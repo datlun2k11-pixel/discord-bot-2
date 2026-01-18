@@ -42,7 +42,7 @@ async def on_message(message):
                     url="https://openrouter.ai/api/v1/chat/completions",
                     headers={"Authorization": f"Bearer {OPENROUTER_KEY}"},
                     json={
-                      "model": "gryphe/mythomax-l2-13b:free",
+                      "model": "mistralai/mistral-7b-instruct:free",
                         "messages": [
                             {
                                 "role": "system", 
