@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# 1. Server ảo bất tử
+# 1. Server ảo
 app = Flask('')
 @app.route('/')
 def home():
-    return "Bot đang tự dò sóng Google nha m! 😇"
+    return "Bot đang dùng hệ thống dự phòng đa model nha m! (⌐■_■)"
 
 def run():
     app.run(host='0.0.0.0', port=8000)
@@ -18,40 +18,46 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 2. Config & Biến toàn cục
+# 2. Config
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY') # Nhớ là Key lấy từ Google AI Studio nha m
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
-CURRENT_MODEL = None # Để bot tự điền
+# List model dự phòng
+MODEL_POOL = []
+CURRENT_MODEL_INDEX = 0
 
-# Hàm tự dò tìm model "sống"
-def get_working_model():
+def refresh_model_pool():
+    global MODEL_POOL
     try:
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={GOOGLE_API_KEY}"
         res = requests.get(url)
         data = res.json()
         
-        # Lọc tìm model ngon (Flash hoặc Pro)
         if 'models' in data:
-            for model in data['models']:
-                name = model['name'] # Nó sẽ có dạng 'models/gemini-1.5-flash'
-                if 'generateContent' in model['supportedGenerationMethods']:
-                    if 'flash' in name or 'pro' in name:
-                        print(f"✅ Đã tìm thấy hàng ngon: {name}")
-                        return name
-            # Nếu ko thấy cái nào quen thì lấy cái đầu tiên tìm được
-            if len(data['models']) > 0:
-                return data['models'][0]['name']
-                
-        print(f"❌ Ko tìm thấy model nào: {data}")
-        return None
+            # Ưu tiên lấy mấy con Lite và Flash mới nhất của m
+            priority_list = ['2.5-flash-lite', '2.5-flash', '2.0-flash', '1.5-flash']
+            new_pool = []
+            
+            all_models = [m['name'] for m in data['models'] if 'generateContent' in m['supportedGenerationMethods']]
+            
+            # Sắp xếp theo độ ưu tiên của m
+            for p in priority_list:
+                for m_name in all_models:
+                    if p in m_name and m_name not in new_pool:
+                        new_pool.append(m_name)
+            
+            # Thêm nốt mấy con còn lại vào cuối list cho chắc
+            for m_name in all_models:
+                if m_name not in new_pool:
+                    new_pool.append(m_name)
+                    
+            MODEL_POOL = new_pool
+            print(f"✅ Pool model đã sẵn sàng: {MODEL_POOL}")
     except Exception as e:
-        print(f"❌ Lỗi khi dò model: {e}")
-        return None
+        print(f"❌ Lỗi quét model: {e}")
 
-# Tìm model ngay khi khởi động code
-CURRENT_MODEL = get_working_model()
+refresh_model_pool()
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -59,46 +65,55 @@ client = discord.Client(intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'Bot {client.user} đã lên sóng với model: {CURRENT_MODEL} (⌐■_■)')
+    print(f'Bot {client.user} đã lên sóng! Đang dùng: {MODEL_POOL[0] if MODEL_POOL else "None"}')
 
 @client.event
 async def on_message(message):
+    global CURRENT_MODEL_INDEX
     if message.author == client.user: return
     if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         async with message.channel.typing():
-            try:
-                # Nếu lúc đầu chưa tìm đc model thì giờ tìm lại
-                global CURRENT_MODEL
-                if not CURRENT_MODEL:
-                    CURRENT_MODEL = get_working_model()
-                    
-                if not CURRENT_MODEL:
-                    await message.reply("Google chặn cửa r m ơi, check lại Key đi 💀")
+            if not MODEL_POOL:
+                refresh_model_pool()
+                if not MODEL_POOL:
+                    await message.reply("T chịu chết, ko tìm thấy cái model nào hết 🥀💔")
                     return
 
-                # Gọi thẳng vào cái model vừa tìm được
-                # Lưu ý: CURRENT_MODEL đã có sẵn chữ 'models/' rồi nên ko thêm nữa
-                url = f"https://generativelanguage.googleapis.com/v1beta/{CURRENT_MODEL}:generateContent?key={GOOGLE_API_KEY}"
-                
-                payload = {
-                    "contents": [{
-                        "parts": [{
-                            "text": f"Mày là một con bot Discord cực kỳ nhây, lầy lội và hài hước. Xưng hô m(mày) - t(tao) với người dùng. Sử dụng teen code nhẹ (ko, v, đc, r...), dùng icon 🥀🐧💀😇💔 và mấy cái emoticon (biểu cảm bằng ký tự). Trả lời ngắn gọn, hay cà khịa nhưng vẫn hiền. Câu hỏi: {message.content}"
+            # Thử lần lượt các model trong pool
+            for _ in range(len(MODEL_POOL)):
+                model_name = MODEL_POOL[CURRENT_MODEL_INDEX]
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/{model_name}:generateContent?key={GOOGLE_API_KEY}"
+                    payload = {
+                        "contents": [{
+                            "parts": [{
+                                "text": f"Mày là một con bot Discord cực kỳ nhây, lầy lội và hài hước. Xưng m - t. Teen code nhẹ, dùng icon 🥀🐧💀😇💔 và emoticon. Trả lời ngắn gọn, hay cà khịa. Câu hỏi: {message.content}"
+                            }]
                         }]
-                    }]
-                }
-                res = requests.post(url, json=payload)
-                data = res.json()
-                
-                if 'candidates' in data:
-                    reply = data['candidates'][0]['content']['parts'][0]['text']
-                    await message.reply(reply)
-                else:
-                    print(f"Lỗi API: {data}")
-                    error_msg = data.get('error', {}).get('message', 'Lỗi ko xác định')
-                    await message.reply(f"t đi ỉa r, Google bảo: {error_msg} 💀")
-            except Exception as e:
-                await message.reply(f"Lỗi r m ơi: {e} 💀")
+                    }
+                    res = requests.post(url, json=payload)
+                    data = res.json()
+
+                    if 'candidates' in data:
+                        reply = data['candidates'][0]['content']['parts'][0]['text']
+                        await message.reply(reply)
+                        return # Xong việc thì nghỉ
+                    
+                    # Nếu lỗi Quota (429) hoặc lỗi model ko tồn tại (404)
+                    error_code = data.get('error', {}).get('code')
+                    if error_code in [429, 404, 400]:
+                        print(f"❌ Model {model_name} đang nghẹn (Code {error_code}), đổi con khác...")
+                        CURRENT_MODEL_INDEX = (CURRENT_MODEL_INDEX + 1) % len(MODEL_POOL)
+                        continue # Thử model tiếp theo
+                    else:
+                        await message.reply(f"Google bảo: {data.get('error', {}).get('message')} 💀")
+                        return
+
+                except Exception as e:
+                    print(f"Lỗi khi gọi {model_name}: {e}")
+                    CURRENT_MODEL_INDEX = (CURRENT_MODEL_INDEX + 1) % len(MODEL_POOL)
+
+            await message.reply("Tất cả model đều đi ỉa r m ơi, đợi tí nhé 💀💔")
 
 keep_alive()
 client.run(DISCORD_TOKEN)
