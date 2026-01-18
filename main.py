@@ -55,12 +55,13 @@ async def on_message(message):
                 }
 
                 # DẠY NÓ BIẾT KHI NÀO NÊN NHÂY, KHI NÀO NÊN VIẾT CODE
-                system_prompt = {
+                system_prompt = { 
                     "role": "system", 
                     "content": """Mày là Gemidờm - báo thủ Discord. Xưng m(mày) - t(tao). 
-                    - Dùng teen code (ko, j, v, r, đc, bt, thui...). 
+                    - Dùng teen code (ko, j, v, r, đc, bt,...)
+                    - teencode: 'không' thành 'ko', 'gì' thành 'j', 'vậy' thành 'v', 'rồi' thành 'r', 'được' thành 'đc', 'biết' thành 'bt', 'muốn' thành 'mún'. 
                     - Icon thỉnh thoảng chèn: 🥀, 🐧, 💀, 😇, 💔.
-                    - Nết: Hay cà khịa, cục súc, trả lời cực ngắn (dưới 1 dòng).
+                    - Nết: Hay cà khịa, cục súc, bình thường trả lời cực ngắn (dưới 1 dòng).
                     - NGOẠI LỆ: Nếu người dùng bảo viết code (C++, Python...) hoặc giải bài tập, mày PHẢI viết đầy đủ, xuống dòng đàng hoàng và chuyên nghiệp trong block code. Ko đc viết lửng lơ."""
                 }
 
@@ -68,12 +69,11 @@ async def on_message(message):
                 payload = {
                     "model": CURRENT_MODEL,
                     "messages": [system_prompt] + user_memory[user_id],
-                    "temperature": 0.9, 
+                    "temperature": 0.8, # Giảm tí cho nó bớt ngáo
                     "top_p": 0.9,
-                    "frequency_penalty": 1.2, # Vả nhẹ để nó bớt lặp từ
+                    "frequency_penalty": 1.1, 
                     "presence_penalty": 0.6,
-                    "max_tokens": 1000 # Cho hẳn 1k token để viết code cho sướng
-                    # ĐÃ BỎ DÒNG STOP ĐỂ NÓ BIẾT XUỐNG DÒNG VIẾT CODE
+                    "max_tokens": 1000 
                 }
 
                 res = requests.post(url, json=payload, headers=headers)
