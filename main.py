@@ -11,9 +11,8 @@ load_dotenv()
 
 # Config API keys
 
-DISCORD_TOKEN = os.getenv(‘DISCORD_TOKEN’)
-GEMINI_API_KEY = os.getenv(‘GOOGLE_API_KEY’)
-
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 # Setup Gemini với system prompt
 
 genai.configure(api_key=GOOGLE_API_KEY)
