@@ -23,7 +23,8 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
-CURRENT_MODEL = "llama-3.3-70b-versatile" 
+# Đổi từ Llama sang Mixtral cho nó bớt đần tiếng Việt
+CURRENT_MODEL = "mixtral-8x7b-32768" 
 user_memory = {}
 
 intents = discord.Intents.default()
