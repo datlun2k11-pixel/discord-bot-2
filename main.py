@@ -5,20 +5,21 @@ from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# Tạo server ảo để Koyeb ko báo lỗi port
+# 1. Tạo server ảo để mở cổng 8000 né lỗi Pending
 app = Flask('')
 @app.route('/')
 def home():
     return "Bot vẫn sống nhăn răng nha m! 😇"
 
 def run():
+    # Koyeb mặc định check cổng 8000 nên phải để port=8000
     app.run(host='0.0.0.0', port=8000)
 
 def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# --- Code bot của m giữ nguyên từ đây ---
+# 2. Load biến môi trường
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 OPENROUTER_KEY = os.getenv('OPENROUTER_KEY')
@@ -54,6 +55,6 @@ async def on_message(message):
             except Exception as e:
                 await message.reply(f"Lỗi r m ơi: {e} 💀")
 
-# Gọi server ảo trước khi chạy bot
+# 3. Chạy server ảo và Bot
 keep_alive()
 client.run(DISCORD_TOKEN)
