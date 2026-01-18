@@ -5,60 +5,111 @@ from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# Giữ bot sống (Koyeb cần mở port để ko bị sập)
-app = Flask('')
-@app.route('/')
-def home():
-    return "Bot đang gáy bẩn trên Google AI! 🥀"
-
-def run():
-    app.run(host='0.0.0.0', port=8080) # Koyeb thích port 8080 hơn
-
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+# Load environment variables
 
 load_dotenv()
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+
+# Config API keys
+
+DISCORD_TOKEN = os.getenv(‘DISCORD_TOKEN’)
+GEMINI_API_KEY = os.getenv(‘GOOGLE_API_KEY’)
+
+# Setup Gemini với system prompt
 
 genai.configure(api_key=GOOGLE_API_KEY)
 
-# Prompt này bao trẩu, bao mất dạy cho m luôn 😇
-model = genai.GenerativeModel(
-    model_name="gemini-1.5-flash",
-    system_instruction="M là Gemidờm - Bot Discord mất nết. Xưng m-t. Dùng teencode (ko, j, v, r, đc, bt, cx). Nết cục súc, hay khịa. Trả lời cực ngắn dưới 1 dòng. Nếu hỏi code/toán thì giải pro trong block code rồi chửi thêm câu."
-)
+system_prompt = “”“Mày là Gemidởm - một thằng bạn Gen Z Việt Nam.
 
-chat_sessions = {}
+LUẬT CHƠI:
+
+- Xưng hô: tao/t - mày/m (BẮT BUỘC)
+- Viết tắt teen code: ko, đc, v, r, ms, cx, dc, đ, j, …
+- Câu trả lời: NGẮN GỌN 1-2 câu, tự nhiên như nhắn tin
+- Thái độ: Hài hước, nhây nhây, cà khịa nhẹ
+- Emoji: 💀, 🙏, ✨, 😎, 💔, 🥀 (đừng lạm dụng)
+
+VÍ DỤ:
+User: “hôm nay ăn gì?”
+Bot: “ăn gió uống sương đi m 💀 hoặc order đồ ăn về cho nhanh”
+
+User: “buồn quá”
+Bot: “buồn thì đi chơi đi m, ngồi một chỗ càng buồn thêm á 🥀”
+
+QUAN TRỌNG:
+
+- KHÔNG ĐƯỢC liệt kê bullet points
+- KHÔNG ĐƯỢC giải thích từng bước một
+- Trả lời NGẮN GỌN như nhắn tin bạn bè
+- Giải toán thì chỉ cần: “à dễ, lấy 60+50-20=90, còn 10 ng ko thích gì hết đó m 😎”
+  “””
+
+model = genai.GenerativeModel(‘gemini-pro’, system_instruction=system_prompt)
+
+# Setup Discord bot
 
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
+# Lưu lịch sử chat
+
+chat_sessions = {}
+
+# Flask app để Koyeb detect port
+
+app = Flask(**name**)
+
+@app.route(’/’)
+def home():
+return “Bot đang chạy! 🚀”
+
+def run_flask():
+port = int(os.environ.get(‘PORT’, 8080))
+app.run(host=‘0.0.0.0’, port=port)
+
 @client.event
 async def on_ready():
-    print(f'{client.user} nhập xác thành công! 💀')
+print(f’{client.user} đã online! 🚀’)
 
 @client.event
 async def on_message(message):
-    if message.author == client.user: return
-    
-    if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
-        async with message.channel.typing():
-            try:
-                user_id = str(message.author.id)
-                if user_id not in chat_sessions:
-                    chat_sessions[user_id] = model.start_chat(history=[])
-                
-                # Giới hạn token đầu ra cho đỡ tốn 
-                response = chat_sessions[user_id].send_message(message.content)
-                await message.reply(response.text)
-            
-            except Exception as e:
-                print(f"Lỗi r: {e}")
-                if user_id in chat_sessions: del chat_sessions[user_id]
-                await message.reply("T chịu chết🥀💔")
+if message.author == client.user:
+return
 
-keep_alive()
+```
+# Chỉ rep khi được tag hoặc DM
+if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
+    content = message.content.replace(f'<@{client.user.id}>', '').strip()
+    
+    if not content:
+        await message.channel.send("Gọi t làm gì? 🤔")
+        return
+    
+    user_id = message.author.id
+    if user_id not in chat_sessions:
+        chat_sessions[user_id] = model.start_chat(history=[])
+    
+    try:
+        async with message.channel.typing():
+            response = chat_sessions[user_id].send_message(content)
+            
+            reply = response.text
+            if len(reply) > 2000:
+                chunks = [reply[i:i+2000] for i in range(0, len(reply), 2000)]
+                for chunk in chunks:
+                    await message.channel.send(chunk)
+            else:
+                await message.channel.send(reply)
+                
+    except Exception as e:
+        await message.channel.send(f"Lỗi rồi bro: {str(e)} 💀")
+        print(f"Error: {e}")
+```
+
+# Chạy Flask ở thread riêng
+
+Thread(target=run_flask).start()
+
+# Chạy bot
+
 client.run(DISCORD_TOKEN)
