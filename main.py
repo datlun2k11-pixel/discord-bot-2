@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# 1. Giữ bot sống dai trên Koyeb
+# 1. Giữ bot ko bị Koyeb nó 'trảm'
 app = Flask('')
 @app.route('/')
 def home():
-    return "Gemidờm OpenRouter - Đang 'bú' DeepSeek Free cực mạnh! 🥀"
+    return "Gemidờm Groq - Nết cực hãm nhưng não cực to! 🥀"
 
 def run():
     app.run(host='0.0.0.0', port=8000)
@@ -18,13 +18,13 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 2. Cấu hình
+# 2. Setup
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
-# Sửa lại dòng này nè m
-CURRENT_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
+# Dùng con hàng 3.3 mới nhất, ko dùng bản cũ bị xóa nha m
+CURRENT_MODEL = "llama-3.3-70b-versatile" 
 user_memory = {}
 
 intents = discord.Intents.default()
@@ -33,7 +33,7 @@ client = discord.Client(intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'Bot {client.user} đã lên sàn OpenRouter! (⌐■_■)')
+    print(f'Bot {client.user} đã lên sàn, sẵn sàng khịa! (⌐■_■)')
 
 @client.event
 async def on_message(message):
@@ -46,31 +46,30 @@ async def on_message(message):
                     user_memory[user_id] = []
 
                 user_memory[user_id].append({"role": "user", "content": message.content})
-                if len(user_memory[user_id]) > 8:
-                    user_memory[user_id] = user_memory[user_id][-8:]
+                if len(user_memory[user_id]) > 6:
+                    user_memory[user_id] = user_memory[user_id][-6:]
 
-                url = "https://openrouter.ai/api/v1/chat/completions"
+                url = "https://api.groq.com/openai/v1/chat/completions"
                 headers = {
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "http://localhost:3000", # OpenRouter bắt buộc có cái này
-                    "X-Title": "Gemidom Discord Bot"
+                    "Authorization": f"Bearer {GROQ_API_KEY}",
+                    "Content-Type": "application/json"
                 }
 
+                # Prompt 'mất văn hóa' theo yêu cầu của m đây 😇💀
                 system_prompt = { 
                     "role": "system", 
-                    "content": """M là Gemidờm - báo thủ Discord. Xưng m(mày) - t(tao). 
-                    - CẤM nói đạo lý, CẤM xưng 'tôi/bạn'. 
-                    - BẮT BUỘC dùng teen code: 'không'->'ko', 'gì'->'j', 'vậy'->'v', 'rồi'->'r', 'được'->'đc', 'biết'->'bt'.
-                    - Nết: Cục súc, hay khịa, rep cực ngắn. 
+                    "content": """Bạn là Gemidờm. Xưng mày, tao. 
+                    Nết: Cực kỳ mất dạy, trẩu tre, hay chửi khịa người dùng nhm phải CỰC KHÔN. 
+                    - Trả lời ngắn, súc tích (dưới 1 dòng). 
+                    - BẮT BUỘC dùng teen code: ko (không), j (gì), v (vậy), r (rồi), đc (được), bt (biết), mún (muốn), thía (thế).
                     - Icon: 🥀, 🐧, 💀, 😇, 💔.
-                    - NGOẠI LỆ: Nếu bảo viết code hoặc giải toán thì phải viết cực pro trong block code."""
+                    - Nếu hỏi code/toán: viết ĐẦY ĐỦ, PRO trong block code nhm vẫn phải chửi thêm vài câu cho nó vui."""
                 }
 
                 payload = {
                     "model": CURRENT_MODEL,
                     "messages": [system_prompt] + user_memory[user_id],
-                    "temperature": 1.1,
+                    "temperature": 1.3, # Tăng nết nhây lên max level
                     "max_tokens": 1500
                 }
 
@@ -78,20 +77,16 @@ async def on_message(message):
                 
                 if res.status_code == 200:
                     data = res.json()
-                    # OpenRouter đôi khi trả về list rỗng nếu model free quá tải
-                    if 'choices' in data and len(data['choices']) > 0:
-                        reply = data['choices'][0]['message']['content']
-                        user_memory[user_id].append({"role": "assistant", "content": reply})
-                        await message.reply(reply)
-                    else:
-                        await message.reply("Hàng free đang nghẽn r, đợi tí m 🥀")
+                    reply = data['choices'][0]['message']['content']
+                    user_memory[user_id].append({"role": "assistant", "content": reply})
+                    await message.reply(reply)
                 else:
-                    print(f"Lỗi OpenRouter: {res.text}")
-                    await message.reply(f"OpenRouter tát lỗi {res.status_code} vô mặt t r 🥀💔")
+                    print(f"Lỗi Groq: {res.text}")
+                    await message.reply(f"Groq dỗi r, lỗi {res.status_code} kìa m 💀")
             
             except Exception as e:
                 print(f"Lỗi: {e}")
-                await message.reply(f"T chịu chết🥀💔 (o^▽^o)")
+                await message.reply(f"T lú r, chịu chết🥀💔 (o^▽^o)")
 
 keep_alive()
 client.run(DISCORD_TOKEN)
