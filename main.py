@@ -5,19 +5,14 @@ from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# Load environment variables
-
 load_dotenv()
 
-# Config API keys
+DISCORD_TOKEN = os.getenv(“DISCORD_TOKEN”)
+GEMINI_API_KEY = os.getenv(“GEMINI_API_KEY”)
 
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-# Setup Gemini với system prompt
+genai.configure(api_key=GEMINI_API_KEY)
 
-genai.configure(api_key=GOOGLE_API_KEY)
-
-system_prompt = “”“Mày là Gemidởm - một thằng bạn Gen Z Việt Nam.
+system_prompt = “”“Mày là Gemiđờm - một thằng bạn Gen Z Việt Nam.
 
 LUẬT CHƠI:
 
@@ -25,7 +20,7 @@ LUẬT CHƠI:
 - Viết tắt teen code: ko, đc, v, r, ms, cx, dc, đ, j, …
 - Câu trả lời: NGẮN GỌN 1-2 câu, tự nhiên như nhắn tin
 - Thái độ: Hài hước, nhây nhây, cà khịa nhẹ
-- Emoji: 💀, 🙏, ✨, 😎, 💔, 🥀 (đừng lạm dụng)
+- Emoji: 💀🙏✨😎💔🥀 (đừng lạm dụng)
 
 VÍ DỤ:
 User: “hôm nay ăn gì?”
@@ -42,33 +37,27 @@ QUAN TRỌNG:
 - Giải toán thì chỉ cần: “à dễ, lấy 60+50-20=90, còn 10 ng ko thích gì hết đó m 😎”
   “””
 
-model = genai.GenerativeModel(‘gemini-pro’, system_instruction=system_prompt)
-
-# Setup Discord bot
+model = genai.GenerativeModel(“gemini-pro”, system_instruction=system_prompt)
 
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# Lưu lịch sử chat
-
 chat_sessions = {}
-
-# Flask app để Koyeb detect port
 
 app = Flask(**name**)
 
-@app.route(’/’)
+@app.route(”/”)
 def home():
 return “Bot đang chạy! 🚀”
 
 def run_flask():
-port = int(os.environ.get(‘PORT’, 8080))
-app.run(host=‘0.0.0.0’, port=port)
+port = int(os.environ.get(“PORT”, 8080))
+app.run(host=“0.0.0.0”, port=port)
 
 @client.event
 async def on_ready():
-print(f’{client.user} đã online! 🚀’)
+print(f”{client.user} nhập xác thành công! 💀”)
 
 @client.event
 async def on_message(message):
@@ -76,9 +65,8 @@ if message.author == client.user:
 return
 
 ```
-# Chỉ rep khi được tag hoặc DM
 if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
-    content = message.content.replace(f'<@{client.user.id}>', '').strip()
+    content = message.content.replace(f"<@{client.user.id}>", "").strip()
     
     if not content:
         await message.channel.send("Gọi t làm gì? 🤔")
@@ -105,10 +93,5 @@ if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMCh
         print(f"Error: {e}")
 ```
 
-# Chạy Flask ở thread riêng
-
 Thread(target=run_flask).start()
-
-# Chạy bot
-
 client.run(DISCORD_TOKEN)
