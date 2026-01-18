@@ -59,7 +59,7 @@ async def on_message(message):
                     await message.reply(reply)
                 else:
                     print(f"Lỗi nè: {data}")
-                    await message.reply("DeepSeek đang đi tắm r, tí t rep nhá 💀")
+                    await message.reply("t đi ỉa r, tí t rep nhá 💀")
             except Exception as e:
                 await message.reply(f"Lỗi r m ơi: {e} 💀")
 
