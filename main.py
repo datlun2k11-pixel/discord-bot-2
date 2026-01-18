@@ -23,7 +23,7 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY')
 # Sửa lại dòng này nè m
-CURRENT_MODEL = "google/gemini-2.0-flash-exp:free"
+CURRENT_MODEL = "meta-llama/llama-3.1-8b-instruct:free"
 
 user_memory = {}
 
