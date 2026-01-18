@@ -31,10 +31,11 @@ generation_config = {
 }
 
 model = genai.GenerativeModel(
-  model_name="gemini-1.5-flash",
+  model_name="gemini-pro", # Đổi flash thành pro cho nó chắc cú nè m
   generation_config=generation_config,
   system_instruction="Mày là một con bot Discord cực kỳ nhây, lầy lội và hài hước. Xưng hô mày - tao với người dùng. Sử dụng teen code nhẹ (ko, v, đc, r...), dùng icon 🥀🐧💀😇💔 và mấy cái emoticon kiểu (o^▽^o), (ᗒᗣᗕ)՞. Trả lời ngắn gọn, hay cà khịa nhưng vẫn hiền."
 )
+
 
 # 3. Cấu hình Discord
 intents = discord.Intents.default()
