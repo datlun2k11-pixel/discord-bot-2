@@ -70,16 +70,14 @@ async def on_message(message):
                 }
 
                 # Payload fix lỗi 400 và tăng độ nhây
-                payload = {
-                    "model": CURRENT_MODEL,
+                                payload = {
+                    "model": "mixtral-8x7b-32768", # Check lại chính xác tên này
                     "messages": [system_prompt] + user_memory[user_id],
-                    "temperature": 1.1, # Tăng độ mặn mòi
-                    "top_p": 0.9,
-                    "frequency_penalty": 1.0, 
-                    "presence_penalty": 0.5,
-                    "max_tokens": 1500 # Cho nó viết code thoải mái
+                    "temperature": 0.7, # Hạ nhiệt cho nó bớt ngáo
+                    "max_tokens": 1024,
+                    "top_p": 1
+                    # Bỏ mấy cái penalty đi cho nó đỡ lỗi 400
                 }
-
                 res = requests.post(url, json=payload, headers=headers)
                 
                 if res.status_code == 200:
