@@ -22,9 +22,8 @@ def keep_alive():
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-
-# Đổi sang con Mixtral để bớt đần tiếng Việt
-CURRENT_MODEL = "mixtral-8x7b-32768" 
+# Đổi sang con 70b bản cũ nhưng cực kỳ ổn định
+CURRENT_MODEL = "llama3-70b-8192" 
 user_memory = {}
 
 intents = discord.Intents.default()
