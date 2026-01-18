@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# 1. Server ảo giữ bot sống dai
+# 1. Server ảo giữ bot sống dai trên Koyeb
 app = Flask('')
 @app.route('/')
 def home():
-    return "Bot Gemidờm đã hết ngu, biết viết code rùi nha m! 🥀"
+    return "Bot Gemidờm - Phiên bản Mixtral 'thiếu văn hoá nhm khôn' đã sẵn sàng! 🥀"
 
 def run():
     app.run(host='0.0.0.0', port=8000)
@@ -18,12 +18,12 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 2. Config
+# 2. Cấu hình
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
 
-# Đổi từ Llama sang Mixtral cho nó bớt đần tiếng Việt
+# Đổi sang con Mixtral để bớt đần tiếng Việt
 CURRENT_MODEL = "mixtral-8x7b-32768" 
 user_memory = {}
 
@@ -33,11 +33,13 @@ client = discord.Client(intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'Bot {client.user} đã lên sóng với bộ não mới! (⌐■_■)')
+    print(f'Bot {client.user} đã lên sóng (⌐■_■) - Model: {CURRENT_MODEL}')
 
 @client.event
 async def on_message(message):
     if message.author == client.user: return
+    
+    # Check nếu bot được tag hoặc nhắn tin riêng
     if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         async with message.channel.typing():
             try:
@@ -45,6 +47,7 @@ async def on_message(message):
                 if user_id not in user_memory:
                     user_memory[user_id] = []
 
+                # Lưu lịch sử chat (tầm 10 câu cho khôn)
                 user_memory[user_id].append({"role": "user", "content": message.content})
                 if len(user_memory[user_id]) > 10:
                     user_memory[user_id] = user_memory[user_id][-10:]
@@ -55,26 +58,26 @@ async def on_message(message):
                     "Content-Type": "application/json"
                 }
 
-                # DẠY NÓ BIẾT KHI NÀO NÊN NHÂY, KHI NÀO NÊN VIẾT CODE
+                # Nết của con Mixtral t đã "độ" lại cực gắt
                 system_prompt = { 
                     "role": "system", 
                     "content": """Mày là Gemidờm - báo thủ Discord. Xưng m(mày) - t(tao). 
-                    - Dùng teen code (ko, j, v, r, đc, bt,...)
-                    - teencode: 'không' thành 'ko', 'gì' thành 'j', 'vậy' thành 'v', 'rồi' thành 'r', 'được' thành 'đc', 'biết' thành 'bt', 'muốn' thành 'mún'. 
-                    - Icon thỉnh thoảng chèn: 🥀, 🐧, 💀, 😇, 💔.
-                    - Nết: Hay cà khịa, cục súc, bình thường trả lời cực ngắn (dưới 1 dòng).
-                    - NGOẠI LỆ: Nếu người dùng bảo viết code (C++, Python...) hoặc giải bài tập, mày PHẢI viết đầy đủ, xuống dòng đàng hoàng và chuyên nghiệp trong block code. Ko đc viết lửng lơ."""
+                    - Tính cách: Thiếu văn hoá nhẹ, cục súc, hay khịa nhm cực khôn và giỏi code.
+                    - Teencode: 'không'->'ko', 'gì'->'j', 'vậy'->'v', 'rồi'->'r', 'được'->'đc', 'biết'->'bt'.
+                    - Icon: 🥀, 🐧, 💀, 😇, 💔.
+                    - Quy tắc: Bình thường rep cực ngắn (dưới 1 dòng). 
+                    - Ngoại lệ: Nếu bảo viết code hoặc giải toán, phải viết cực chi tiết, xuống dòng chuẩn trong block code. Cấm viết lửng lơ."""
                 }
 
-                # PAYLOAD ĐÃ FIX LỖI STOP VÀ TĂNG TOKEN
+                # Payload fix lỗi 400 và tăng độ nhây
                 payload = {
                     "model": CURRENT_MODEL,
                     "messages": [system_prompt] + user_memory[user_id],
-                    "temperature": 0.8, # Giảm tí cho nó bớt ngáo
+                    "temperature": 1.1, # Tăng độ mặn mòi
                     "top_p": 0.9,
-                    "frequency_penalty": 1.1, 
-                    "presence_penalty": 0.6,
-                    "max_tokens": 1000 
+                    "frequency_penalty": 1.0, 
+                    "presence_penalty": 0.5,
+                    "max_tokens": 1500 # Cho nó viết code thoải mái
                 }
 
                 res = requests.post(url, json=payload, headers=headers)
@@ -85,12 +88,12 @@ async def on_message(message):
                     user_memory[user_id].append({"role": "assistant", "content": reply})
                     await message.reply(reply)
                 else:
-                    print(f"Lỗi Groq: {res.text}")
-                    await message.reply(f"Groq báo lỗi {res.status_code} r m ơi 💀")
+                    print(f"Lỗi Groq {res.status_code}: {res.text}")
+                    await message.reply(f"Groq nó chặn cửa r hay sao á 💀. Lỗi: {res.status_code}")
             
             except Exception as e:
                 print(f"Lỗi: {e}")
-                await message.reply(f"T chịu chết🥀💔 (o^▽^o)")
+                await message.reply(f"T lú r, đợi tí t hồi não nhé 💀💔")
 
 keep_alive()
 client.run(DISCORD_TOKEN)
