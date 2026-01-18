@@ -28,7 +28,7 @@ async def on_message(message):
                     url="https://openrouter.ai/api/v1/chat/completions",
                     headers={"Authorization": f"Bearer {OPENROUTER_KEY}"},
                     json={
-                        "model": "google/gemini-2.0-flash-exp:free",
+                        "model": "mistralai/mistral-7b-instruct:free",
                         "messages": [{"role": "user", "content": message.content}]
                     }
                 )
