@@ -68,15 +68,15 @@ async def on_message(message):
                     - Ngoại lệ: Nếu bảo viết code hoặc giải toán, phải viết cực chi tiết, xuống dòng chuẩn trong block code. Cấm viết lửng lơ."""
                 }
 
-                # Payload fix lỗi 400 và tăng độ nhây
-                                payload = {
-                    "model": "mixtral-8x7b-32768", # Check lại chính xác tên này
+                               # Sửa lại payload dùng biến CURRENT_MODEL để ko bị lỗi chéo model
+                payload = {
+                    "model": CURRENT_MODEL, # Dùng biến này nè m, đừng viết cứng Mixtral vô nữa
                     "messages": [system_prompt] + user_memory[user_id],
-                    "temperature": 0.7, # Hạ nhiệt cho nó bớt ngáo
+                    "temperature": 0.8, # Để 0.8 cho nó vừa đủ khôn vừa đủ nhây
                     "max_tokens": 1024,
                     "top_p": 1
-                    # Bỏ mấy cái penalty đi cho nó đỡ lỗi 400
                 }
+         
                 res = requests.post(url, json=payload, headers=headers)
                 
                 if res.status_code == 200:
