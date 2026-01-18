@@ -23,18 +23,24 @@ async def on_message(message):
     # Trả lời khi đc tag hoặc nhắn tin riêng
     if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         async with message.channel.typing():
-            try:
+                        try:
                 res = requests.post(
                     url="https://openrouter.ai/api/v1/chat/completions",
                     headers={"Authorization": f"Bearer {OPENROUTER_KEY}"},
                     json={
-                        "model": "mistralai/mistral-7b-instruct:free",
+                        "model": "google/gemini-2.0-flash-exp:free",
                         "messages": [{"role": "user", "content": message.content}]
                     }
                 )
-                reply = res.json()['choices'][0]['message']['content']
-                await message.reply(reply)
+                data = res.json()
+                if 'choices' in data:
+                    reply = data['choices'][0]['message']['content']
+                    await message.reply(reply)
+                else:
+                    print(f"Lỗi từ OpenRouter: {data}")
+                    await message.reply(f"AI đang bận r m ơi, thử lại sau nhá 💀")
             except Exception as e:
                 await message.reply(f"Lỗi r m ơi: {e} 💀")
+
 
 client.run(DISCORD_TOKEN)
