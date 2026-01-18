@@ -1,11 +1,11 @@
 import discord
+import requests
 import os
-import google.generativeai as genai
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# 1. Server ảo giữ bot tỉnh ngủ (Port 8000)
+# 1. Server ảo
 app = Flask('')
 @app.route('/')
 def home():
@@ -18,33 +18,18 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 2. Cấu hình Google AI
+# 2. Config
 load_dotenv()
-GOOGLE_API_KEY = os.getenv('OPENROUTER_KEY') # T tận dụng lại cái tên cũ trên Koyeb của m luôn
-genai.configure(api_key=GOOGLE_API_KEY)
+DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
+GOOGLE_API_KEY = os.getenv('OPENROUTER_KEY') # Dùng key Google dán vào ô này nha m
 
-# Cài đặt nết nhây cho Bot
-generation_config = {
-  "temperature": 0.9,
-  "top_p": 1,
-  "max_output_tokens": 2048,
-}
-
-model = genai.GenerativeModel(
-  model_name="gemini-pro", # Đổi flash thành pro cho nó chắc cú nè m
-  generation_config=generation_config,
-  system_instruction="Mày là một con bot Discord cực kỳ nhây, lầy lội và hài hước. Xưng hô mày - tao với người dùng. Sử dụng teen code nhẹ (ko, v, đc, r...), dùng icon 🥀🐧💀😇💔 và mấy cái emoticon kiểu (o^▽^o), (ᗒᗣᗕ)՞. Trả lời ngắn gọn, hay cà khịa nhưng vẫn hiền."
-)
-
-
-# 3. Cấu hình Discord
 intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
 @client.event
 async def on_ready():
-    print(f'Bot {client.user} (Hàng Google) đã lên sóng r nhá! (⌐■_■)')
+    print(f'Bot {client.user} đã lên sóng r nhá! (⌐■_■)')
 
 @client.event
 async def on_message(message):
@@ -52,13 +37,26 @@ async def on_message(message):
     if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         async with message.channel.typing():
             try:
-                # Chat với Gemini chính chủ
-                response = model.start_chat(history=[]).send_message(message.content)
-                await message.reply(response.text)
+                # Gọi thẳng vào API Google
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
+                payload = {
+                    "contents": [{
+                        "parts": [{
+                            "text": f"Mày là một con bot Discord cực kỳ nhây, lầy lội và hài hước. Xưng hô mày - tao với người dùng. Sử dụng teen code nhẹ (ko, v, đc, r...), dùng icon 🥀🐧💀😇💔 và mấy cái emoticon (emoticon là mấy cái biểu cảm bằng ký tự, không phải emoji). Trả lời ngắn gọn, hay cà khịa nhưng vẫn hiền. Câu hỏi của người dùng: {message.content}"
+                        }]
+                    }]
+                }
+                res = requests.post(url, json=payload)
+                data = res.json()
+                
+                if 'candidates' in data:
+                    reply = data['candidates'][0]['content']['parts'][0]['text']
+                    await message.reply(reply)
+                else:
+                    print(f"Lỗi: {data}")
+                    await message.reply("t đi ỉa r, tí t rep nhá 💀")
             except Exception as e:
-                print(f"Lỗi r m: {e}")
-                await message.reply("t đi ỉa r, tí t rep nhá 💀 (Lỗi Google r m ơi)")
+                await message.reply(f"Lỗi r m ơi: {e} 💀")
 
-# 4. Chạy thôi
 keep_alive()
-client.run(os.getenv('DISCORD_TOKEN'))
+client.run(DISCORD_TOKEN)
