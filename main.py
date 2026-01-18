@@ -2,8 +2,23 @@ import discord
 import requests
 import os
 from dotenv import load_dotenv
+from flask import Flask
+from threading import Thread
 
-# Load mấy cái secret từ file .env hoặc môi trường Koyeb
+# Tạo server ảo để Koyeb ko báo lỗi port
+app = Flask('')
+@app.route('/')
+def home():
+    return "Bot vẫn sống nhăn răng nha m! 😇"
+
+def run():
+    app.run(host='0.0.0.0', port=8000)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# --- Code bot của m giữ nguyên từ đây ---
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 OPENROUTER_KEY = os.getenv('OPENROUTER_KEY')
@@ -19,11 +34,9 @@ async def on_ready():
 @client.event
 async def on_message(message):
     if message.author == client.user: return
-
-    # Trả lời khi đc tag hoặc nhắn tin riêng
     if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         async with message.channel.typing():
-                        try:
+            try:
                 res = requests.post(
                     url="https://openrouter.ai/api/v1/chat/completions",
                     headers={"Authorization": f"Bearer {OPENROUTER_KEY}"},
@@ -37,10 +50,10 @@ async def on_message(message):
                     reply = data['choices'][0]['message']['content']
                     await message.reply(reply)
                 else:
-                    print(f"Lỗi từ OpenRouter: {data}")
-                    await message.reply(f"AI đang bận r m ơi, thử lại sau nhá 💀")
+                    await message.reply("AI đang bận, tí t rep nhá 💀")
             except Exception as e:
                 await message.reply(f"Lỗi r m ơi: {e} 💀")
 
-
+# Gọi server ảo trước khi chạy bot
+keep_alive()
 client.run(DISCORD_TOKEN)
