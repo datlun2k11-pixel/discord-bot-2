@@ -22,9 +22,8 @@ def keep_alive():
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-
-# Dùng con 70b cho nó khôn mà ko chảnh
-CURRENT_MODEL = "llama3-70b-8192" 
+ # Dùng con Llama 3.3 mới nhất, bao khôn bao chạy
+CURRENT_MODEL = "llama-3.3-70b-versatile"
 user_memory = {}
 
 intents = discord.Intents.default()
