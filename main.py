@@ -74,7 +74,7 @@ async def on_message(message):
                     "top_p": 0.9,
                     "frequency_penalty": 1.5, # Vả cực mạnh nếu nó dám lặp từ "lô dzô"
                     "presence_penalty": 1.0, # Khuyến khích nó nói chuyện mới
-                    "max_tokens": 100, # Ngắn gọn súc tích
+                    "max_tokens": 512, # Ngắn gọn súc tích
                     "stop": ["\n", "User:", "Assistant:"] # Chặn đứng việc nó tự biên tự diễn
                 }
 
