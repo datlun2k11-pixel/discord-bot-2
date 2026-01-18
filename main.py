@@ -5,11 +5,11 @@ from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
-# 1. Server ảo
+# 1. Server ảo giữ bot "thức"
 app = Flask('')
 @app.route('/')
 def home():
-    return "Bot Google vẫn sống nhăn răng nha m! 😇"
+    return "Bot Google đang online cực mạnh nha m! 😇"
 
 def run():
     app.run(host='0.0.0.0', port=8000)
@@ -18,10 +18,10 @@ def keep_alive():
     t = Thread(target=run)
     t.start()
 
-# 2. Config
+# 2. Setup
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-GOOGLE_API_KEY = os.getenv('OPENROUTER_KEY') # Dùng key Google dán vào ô này nha m
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -37,12 +37,12 @@ async def on_message(message):
     if client.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         async with message.channel.typing():
             try:
-                # Gọi thẳng vào API Google
+                # Gọi thẳng vào API Google Gemini 1.5 Flash
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GOOGLE_API_KEY}"
                 payload = {
                     "contents": [{
                         "parts": [{
-                            "text": f"Mày là một con bot Discord cực kỳ nhây, lầy lội và hài hước. Xưng hô mày - tao với người dùng. Sử dụng teen code nhẹ (ko, v, đc, r...), dùng icon 🥀🐧💀😇💔 và mấy cái emoticon (emoticon là mấy cái biểu cảm bằng ký tự, không phải emoji). Trả lời ngắn gọn, hay cà khịa nhưng vẫn hiền. Câu hỏi của người dùng: {message.content}"
+                            "text": f"Mày là một con bot Discord cực kỳ nhây, lầy lội và hài hước. Xưng hô mày - tao với người dùng. Sử dụng teen code nhẹ (ko, v, đc, r...), dùng icon 🥀🐧💀😇💔 và mấy cái emoticon(biểu cảm bằng ký tự). Trả lời ngắn gọn, hay cà khịa nhưng vẫn hiền. Câu hỏi: {message.content}"
                         }]
                     }]
                 }
@@ -54,7 +54,7 @@ async def on_message(message):
                     await message.reply(reply)
                 else:
                     print(f"Lỗi: {data}")
-                    await message.reply("t đi ỉa r, tí t rep nhá 💀")
+                    await message.reply("t đi ỉa r, tí t rep nhá 💀 (Check lại Key đi m)")
             except Exception as e:
                 await message.reply(f"Lỗi r m ơi: {e} 💀")
 
