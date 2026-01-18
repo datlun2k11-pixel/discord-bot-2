@@ -83,7 +83,7 @@ async def on_message(message):
                     payload = {
                         "contents": user_memory[user_id],
                         "system_instruction": {
-                            "parts": [{"text": "Mày là bot Discord nhây, lầy. Xưng m - t. Teen code, icon 🥀🐧💀😇💔. Trả lời cực ngắn gọn."}]
+                            "parts": [{"text": "Mày là bot Discord nhây, lầy. Xưng m - t. Teen code, thỉnh thoảng chèn icon 🥀, 🐧, 💀, 😇, 💔. Trả lời cực ngắn gọn."}]
                         }
                     }
                     
