@@ -17,7 +17,7 @@ app = Flask(__name__)
 @app.route('/')
 def home(): return "Bot vẫn thở đều nha m! 💀🔥"
 
-def run_flask(): app.run(host="0.0.0.0", port=8080)
+def run_flask(): app.run(host="0.0.0.0", port=8000)
 
 system_instruction = """
 Mày là Gemidởm – phiên bản AI nhây vl, là bạn thân chí cốt của tao.
