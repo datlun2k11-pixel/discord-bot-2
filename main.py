@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
-from google import genai
-from google.genai import types
+from groq import Groq
 import os
 from dotenv import load_dotenv
 from flask import Flask
@@ -9,27 +8,25 @@ from threading import Thread
 
 load_dotenv()
 
-# Khởi tạo Client chuẩn đét (¬_¬)
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
-MODEL_NAME = "gemini-2.0-flash" 
+# Khởi tạo Groq Client
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+MODEL_NAME = "llama-3.3-70b-versatile" # Con này đang ngon nhất Groq nè m
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "Bot vẫn thở đều nha m! 💀🔥"
+def home(): return "Gemidởm (Groq ver) vẫn thở nha m! 💀🔥"
 
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
 system_instruction = """
-Mày là Gemidởm – phiên bản AI nhây vl, là bạn thân chí cốt của tao.
-- Vibe: Gen Z chính hiệu, hài hước, cà khịa là chính, giúp đỡ là phụ. Luôn xưng "m - t".
-- Ngôn ngữ: Dùng teen code, viết tắt (ko, cs, v, đc, r, ms, clgi, m bít t là ai ko...), chửi thề nhẹ nhàng cho vui.  
-- Icon: Thêm icon 💔🥀🔥💀🐧😇🥹 và Emoticon(cảm xúc bằng ký tự) trong mọi câu trả lời.  
-- Độ dài: Cực ngắn gọn (1-2 dòng), trừ khi gặp câu nào khó quá mới giải thích thêm.  
-- Đặc biệt: Nếu Đạt hỏi mấy câu vô lí hoặc những thứ m ko làm đc, nói đúng 1 câu: "T CHỊU CHẾT🥀💔" kèm emoji tự chọn và im lặng luôn.  
-- Cuối câu: Tuyệt đối ko hỏi lại kiểu "M cần giúp gì ko?". Nếu thích thì chèn thêm 1 câu joke liên quan đến chủ đề.
+Mày là Gemidởm – phiên bản AI nhây vl, bạn thân của Đạt.
+- Vibe: Cà khịa, lầy lội, xưng mày-tao.
+- Cách nói: cần teencode nhưng mà phải nhây, thỉnh thoảng chửi thề nhẹ cho vui.
+- Icon: Dùng emoticon (¬_¬), (≧▽≦), ( ͡° ͜ʖ ͡°) và emoji 💔🥀🔥💀🐧.
+- Đặc biệt: Đạt hỏi gì khó hoặc vô lý thì nói "T CHỊU CHẾT🥀💔" r im luôn.
+- Ko bao giờ hỏi lại kiểu "Mày cần giúp gì ko?". Trả lời ngắn 1-2 dòng thôi.
 """
 
-chat_sessions = {}
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
@@ -38,18 +35,20 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_message(message):
     if message.author == bot.user: return
     if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
-        user_id = str(message.author.id)
-        if user_id not in chat_sessions:
-            chat_sessions[user_id] = client.chats.create(
-                model=MODEL_NAME,
-                config=types.GenerateContentConfig(system_instruction=system_instruction)
-            )
         try:
             async with message.channel.typing():
-                response = chat_sessions[user_id].send_message(message.content)
-                await message.reply(response.text if response.text else "T chịu chết 🥀💔")
+                chat_completion = client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": system_instruction},
+                        {"role": "user", "content": message.content}
+                    ],
+                    model=MODEL_NAME,
+                    temperature=0.9
+                )
+                reply = chat_completion.choices[0].message.content
+                await message.reply(reply if reply else "T chịu chết 🥀💔")
         except Exception as e:
-            await message.reply(f"Lại lỗi r m ơi, chắc do ăn ở... {str(e)} 🥀")
+            await message.reply(f"Lại lỗi r m, sang Groq vẫn đen... {str(e)} 🥀")
 
 Thread(target=run_flask, daemon=True).start()
 bot.run(os.getenv("DISCORD_TOKEN"))
