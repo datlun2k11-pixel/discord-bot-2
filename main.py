@@ -11,7 +11,7 @@ load_dotenv()
 # Khởi tạo Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 # Đổi sang con 120B m thích đây
-MODEL_NAME = "gpt-oss-120b-reasoning" 
+MODEL_NAME = "openai/gpt-oss-120b" 
 
 app = Flask(__name__)
 @app.route('/')
