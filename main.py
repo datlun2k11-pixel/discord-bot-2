@@ -10,8 +10,8 @@ load_dotenv()
 
 # Khởi tạo Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-# Đổi sang con compound vip pro
-MODEL_NAME = "groq/compound" 
+# Đổi sang 120B và compound bú lắm token vl
+MODEL_NAME = "openai/gpt-oss-120b" 
 
 app = Flask(__name__)
 @app.route('/')
