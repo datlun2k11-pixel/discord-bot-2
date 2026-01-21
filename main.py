@@ -63,9 +63,9 @@ async def imagine(interaction: discord.Interaction, prompt: str):
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"Vẽ méo đc r m ơi... 💀: {e}")
-        
 # --- Slash model ---
-
+@tree.command(name="model", description="Đổi Model AI) # M thiếu dòng này nè!
+@app_commands.describe(chon_model="Chọn một AI") # Thêm cái này cho nó chuyên nghiệp
 @app_commands.choices(chon_model=[
     app_commands.Choice(name="GPT-OSS 120B (Rất khôn, nặng nhất)", value="120B"),
     app_commands.Choice(name="Llama 4 Maverick (Mạnh teencode nhất)", value="Llama-4-Maverick"),
@@ -74,7 +74,6 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     app_commands.Choice(name="GPT-OSS 20B (Nhanh nhất)", value="GPT-OSS-20B"),
     app_commands.Choice(name="Kimi K2 (Công cụ mạnh)", value="Kimi-K2")
 ])
-
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global MODEL_NAME
     MODEL_NAME = MODELS[chon_model.value]
