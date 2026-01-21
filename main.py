@@ -19,7 +19,8 @@ MODELS = {
     "Llama-3.3": "llama-3.3-70b-versatile",
     "Qwen-3": "qwen/qwen3-32b",
     "GPT-OSS-20B": "openai/gpt-oss-20b",
-    "Kimi-K2": "moonshotai/kimi-k2-instruct-0905"
+    "Kimi-K2": "moonshotai/kimi-k2-instruct-0905",
+    "Compound": "groq/compound"
 }
 
 # Mặc định dùng con Llama 4 Maverick cho nó chiến
@@ -77,7 +78,8 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     app_commands.Choice(name="Llama 3.3 70B (Reasoning đỉnh)", value="Llama-3.3"),
     app_commands.Choice(name="Qwen 3 (Master Coding)", value="Qwen-3"),
     app_commands.Choice(name="GPT-OSS 20B (Thần tốc 1000 t/s)", value="GPT-OSS-20B"),
-    app_commands.Choice(name="Kimi K2 (Công cụ mạnh)", value="Kimi-K2")
+    app_commands.Choice(name="Kimi K2 (Công cụ mạnh)", value="Kimi-K2"),
+    app_commands.Choice(name="Compound (Thập cẩm/tốn token nhất)", value="Compound")
 ])
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global MODEL_NAME
