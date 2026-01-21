@@ -27,7 +27,7 @@ MODEL_NAME = MODELS["Llama-4-Maverick"]
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "Gemidởm đang nhây, đừng chạm vào! 🔥💀"
+def home(): return "GenA-bot đang nhây, đừng chạm vào! 🔥💀"
 
 def run_flask():
     app.run(host="0.0.0.0", port=8000)
@@ -62,15 +62,15 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     try:
         encoded_prompt = urllib.parse.quote(prompt)
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-        embed = discord.Embed(title="Ảnh của m đây!", description=f"Prompt: `{prompt}`", color=0x00ff00)
+        embed = discord.Embed(title="Ảnh đây 👇 (có thể mất chút thời gian để load)", description=f"Prompt: `{prompt}`", color=0x00ff00)
         embed.set_image(url=image_url)
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"Vẽ méo đc r m ơi... 💀: {e}")
         
 # --- Lệnh SLASH để ĐỔI MODEL ---
-@tree.command(name="model", description="Đổi model AI để chat cho nó 'phê' (≧▽≦)")
-@app_commands.describe(chon_model="Chọn một con hàng m thích")
+@tree.command(name="model", description="Đổi model AI để chat")
+@app_commands.describe(chon_model="Chọn một model AI mà bạn thích")
 @app_commands.choices(chon_model=[
     app_commands.Choice(name="GPT-OSS 120B (Siêu to - 500 t/s)", value="120B"),
     app_commands.Choice(name="Llama 4 Maverick 🔥 (Cực mạnh)", value="Llama-4-Maverick"),
@@ -82,7 +82,7 @@ async def imagine(interaction: discord.Interaction, prompt: str):
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global MODEL_NAME
     MODEL_NAME = MODELS[chon_model.value]
-    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}**! Quẩy thôi m 🐧🔥")
+    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công")
 
 # --- Xử lý tin nhắn chat ---
 @bot.event
