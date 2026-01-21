@@ -1,16 +1,16 @@
-import discord # Viết thường thôi m (¬_¬)
+import discord
 from discord.ext import commands
+from discord import app_commands
 from groq import Groq
-import os
+import os, io, urllib.parse
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
 load_dotenv()
 
-# Khởi tạo Groq
+# --- Khởi tạo Groq ---
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-# Đổi sang qwen, compound bú lắm token vl
 MODEL_NAME = "openai/gpt-oss-120b" 
 
 app = Flask(__name__)
@@ -18,9 +18,9 @@ app = Flask(__name__)
 def home(): return "Gemidởm đang nhây, đừng chạm vào! 🔥💀"
 
 def run_flask():
-    # Koyeb thường dùng 8080 cho ổn định m ơi
     app.run(host="0.0.0.0", port=8000)
 
+# --- Chỉ dẫn hệ thống (System Instruction) của m ---
 system_instruction = """
 Bot là Gemidởm – phiên bản AI nhây vl, vibe bạn thân.
 - Vibe: Cà khịa, lầy lội.
@@ -35,11 +35,33 @@ chat_history = {}
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
 
+@bot.event
+async def on_ready():
+    await tree.sync() # Đồng bộ slash command lên Discord
+    print(f"Bot {bot.user} đã sẵn sàng cắn m r nè! (≧▽≦)")
+
+# --- Lệnh SLASH để VẼ ẢNH ---
+@tree.command(name="imagine", description="Để t vẽ cho m xem ( ͡° ͜ʖ ͡°)")
+@app_commands.describe(prompt="Mô tả cái ảnh m mún vẽ")
+async def imagine(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer()
+    try:
+        encoded_prompt = urllib.parse.quote(prompt)
+        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+        embed = discord.Embed(title="Hàng về! 🎨", description=f"Prompt: `{prompt}`", color=0x00ff00)
+        embed.set_image(url=image_url)
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"Vẽ méo đc r m ơi... 💀: {e}")
+
+# --- Sự kiện CHAT cũ của m ---
 @bot.event
 async def on_message(message):
     if message.author == bot.user: return
     
+    # Chỉ trả lời khi bị tag hoặc nhắn tin riêng (DM)
     if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         user_id = str(message.author.id)
         if user_id not in chat_history:
@@ -47,17 +69,17 @@ async def on_message(message):
         
         chat_history[user_id].append({"role": "user", "content": message.content})
         
+        # Giữ lại 10 tin nhắn gần nhất để đỡ tốn token
         if len(chat_history[user_id]) > 10:
             chat_history[user_id] = [chat_history[user_id][0]] + chat_history[user_id][-9:]
 
         try:
             async with message.channel.typing():
-                # Fix lại cách gọi cho con 120B
                 chat_completion = client.chat.completions.create(
                     messages=chat_history[user_id],
                     model=MODEL_NAME,
                     temperature=0.7,
-                    max_tokens=300 # Cho nó "phun" chữ dài tí nếu cần
+                    max_tokens=300
                 )
                 
                 reply = chat_completion.choices[0].message.content
@@ -65,7 +87,6 @@ async def on_message(message):
                 await message.reply(reply if reply else "T CHỊU CHẾT🥀💔")
                 
         except Exception as e:
-            print(f"Lỗi nè m: {e}") # Log ra xem lỗi gì còn biết đường mà chửi
             if "429" in str(e):
                 await message.reply("M bào Groq ác quá nó sập mẹ r, đợi tí đê (¬_¬)🥀")
             else:
