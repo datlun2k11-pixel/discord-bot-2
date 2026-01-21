@@ -43,14 +43,14 @@ async def on_ready():
     print(f"Bot {bot.user} đã sẵn sàng cắn m r nè! (≧▽≦)")
 
 # --- Lệnh SLASH để VẼ ẢNH ---
-@tree.command(name="imagine", description="Để t vẽ cho m xem ( ͡° ͜ʖ ͡°)")
-@app_commands.describe(prompt="Mô tả cái ảnh m mún vẽ")
+@tree.command(name="imagine", description="dùng lệnh này để vẽ")
+@app_commands.describe(prompt="ném prompt vào để bot vẽ")
 async def imagine(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer()
     try:
         encoded_prompt = urllib.parse.quote(prompt)
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-        embed = discord.Embed(title="Hàng về! 🎨", description=f"Prompt: `{prompt}`", color=0x00ff00)
+        embed = discord.Embed(title="Ảnh đây (có thể mất chút thời gian để load)", description=f"Prompt: `{prompt}`", color=0x00ff00)
         embed.set_image(url=image_url)
         await interaction.followup.send(embed=embed)
     except Exception as e:
