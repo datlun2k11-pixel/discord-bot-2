@@ -12,6 +12,14 @@ load_dotenv()
 # --- Khởi tạo Groq ---
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL_NAME = "openai/gpt-oss-120b" 
+MODELS = {
+    "120B": "openai/gpt-oss-120b",
+    "Llama-3.3": "llama-3.3-70b-versatile",
+    "Llama-3.1": "llama-3.1-8b-instant",
+    "Mixtral": "mixtral-8x7b-32768"
+}
+# [span_0](start_span)Để mặc định là con 120B như cũ của m[span_0](end_span)
+MODEL_NAME = MODELS["120B"] 
 
 app = Flask(__name__)
 @app.route('/')
@@ -55,6 +63,19 @@ async def imagine(interaction: discord.Interaction, prompt: str):
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"Vẽ méo đc r m ơi... 💀: {e}")
+        
+@tree.command(name="model", description="Đổi model AI để chat cho nó 'phê' (≧▽≦)")
+@app_commands.describe(chon_model="Chọn một con hàng m thích")
+@app_commands.choices(chon_model=[
+    app_commands.Choice(name="GPT-OSS 120B (Siêu to khổng lồ)", value="120B"),
+    app_commands.Choice(name="Llama 3.3 70B (Hàng mới cực căng)", value="Llama-3.3"),
+    app_commands.Choice(name="Llama 3.1 8B (Nhanh như chớp)", value="Llama-3.1"),
+    app_commands.Choice(name="Mixtral 8x7b (Thông minh)", value="Mixtral")
+])
+async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
+    global MODEL_NAME
+    MODEL_NAME = MODELS[chon_model.value]
+    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}**! Quẩy thôi m 🐧🔥")
 
 # --- Sự kiện CHAT cũ của m ---
 @bot.event
