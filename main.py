@@ -14,13 +14,13 @@ client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL_NAME = "openai/gpt-oss-120b" 
 MODELS = {
     "120B": "openai/gpt-oss-120b",
-    "Llama-3.3": "llama-3.3-70b-versatile",
     "Llama-4-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "DeepSeek-R1": "deepseek-r1-distill-llama-70b",
+    "Llama-3.3": "llama-3.3-70b-versatile",
     "Qwen-3": "qwen/qwen3-32b",
-    "GPT-OSS-20B": "openai/gpt-oss-20b"
+    "GPT-OSS-20B": "openai/gpt-oss-20b",
+    "Kimi-K2": "moonshotai/kimi-k2-instruct-0905"
 }
-MODEL_NAME = MODELS["120B"]
+MODEL_NAME = MODELS["Llama-4-Maverick"]
 app = Flask(__name__)
 @app.route('/')
 def home(): return "Gemidởm đang nhây, đừng chạm vào! 🔥💀"
@@ -66,20 +66,19 @@ async def imagine(interaction: discord.Interaction, prompt: str):
         
 # --- Slash model ---
 
-@tree.command(name="model", description="Cho phép chuyển đổi giữa các model")
-@app_commands.describe(chon_model="Chọn một model")
 @app_commands.choices(chon_model=[
-    app_commands.Choice(name="GPT-OSS 120B (Hàng cũ nhưng chất)", value="120B"),
-    app_commands.Choice(name="Llama 3.3 70B (Mạnh vcl 280 t/s)", value="Llama-3.3"),
-    app_commands.Choice(name="Llama 4 Maverick 🔥 (Hàng nóng)", value="Llama-4-Maverick"),
-    app_commands.Choice(name="DeepSeek R1 (Llama 70b Distill)", value="DeepSeek-R1"),
-    app_commands.Choice(name="Qwen 3 (Mới ngon)", value="Qwen-3"),
-    app_commands.Choice(name="GPT-OSS 20B (Thần tốc 1000 t/s)", value="GPT-OSS-20B")
+    app_commands.Choice(name="GPT-OSS 120B (Rất khôn, nặng nhất)", value="120B"),
+    app_commands.Choice(name="Llama 4 Maverick (Mạnh teencode nhất)", value="Llama-4-Maverick"),
+    app_commands.Choice(name="Llama 3.3 70B (Reasoning đỉnh)", value="Llama-3.3"),
+    app_commands.Choice(name="Qwen 3 (Master Coding)", value="Qwen-3"),
+    app_commands.Choice(name="GPT-OSS 20B (Nhanh nhất)", value="GPT-OSS-20B"),
+    app_commands.Choice(name="Kimi K2 (Công cụ mạnh)", value="Kimi-K2")
 ])
+
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global MODEL_NAME
     MODEL_NAME = MODELS[chon_model.value]
-    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}**!")
+    await interaction.response.send_message(f"Model đẫ dược chuyển sang **{chon_model.name}**")
 
 # --- Sự kiện CHAT cũ của m ---
 @bot.event
