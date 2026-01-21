@@ -11,7 +11,7 @@ load_dotenv()
 # Khởi tạo Groq
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 # Đổi sang qwen, compound bú lắm token vl
-MODEL_NAME = "qwen/qwen3-32b" 
+MODEL_NAME = "openai/gpt-oss-120b" 
 
 app = Flask(__name__)
 @app.route('/')
