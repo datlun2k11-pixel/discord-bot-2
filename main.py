@@ -107,7 +107,7 @@ async def on_message(message):
                     messages=chat_history[user_id],
                     model=MODEL_NAME,
                     temperature=0.7,
-                    max_tokens=300
+                    max_tokens=1000
                 )
                 
                 reply = chat_completion.choices[0].message.content
