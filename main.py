@@ -85,7 +85,18 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
     global MODEL_NAME
     MODEL_NAME = MODELS[chon_model.value]
     await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công")
-
+# --- Lệnh SLASH để TÙY CHỈNH SYSTEM PROMPT ---
+@tree.command(name="instruction", description="Thay system prompt mới")
+@app_commands.describe(new_prompt="Nhập chỉ dẫn mới cho bot vào đây")
+async def setup(interaction: discord.Interaction, new_prompt: str):
+    global system_instruction
+    system_instruction = new_prompt
+    
+    # Reset lại lịch sử chat của thằng dùng lệnh để áp dụng prompt mới luôn
+    user_id = str(interaction.user.id)
+    chat_history[user_id] = [{"role": "system", "content": system_instruction}]
+    
+    await interaction.response.send_message(f"Đã đổi system prompt.\nPrompt hiện tại: `{new_prompt}`")
 # --- Xử lý tin nhắn chat ---
 @bot.event
 async def on_message(message):
