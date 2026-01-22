@@ -73,13 +73,13 @@ async def imagine(interaction: discord.Interaction, prompt: str):
 @tree.command(name="model", description="Đổi model AI để chat")
 @app_commands.describe(chon_model="Chọn một model AI mà bạn thích")
 @app_commands.choices(chon_model=[
-    app_commands.Choice(name="GPT-OSS 120B (Siêu to - 500 t/s)", value="120B"),
-    app_commands.Choice(name="Llama 4 Maverick 🔥 (Cực mạnh)", value="Llama-4-Maverick"),
-    app_commands.Choice(name="Llama 3.3 70B (Reasoning đỉnh)", value="Llama-3.3"),
+    app_commands.Choice(name="GPT-OSS 120B (Most intelligent)", value="120B"),
+    app_commands.Choice(name="GPT-OSS 20B (The fastest)", value="GPT-OSS-20B"),
+    app_commands.Choice(name="Llama 3.3 70B (Reasoning)", value="Llama-3.3"),
+    app_commands.Choice(name="Llama 4 Maverick (master of 'teencode')", value="Llama-4-Maverick"),
+    app_commands.Choice(name="Kimi K2 (Most trolling)", value="Kimi-K2"),
     app_commands.Choice(name="Qwen 3 (Master Coding)", value="Qwen-3"),
-    app_commands.Choice(name="GPT-OSS 20B (Thần tốc 1000 t/s)", value="GPT-OSS-20B"),
-    app_commands.Choice(name="Kimi K2 (Công cụ mạnh)", value="Kimi-K2"),
-    app_commands.Choice(name="Compound (Thập cẩm/tốn token nhất)", value="Compound")
+    app_commands.Choice(name="Compound (Complex/most token consumer)", value="Compound")
 ])
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global MODEL_NAME
