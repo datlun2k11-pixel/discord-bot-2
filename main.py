@@ -83,8 +83,8 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     embed = discord.Embed(title="Hàng về!", description=f"Prompt: `{prompt}`", color=0xff69b4)
     embed.set_image(url=url)
     await interaction.followup.send(embed=embed)
-    # --- Xoá ký ức ---
-    @bot.tree.command(name="clear", description="Xóa sạch ký ức với bot")
+# --- Xoá ký ức ---
+@bot.tree.command(name="clear", description="Xóa sạch ký ức với bot")
 async def clear(interaction: discord.Interaction):
     global chat_history
     user_id = str(interaction.user.id)
