@@ -2,91 +2,64 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
-import os, io, urllib.parse
-import google.generativeai as genai
+from openai import OpenAI
+import os, urllib.parse
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
 load_dotenv()
 
-# --- Khởi tạo Multi SDK (Groq + Google) ---
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+# --- Khởi tạo SDK (Xoá Google r nhé con vợ) ---
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+or_client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+)
 
-# 1. Config Model ID
+# 1. Config Model ID (3 con Groq + model OpenRouter)
 MODELS_CONFIG = {
-    "120B": "openai/gpt-oss-120b",
-    "Llama-4-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "Kimi-K2": "moonshotai/kimi-k2-instruct-0905",
-    "Gemini-2.5-Pro": "gemini-2.5-pro",
-    "Gemini-2.5-Flash": "gemini-2.5-flash",
-    "Gemini-3-Flash": "gemini-3.0-flash-preview",
-    "Gemini-3-Pro": "gemini-3.0-pro-preview"
+    "120B": "openai/gpt-oss-120b", # Con hàng m tin tưởng đây
+    "Llama-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
+    "Kimi": "moonshotai/kimi-k2-instruct-0905",
+    "Llama-Free": "meta-llama/llama-3.1-8b-instruct:free"
 }
 
-# 2. Danh sách Model cho Slash Command
+# 2. Choice cho m chọn
 MODEL_CHOICES = [
-    app_commands.Choice(name="Gemini 3 Pro Preview", value="Gemini-3-Pro"),
-    app_commands.Choice(name="Gemini 3 Flash Preview", value="Gemini-3-Flash"),
-    app_commands.Choice(name="Gemini 2.5 Pro", value="Gemini-2.5-Pro"), # Phải là 2.5 cho khớp config
-    app_commands.Choice(name="Gemini 2.5 Flash", value="Gemini-2.5-Flash"), # Như trên
-    app_commands.Choice(name="Llama 4 Maverick", value="Llama-4-Maverick"),
-    app_commands.Choice(name="Kimi K2", value="Kimi-K2"),
-    app_commands.Choice(name="GPT-OSS-120B", value="120B")
+    app_commands.Choice(name="GPT-OSS-120B (Groq Power)", value="120B"),
+    app_commands.Choice(name="Llama 4 Maverick", value="Llama-Maverick"),
+    app_commands.Choice(name="Kimi K2", value="Kimi"),
+    app_commands.Choice(name="Llama 3.1 8B (OpenRouter FREE)", value="Llama-Free")
 ]
 
-MODEL_NAME = MODELS_CONFIG["Llama-4-Maverick"] 
+CURRENT_MODEL = "120B" 
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenA-bot đang nhây, đừng chạm vào! 🔥💀"
+def home(): return "Bot Groq đang múa, né ra ko cắn! 🔥💀"
 
 def run_flask():
     app.run(host="0.0.0.0", port=8000)
 
-system_instruction = """
-Bot là GenA-bot – phiên bản AI nhây vl, vibe bạn thân.
-- Vibe: Cà khịa, lầy lội.
-- Xưng hô: m(mày) và t(tao)
-- Cách nói: cần teencode và viết tắt (j, v, r, cx, nx, ko,...)
-- Icon: Emoticon và emoji 💔, 🥀, 🔥, 💀, 🐧.
-- Đặc biệt: hỏi gì khó hoặc vô lý thì nói "T CHỊU CHẾT🥀💔" rồi im luôn.
-- Trả lời ngắn 1-2 dòng thôi.
-"""
+system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m-t, viết teencode, icon 💔🥀🔥💀🐧. Ngắn gọn 1-2 dòng thôi. Khó quá thì 'T CHỊU CHẾT🥀💔'."
 
 chat_history = {}
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
 
 @bot.event
 async def on_ready():
-    await tree.sync()
-    print(f"Bot {bot.user} ready cắn m r! (≧▽≦)")
+    await bot.tree.sync()
+    [span_4](start_span)print(f"Bot {bot.user} đã lên sàn Groq! (≧▽≦)")[span_4](end_span)
 
-# --- Lệnh SLASH để VẼ ẢNH (Dùng Pollinations cho nó "mlem") ---
-@tree.command(name="imagine", description="Vẽ ảnh bằng AI")
-@app_commands.describe(prompt="Ném prompt mlem vào đây")
-async def imagine(interaction: discord.Interaction, prompt: str):
-    await interaction.response.defer()
-    try:
-        encoded_prompt = urllib.parse.quote(prompt)
-        image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-        embed = discord.Embed(title="Ảnh:", description=f"Prompt: `{prompt}`", color=0xff69b4)
-        embed.set_image(url=image_url)
-        await interaction.followup.send(embed=embed)
-    except Exception as e:
-        await interaction.followup.send(f"Chuối nát r m ơi... 💀: {e}")
-
-# --- Lệnh SLASH ĐỔI MODEL ---
-@tree.command(name="model", description="Đổi model AI để chat")
+@bot.tree.command(name="model", description="Đổi model AI")
 @app_commands.choices(chon_model=MODEL_CHOICES)
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
-    global MODEL_NAME
-    MODEL_NAME = MODELS_CONFIG[chon_model.value]
-    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công")
+    global CURRENT_MODEL
+    CURRENT_MODEL = chon_model.value
+    [span_5](start_span)await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** 🐧🔥")[span_5](end_span)
 
 @bot.event
 async def on_message(message):
@@ -94,28 +67,32 @@ async def on_message(message):
     if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         user_id = str(message.author.id)
         if user_id not in chat_history:
-            chat_history[user_id] = [{"role": "system", "content": system_instruction}]
-        chat_history[user_id].append({"role": "user", "content": message.content})
+            [span_6](start_span)chat_history[user_id] = [{"role": "system", "content": system_instruction}][span_6](end_span)
+        
+        [span_7](start_span)chat_history[user_id].append({"role": "user", "content": message.content})[span_7](end_span)
         
         try:
             async with message.channel.typing():
-                # Phân loại dùng SDK nào
-                if "gemini" in MODEL_NAME.lower():
-                    m = genai.GenerativeModel(MODEL_NAME)
-                    response = m.generate_content(message.content)
-                    reply = response.text
-                else:
-                    chat_completion = client.chat.completions.create(
+                model_id = MODELS_CONFIG[CURRENT_MODEL]
+                
+                # Check xem dùng Groq hay OpenRouter
+                if CURRENT_MODEL in ["120B", "Llama-Maverick", "Kimi"]:
+                    res = groq_client.chat.completions.create(
+                        model=model_id,
                         messages=chat_history[user_id],
-                        model=MODEL_NAME,
                         temperature=0.7
                     )
-                    reply = chat_completion.choices[0].message.content
+                else:
+                    res = or_client.chat.completions.create(
+                        model=model_id,
+                        messages=chat_history[user_id]
+                    )
                 
-                await message.reply(reply if reply else "T CHỊU CHẾT🥀💔")
+                reply = res.choices[0].message.content
+                [span_8](start_span)await message.reply(reply if reply else "T CHỊU CHẾT🥀💔")[span_8](end_span)
         except Exception as e:
-            await message.reply(f"Lại lỗi clgi r... 💀: {e}")
+            [span_9](start_span)await message.reply(f"Lại oẳng r... 💀: {e}")[span_9](end_span)
 
 if __name__ == "__main__":
-    Thread(target=run_flask, daemon=True).start()
-    bot.run(os.getenv("DISCORD_TOKEN"))
+    [span_10](start_span)Thread(target=run_flask, daemon=True).start()[span_10](end_span)
+    [span_11](start_span)bot.run(os.getenv("DISCORD_TOKEN"))[span_11](end_span)
