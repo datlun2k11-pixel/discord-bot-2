@@ -27,13 +27,13 @@ MODELS_CONFIG = {
 
 # 2. Danh sách Model cho Slash Command
 MODEL_CHOICES = [
-    app_commands.Choice(name="Gemini 3 Pro Preview (Peakest/ez out quata)", value="Gemini-3-Pro"),
-    app_commands.Choice(name="Gemini 3 Flash Preview (fast)", value="Gemini-3-Flash"),
-    app_commands.Choice(name="Gemini 2.5 Pro (peak)", value="Gemini-2-Pro"),
-    app_commands.Choice(name="Gemini 2.5 Flash (Smooth)", value="Gemini-2-Flash"),
-    app_commands.Choice(name="Llama 4 Maverick (master of teencode)", value="Llama-4-Maverick"),
-    app_commands.Choice(name="Kimi K2 (trolling)", value="Kimi-K2"),
-    app_commands.Choice(name="GPT-OSS-120B (Reasoning)", value="120B")
+    app_commands.Choice(name="Gemini 3 Pro Preview", value="Gemini-3-Pro"),
+    app_commands.Choice(name="Gemini 3 Flash Preview", value="Gemini-3-Flash"),
+    app_commands.Choice(name="Gemini 2.5 Pro", value="Gemini-2.5-Pro"), # Phải là 2.5 cho khớp config
+    app_commands.Choice(name="Gemini 2.5 Flash", value="Gemini-2.5-Flash"), # Như trên
+    app_commands.Choice(name="Llama 4 Maverick", value="Llama-4-Maverick"),
+    app_commands.Choice(name="Kimi K2", value="Kimi-K2"),
+    app_commands.Choice(name="GPT-OSS-120B", value="120B")
 ]
 
 MODEL_NAME = MODELS_CONFIG["Llama-4-Maverick"] 
