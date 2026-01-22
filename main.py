@@ -63,7 +63,8 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer()
     try:
         # Gọi Nano Banana xịn xò
-        model = genai.GenerativeModel('nano-banana')
+        # Sửa lại thành tên model chuẩn của m nè
+        model = genai.GenerativeModel('gemini-2.5-flash-image') 
         # Lưu ý: Đây là cách gọi ví dụ, tùy vào API thực tế của Nano Banana m đang dùng
         result = model.generate_content(prompt)
         
