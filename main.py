@@ -28,7 +28,8 @@ MODELS_CONFIG = {
     "MiMo-Flash": "xiaomi/mimo-v2-flash:free",          # vl xịn, context 262k 🔥
     "Devstral": "mistralai/devstral-2512:free",         # coding god free luôn
     "Chimera-R1T2": "tngtech/deepseek-r1t2-chimera:free",  # roleplay/creepy ngon
-    "LFM-Instruct": "liquid/lfm-2.5-1.2b-instruct:free"   # nhỏ gọn, chat nhanh
+    "LFM-Instruct": "liquid/lfm-2.5-1.2b-instruct:free",  # nhỏ gọn, chat nhanh
+    "Gemma-3": "google/gemma-3-27b-it:free"
 }
 
 # 2. Danh sách Model cho Slash Command (thêm mấy con free)
@@ -36,7 +37,7 @@ MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
     app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Llama-Maverick"),
     app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi"),
-    app_commands.Choice(name="Llama 3.1 8B (OpenRouter FREE)", value="Llama-Free"),
+    app_commands.Choice(name="Gemma 3 (mạnh)", value="Gemma-3"),
     app_commands.Choice(name="MiMo-V2-Flash (Free 262k ctx)", value="MiMo-Flash"),
     app_commands.Choice(name="Devstral 2 2512 (Coding Beast Free)", value="Devstral"),
     app_commands.Choice(name="DeepSeek R1T2 Chimera (Roleplay Free)", value="Chimera-R1T2"),
