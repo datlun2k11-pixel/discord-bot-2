@@ -19,20 +19,28 @@ or_client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
-# 1. Config Model ID
+# 1. Config Model ID (thêm free OpenRouter)
 MODELS_CONFIG = {
     "120B": "openai/gpt-oss-120b",
     "Llama-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
     "Kimi": "moonshotai/kimi-k2-instruct-0905",
-    "Llama-Free": "meta-llama/llama-3.1-8b-instruct:free"
+    "Llama-Free": "meta-llama/llama-3.1-8b-instruct:free",
+    "MiMo-Flash": "xiaomi/mimo-v2-flash:free",          # vl xịn, context 262k 🔥
+    "Devstral": "mistralai/devstral-2512:free",         # coding god free luôn
+    "Chimera-R1T2": "tngtech/deepseek-r1t2-chimera:free",  # roleplay/creepy ngon
+    "LFM-Instruct": "liquid/lfm-2.5-1.2b-instruct:free"   # nhỏ gọn, chat nhanh
 }
 
-# 2. Danh sách Model cho Slash Command
+# 2. Danh sách Model cho Slash Command (thêm mấy con free)
 MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
     app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Llama-Maverick"),
     app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi"),
-    app_commands.Choice(name="Llama 3.1 8B (OpenRouter FREE)", value="Llama-Free")
+    app_commands.Choice(name="Llama 3.1 8B (OpenRouter FREE)", value="Llama-Free"),
+    app_commands.Choice(name="MiMo-V2-Flash (Free 262k ctx)", value="MiMo-Flash"),
+    app_commands.Choice(name="Devstral 2 2512 (Coding Beast Free)", value="Devstral"),
+    app_commands.Choice(name="DeepSeek R1T2 Chimera (Roleplay Free)", value="Chimera-R1T2"),
+    app_commands.Choice(name="LFM 1.2B Instruct (Nhỏ gọn Free)", value="LFM-Instruct")
 ]
 
 CURRENT_MODEL = "120B" 
@@ -40,7 +48,7 @@ CURRENT_MODEL = "120B"
 # --- FLASK ĐỂ TREO BOT TRÊN KOYEB ---
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenA-bot đang 'quẩy' Groq, né ra ko cắn! 🔥💀"
+def home(): return "GenA-bot đang 'quẩy' Groq + OpenRouter free, né ra ko cắn! 🔥💀"
 
 def run_flask():
     app.run(host="0.0.0.0", port=8000)
@@ -101,7 +109,7 @@ async def on_message(message):
                     )
                     reply = chat_completion.choices[0].message.content
                 else:
-                    # Dùng OpenRouter SDK
+                    # Dùng OpenRouter SDK (cho tất cả free + Llama-Free)
                     res = or_client.chat.completions.create(
                         model=model_id,
                         messages=chat_history[user_id]
