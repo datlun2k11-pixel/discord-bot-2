@@ -10,39 +10,43 @@ from threading import Thread
 
 load_dotenv()
 
-# --- Khởi tạo SDK (Xoá Google r nhé con vợ) ---
+# --- KHỞI TẠO SDK (Vĩnh biệt Google Rate Limit 🥀) ---
+# Groq cho mấy con model m thích
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# OpenRouter cho mấy con hàng FREE
 or_client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY"),
 )
 
-# 1. Config Model ID (3 con Groq + model OpenRouter)
+# 1. Config Model ID
 MODELS_CONFIG = {
-    "120B": "openai/gpt-oss-120b", # Con hàng m tin tưởng đây
+    "120B": "openai/gpt-oss-120b",
     "Llama-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
     "Kimi": "moonshotai/kimi-k2-instruct-0905",
     "Llama-Free": "meta-llama/llama-3.1-8b-instruct:free"
 }
 
-# 2. Choice cho m chọn
+# 2. Danh sách Model cho Slash Command
 MODEL_CHOICES = [
-    app_commands.Choice(name="GPT-OSS-120B (Groq Power)", value="120B"),
-    app_commands.Choice(name="Llama 4 Maverick", value="Llama-Maverick"),
-    app_commands.Choice(name="Kimi K2", value="Kimi"),
+    app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
+    app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Llama-Maverick"),
+    app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi"),
     app_commands.Choice(name="Llama 3.1 8B (OpenRouter FREE)", value="Llama-Free")
 ]
 
 CURRENT_MODEL = "120B" 
 
+# --- FLASK ĐỂ TREO BOT TRÊN KOYEB ---
 app = Flask(__name__)
 @app.route('/')
-def home(): return "Bot Groq đang múa, né ra ko cắn! 🔥💀"
+def home(): return "GenA-bot đang 'quẩy' Groq, né ra ko cắn! 🔥💀"
 
 def run_flask():
     app.run(host="0.0.0.0", port=8000)
 
-system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m-t, viết teencode, icon 💔🥀🔥💀🐧. Ngắn gọn 1-2 dòng thôi. Khó quá thì 'T CHỊU CHẾT🥀💔'."
+# --- CONFIG BOT ---
+system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m-t, viết teencode, dùng icon 💔🥀🔥💀🐧. Trả lời cực ngắn 1-2 dòng. Khó/vô lý quá thì 'GAH DAYUM💔😭🙏'."
 
 chat_history = {}
 intents = discord.Intents.default()
@@ -52,47 +56,62 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    [span_4](start_span)print(f"Bot {bot.user} đã lên sàn Groq! (≧▽≦)")[span_4](end_span)
+    print(f"Bot {bot.user} ready cắn m r! (≧▽≦)")
 
-@bot.tree.command(name="model", description="Đổi model AI")
+# --- LỆNH SLASH ĐỔI MODEL ---
+@bot.tree.command(name="model", description="Đổi model AI để chat")
 @app_commands.choices(chon_model=MODEL_CHOICES)
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
-    [span_5](start_span)await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** 🐧🔥")[span_5](end_span)
+    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công 🐧🔥")
 
+# --- LỆNH SLASH VẼ ẢNH ---
+@bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
+async def imagine(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer()
+    encoded = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true"
+    embed = discord.Embed(title="Hàng về!", description=f"Prompt: `{prompt}`", color=0xff69b4)
+    embed.set_image(url=url)
+    await interaction.followup.send(embed=embed)
+
+# --- XỬ LÝ CHAT ---
 @bot.event
 async def on_message(message):
     if message.author == bot.user: return
     if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         user_id = str(message.author.id)
         if user_id not in chat_history:
-            [span_6](start_span)chat_history[user_id] = [{"role": "system", "content": system_instruction}][span_6](end_span)
+            chat_history[user_id] = [{"role": "system", "content": system_instruction}]
         
-        [span_7](start_span)chat_history[user_id].append({"role": "user", "content": message.content})[span_7](end_span)
+        chat_history[user_id].append({"role": "user", "content": message.content})
         
         try:
             async with message.channel.typing():
                 model_id = MODELS_CONFIG[CURRENT_MODEL]
                 
-                # Check xem dùng Groq hay OpenRouter
+                # Logic chọn SDK
                 if CURRENT_MODEL in ["120B", "Llama-Maverick", "Kimi"]:
-                    res = groq_client.chat.completions.create(
-                        model=model_id,
+                    # Dùng Groq SDK
+                    chat_completion = groq_client.chat.completions.create(
                         messages=chat_history[user_id],
+                        model=model_id,
                         temperature=0.7
                     )
+                    reply = chat_completion.choices[0].message.content
                 else:
+                    # Dùng OpenRouter SDK
                     res = or_client.chat.completions.create(
                         model=model_id,
                         messages=chat_history[user_id]
                     )
+                    reply = res.choices[0].message.content
                 
-                reply = res.choices[0].message.content
-                [span_8](start_span)await message.reply(reply if reply else "T CHỊU CHẾT🥀💔")[span_8](end_span)
+                await message.reply(reply if reply else "GAH DAYUM💔😭🙏")
         except Exception as e:
-            [span_9](start_span)await message.reply(f"Lại oẳng r... 💀: {e}")[span_9](end_span)
+            await message.reply(f"Lỗi clgi r m ơi... 💀: {e}")
 
 if __name__ == "__main__":
-    [span_10](start_span)Thread(target=run_flask, daemon=True).start()[span_10](end_span)
-    [span_11](start_span)bot.run(os.getenv("DISCORD_TOKEN"))[span_11](end_span)
+    Thread(target=run_flask, daemon=True).start()
+    bot.run(os.getenv("DISCORD_TOKEN"))
