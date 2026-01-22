@@ -19,18 +19,18 @@ MODELS_CONFIG = {
     "120B": "openai/gpt-oss-120b",
     "Llama-4-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
     "Kimi-K2": "moonshotai/kimi-k2-instruct-0905",
-    "Gemini-2-Pro": "gemini-2.0-pro-exp",
-    "Gemini-2-Flash": "gemini-2.0-flash-exp",
-    "Gemini-3-Flash-Pre": "gemini-3.0-flash-preview",
-    "Gemini-3-Pro-Pre": "gemini-3.0-pro-preview"
+    "Gemini-2.5-Pro": "gemini-2.5-pro",
+    "Gemini-2.5-Flash": "gemini-2.5-flash",
+    "Gemini-3-Flash": "gemini-3.0-flash-preview",
+    "Gemini-3-Pro": "gemini-3.0-pro-preview"
 }
 
 # 2. Danh sách Model cho Slash Command
 MODEL_CHOICES = [
-    app_commands.Choice(name="Gemini 3 Pro Preview (Peakest/ez out quata)", value="Gemini-3-Pro-Pre"),
-    app_commands.Choice(name="Gemini 3 Flash Preview (fast)", value="Gemini-3-Flash-Pre"),
-    app_commands.Choice(name="Gemini 2 Pro Exp (peak)", value="Gemini-2-Pro"),
-    app_commands.Choice(name="Gemini 2 Flash Exp (Smooth)", value="Gemini-2-Flash"),
+    app_commands.Choice(name="Gemini 3 Pro Preview (Peakest/ez out quata)", value="Gemini-3-Pro"),
+    app_commands.Choice(name="Gemini 3 Flash Preview (fast)", value="Gemini-3-Flash"),
+    app_commands.Choice(name="Gemini 2.5 Pro (peak)", value="Gemini-2-Pro"),
+    app_commands.Choice(name="Gemini 2.5 Flash (Smooth)", value="Gemini-2-Flash"),
     app_commands.Choice(name="Llama 4 Maverick (master of teencode)", value="Llama-4-Maverick"),
     app_commands.Choice(name="Kimi K2 (trolling)", value="Kimi-K2"),
     app_commands.Choice(name="GPT-OSS-120B (Reasoning)", value="120B")
