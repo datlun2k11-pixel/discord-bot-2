@@ -43,7 +43,7 @@ MODEL_CHOICES = [
     app_commands.Choice(name="LFM 1.2B Instruct (Nhỏ gọn Free)", value="LFM-Instruct")
 ]
 
-CURRENT_MODEL = "120B" 
+CURRENT_MODEL = "Kimi" 
 
 # --- FLASK ĐỂ TREO BOT TRÊN KOYEB ---
 app = Flask(__name__)
@@ -54,7 +54,7 @@ def run_flask():
     app.run(host="0.0.0.0", port=8000)
 
 # --- CONFIG BOT ---
-system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m-t, viết teencode, dùng icon 💔🥀🔥💀🐧. Trả lời cực ngắn 1-2 dòng. Khó/vô lý quá thì 'GAH DAYUM💔😭🙏'."
+system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m(mày) - t(tao), viết teencode, dùng icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
 
 chat_history = {}
 intents = discord.Intents.default()
@@ -72,7 +72,7 @@ async def on_ready():
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
-    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công 🐧🔥")
+    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công")
 
 # --- LỆNH SLASH VẼ ẢNH ---
 @bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
