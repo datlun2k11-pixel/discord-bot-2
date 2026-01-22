@@ -95,6 +95,30 @@ async def clear(interaction: discord.Interaction):
         await interaction.response.send_message("Đã xóa sạch ký ức")
     else:
         await interaction.response.send_message("Chưa xoá được do ký ức mới")
+# --- Meme ---
+@bot.tree.command(name="meme", description="Random meme hàng VN")
+async def meme(interaction: discord.Interaction, so_luong: int = 1):
+    await interaction.response.defer()
+    try:
+        import aiohttp
+        
+        if so_luong > 5:
+            await interaction.followup.send("Tối đa 5 meme thôi")
+            return
+            
+        async with aiohttp.ClientSession() as session:
+            for i in range(so_luong):
+                async with session.get("https://phimtat.vn/api/random-meme/") as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        meme_url = data.get("url") or data.get("image") or data.get("link")
+                        
+                        embed = discord.Embed(title=f"Meme #{i+1} Meme:", color=0xff69b4)
+                        embed.set_image(url=meme_url)
+                        
+                        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"Lỗi vl: {e} 😭🙏")
 
 
 # --- XỬ LÝ CHAT ---
