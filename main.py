@@ -96,27 +96,37 @@ async def clear(interaction: discord.Interaction):
     else:
         await interaction.response.send_message("Chưa xoá được do ký ức mới")
 # --- Meme ---
-@bot.tree.command(name="meme", description="Random meme Việt cực bá đạo")
-async def meme(interaction: discord.Interaction):
+@bot.tree.command(name="meme", description="Random meme Việt Nam")
+async def meme(interaction: discord.Interaction, so_luong: int = 1):
     await interaction.response.defer()
+    
+    if so_luong > 5:
+        await interaction.followup.send("Tối đa 5 meme thôi m ơi, nhiều vcl spam r 💀")
+        return
+    
+    if so_luong < 1:
+        await interaction.followup.send("Ít nhất 1 meme chứ bro 😭")
+        return
+    
     try:
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            async with session.get("https://phimtat.vn/api/random-meme/") as resp:
-                if resp.status == 200:
-                    # API trả về link redirect sang ảnh luôn, lấy URL cuối cùng
-                    meme_url = str(resp.url)
-                    
-                    embed = discord.Embed(title="Meme hàng khủng VN đây! 🔥", color=0xff69b4)
-                    embed.set_image(url=meme_url)
-                    
-                    await interaction.followup.send(embed=embed)
-                else:
-                    await interaction.followup.send("API meme chết r bro 💀")
+            for i in range(so_luong):
+                async with session.get("https://phimtat.vn/api/random-meme/") as resp:
+                    if resp.status == 200:
+                        meme_url = str(resp.url)
+                        
+                        embed = discord.Embed(
+                            title=f"Meme #{i+1}:", 
+                            color=0xff69b4
+                        )
+                        embed.set_image(url=meme_url)
+                        
+                        await interaction.followup.send(embed=embed)
+                    else:
+                        await interaction.followup.send(f"Meme #{i+1} lỗi r bro 💀")
     except Exception as e:
         await interaction.followup.send(f"Lỗi vl: {e} 😭🙏")
-
-
 # --- XỬ LÝ CHAT ---
 @bot.event
 async def on_message(message):
