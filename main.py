@@ -83,6 +83,18 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     embed = discord.Embed(title="Hàng về!", description=f"Prompt: `{prompt}`", color=0xff69b4)
     embed.set_image(url=url)
     await interaction.followup.send(embed=embed)
+    # --- Xoá ký ức ---
+    @bot.tree.command(name="clear", description="Xóa sạch ký ức với bot")
+async def clear(interaction: discord.Interaction):
+    global chat_history
+    user_id = str(interaction.user.id)
+    if user_id in chat_history:
+        # Reset về lại system instruction ban đầu
+        chat_history[user_id] = [{"role": "system", "content": system_instruction}]
+        await interaction.response.send_message("Đã xóa sạch ký ức")
+    else:
+        await interaction.response.send_message("Chưa xoá được do ký ức mới")
+
 
 # --- XỬ LÝ CHAT ---
 @bot.event
