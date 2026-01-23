@@ -2,36 +2,36 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
-import os, urllib.parse
+import os, urllib.parse, base64
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
 load_dotenv()
 
-# --- KHỞI TẠO SDK (chỉ giữ Groq thôi) ---
+# --- KHỞI TẠO SDK ---
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# 1. Config Model ID (xoá sạch OpenRouter r nhé)
+# 1. Config Model ID (đánh dấu con nào support vision)
 MODELS_CONFIG = {
-    "120B": "openai/gpt-oss-120b",
-    "Llama-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "Kimi": "moonshotai/kimi-k2-instruct-0905"
+    "120B": {"id": "openai/gpt-oss-120b", "vision": False},
+    "Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "vision": True},  # con này nhìn đc ảnh
+    "Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False}
 }
 
-# 2. Danh sách Model cho Slash Command (chỉ còn Groq)
+# 2. Danh sách Model cho Slash Command
 MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
-    app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Llama-Maverick"),
+    app_commands.Choice(name="Llama 4 Maverick (Groq)(phân tích đc ảnh)", value="Llama-Maverick"),  # emoji mắt = support ảnh
     app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi")
 ]
 
-CURRENT_MODEL = "Kimi" 
+CURRENT_MODEL = "Llama-Maverick"  # đổi default sang con nhìn đc ảnh
 
-# --- FLASK ĐỂ TREO BOT TRÊN KOYEB ---
+# --- FLASK ---
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenA-bot đang 'quẩy' Groq, né ra ko cắn! 🔥💀"
+def home(): return "GenA-bot đang 'quẩy' Groq + Vision, né ra ko cắn! 🔥💀"
 
 def run_flask():
     app.run(host="0.0.0.0", port=8000)
@@ -55,7 +55,8 @@ async def on_ready():
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
-    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công 🔥")
+    vision_status = "👁️ Nhìn đc ảnh" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌ Ko nhìn đc ảnh"
+    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** ({vision_status}) 🔥")
 
 # --- LỆNH SLASH VẼ ẢNH ---
 @bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
@@ -111,7 +112,21 @@ async def meme(interaction: discord.Interaction, so_luong: int = 1):
     except Exception as e:
         await interaction.followup.send(f"Lỗi vl: {e} 😭🙏")
 
-# --- XỬ LÝ CHAT ---
+# --- HÀM DOWNLOAD ẢNH TỪ DISCORD ---
+async def download_image(attachment):
+    """Download ảnh từ Discord và convert sang base64"""
+    try:
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            async with session.get(attachment.url) as resp:
+                if resp.status == 200:
+                    image_data = await resp.read()
+                    return base64.b64encode(image_data).decode('utf-8')
+    except Exception as e:
+        print(f"Lỗi download ảnh: {e}")
+    return None
+
+# --- XỬ LÝ CHAT (CÓ HỖ TRỢ VISION) ---
 @bot.event
 async def on_message(message):
     if message.author == bot.user: return
@@ -120,19 +135,68 @@ async def on_message(message):
         if user_id not in chat_history:
             chat_history[user_id] = [{"role": "system", "content": system_instruction}]
         
-        chat_history[user_id].append({"role": "user", "content": message.content})
+        # Kiểm tra xem có ảnh ko
+        has_image = len(message.attachments) > 0 and message.attachments[0].content_type.startswith('image/')
+        
+        # Kiểm tra model hiện tại có support vision ko
+        if has_image and not MODELS_CONFIG[CURRENT_MODEL]["vision"]:
+            await message.reply("Model hiện tại ko nhìn đc ảnh m ơi 💀 Dùng /model chọn Llama 4 Maverick đi!")
+            return
         
         try:
             async with message.channel.typing():
-                model_id = MODELS_CONFIG[CURRENT_MODEL]
+                model_id = MODELS_CONFIG[CURRENT_MODEL]["id"]
                 
-                # Chỉ dùng Groq SDK thôi
+                # Nếu có ảnh và model support vision
+                if has_image and MODELS_CONFIG[CURRENT_MODEL]["vision"]:
+                    image_base64 = await download_image(message.attachments[0])
+                    
+                    if image_base64:
+                        # Format message cho vision API
+                        user_message = {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": message.content if message.content else "Phân tích ảnh này giúp t"
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:image/jpeg;base64,{image_base64}"
+                                    }
+                                }
+                            ]
+                        }
+                    else:
+                        await message.reply("Download ảnh lỗi r bro 💀")
+                        return
+                else:
+                    # Chat text bình thường
+                    user_message = {"role": "user", "content": message.content}
+                
+                # Tạo history tạm (ko lưu ảnh vào history để tiết kiệm token)
+                temp_history = chat_history[user_id].copy()
+                temp_history.append(user_message)
+                
+                # Gọi API
                 chat_completion = groq_client.chat.completions.create(
-                    messages=chat_history[user_id],
+                    messages=temp_history,
                     model=model_id,
                     temperature=0.7
                 )
                 reply = chat_completion.choices[0].message.content
+                
+                # Lưu vào history (chỉ lưu text thôi)
+                if has_image:
+                    chat_history[user_id].append({
+                        "role": "user", 
+                        "content": f"[Đã gửi ảnh] {message.content if message.content else 'Phân tích ảnh'}"
+                    })
+                else:
+                    chat_history[user_id].append(user_message)
+                
+                chat_history[user_id].append({"role": "assistant", "content": reply})
                 
                 await message.reply(reply if reply else "GAH DAYUM💔😭🙏")
         except Exception as e:
