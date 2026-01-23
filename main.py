@@ -64,7 +64,7 @@ async def random_model(interaction: discord.Interaction):
     global CURRENT_MODEL
     choice = random.choice(MODEL_CHOICES)
     CURRENT_MODEL = choice.value
-    vision_status = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
+    vision_status = "(👁️✅)" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "(👁️❌)"
     await interaction.response.send_message(f"đã bốc trúng model: **{choice.name}** {vision_status}.")
 
 # --- LỆNH SLASH VẼ ẢNH ---
@@ -139,7 +139,19 @@ async def ship(interaction: discord.Interaction, user1: discord.Member, user2: d
         color=0xff0000 if pts < 50 else 0x00ff00
     )
     await interaction.response.send_message(embed=embed)
+# --- gay checker ---
+@bot.tree.command(name="check_gay", description="Đo độ gây của bạn")
+async def check_gay(interaction: discord.Interaction, target: discord.Member):
+    rate = random.randint(0, 100)
+    
+    if rate < 30:
+        result = f"Chỉ cs {rate}% th. thẳng như cột thu lôi luôn, coi chừng bị sét đánh=))"
+    elif rate <= 70:
+        result = f"T thấy {rate}% khá cấn đó bro, nghi m vl🥀."
+    else:
+        result = f"bro af, tận {rate}%, t nghĩ m... 🏳️‍🌈 thật r 😭🔥"
 
+    await interaction.response.send_message(f"Đo độ 🏳️‍🌈 của **{target.display_name}**:\n**Kết quả:** {result}")
 # --- HÀM DOWNLOAD ẢNH TỪ DISCORD ---
 async def download_image(attachment):
     """Download ảnh từ Discord và convert sang base64"""
