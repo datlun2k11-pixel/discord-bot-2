@@ -37,7 +37,7 @@ def run_flask():
     app.run(host="0.0.0.0", port=8000)
 
 # --- CONFIG BOT ---
-system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m(mày, chỉ đối phương) - t(tao, chỉ bản thân), viết teencode, dùng icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
+system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m(mày, chỉ đối phương) - t(tao, chỉ bản thân), viết teencode, dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
 chat_history = {}
 intents = discord.Intents.default()
 intents.message_content = True
