@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
-from openai import OpenAI
 import os, urllib.parse
 from dotenv import load_dotenv
 from flask import Flask
@@ -10,38 +9,21 @@ from threading import Thread
 
 load_dotenv()
 
-# --- KHỞI TẠO SDK (Vĩnh biệt Google Rate Limit 🥀) ---
-# Groq cho mấy con model m thích
+# --- KHỞI TẠO SDK (chỉ giữ Groq thôi) ---
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-# OpenRouter cho mấy con hàng FREE
-or_client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-)
 
-# 1. Config Model ID (thêm free OpenRouter)
+# 1. Config Model ID (xoá sạch OpenRouter r nhé)
 MODELS_CONFIG = {
     "120B": "openai/gpt-oss-120b",
     "Llama-Maverick": "meta-llama/llama-4-maverick-17b-128e-instruct",
-    "Kimi": "moonshotai/kimi-k2-instruct-0905",
-    "Llama-Free": "meta-llama/llama-3.1-8b-instruct:free",
-    "MiMo-Flash": "xiaomi/mimo-v2-flash:free",          # vl xịn, context 262k 🔥
-    "Devstral": "mistralai/devstral-2512:free",         # coding god free luôn
-    "Chimera-R1T2": "tngtech/deepseek-r1t2-chimera:free",  # roleplay/creepy ngon
-    "LFM-Instruct": "liquid/lfm-2.5-1.2b-instruct:free",  # nhỏ gọn, chat nhanh
-    "Gemma-3": "google/gemma-3-27b-it:free"
+    "Kimi": "moonshotai/kimi-k2-instruct-0905"
 }
 
-# 2. Danh sách Model cho Slash Command (thêm mấy con free)
+# 2. Danh sách Model cho Slash Command (chỉ còn Groq)
 MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
     app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Llama-Maverick"),
-    app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi"),
-    app_commands.Choice(name="Gemma 3 (mạnh)", value="Gemma-3"),
-    app_commands.Choice(name="MiMo-V2-Flash (Free 262k ctx)", value="MiMo-Flash"),
-    app_commands.Choice(name="Devstral 2 2512 (Coding Beast Free)", value="Devstral"),
-    app_commands.Choice(name="DeepSeek R1T2 Chimera (Roleplay Free)", value="Chimera-R1T2"),
-    app_commands.Choice(name="LFM 1.2B Instruct (Nhỏ gọn Free)", value="LFM-Instruct")
+    app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi")
 ]
 
 CURRENT_MODEL = "Kimi" 
@@ -49,7 +31,7 @@ CURRENT_MODEL = "Kimi"
 # --- FLASK ĐỂ TREO BOT TRÊN KOYEB ---
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenA-bot đang 'quẩy' Groq + OpenRouter free, né ra ko cắn! 🔥💀"
+def home(): return "GenA-bot đang 'quẩy' Groq, né ra ko cắn! 🔥💀"
 
 def run_flask():
     app.run(host="0.0.0.0", port=8000)
@@ -73,7 +55,7 @@ async def on_ready():
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
-    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công")
+    await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** thành công 🔥")
 
 # --- LỆNH SLASH VẼ ẢNH ---
 @bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
@@ -84,17 +66,18 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     embed = discord.Embed(title="Hàng về!", description=f"Prompt: `{prompt}`", color=0xff69b4)
     embed.set_image(url=url)
     await interaction.followup.send(embed=embed)
+
 # --- Xoá ký ức ---
 @bot.tree.command(name="clear", description="Xóa sạch ký ức với bot")
 async def clear(interaction: discord.Interaction):
     global chat_history
     user_id = str(interaction.user.id)
     if user_id in chat_history:
-        # Reset về lại system instruction ban đầu
         chat_history[user_id] = [{"role": "system", "content": system_instruction}]
-        await interaction.response.send_message("Đã xóa sạch ký ức")
+        await interaction.response.send_message("Đã xóa sạch ký ức 💀")
     else:
-        await interaction.response.send_message("Chưa xoá được do ký ức mới")
+        await interaction.response.send_message("Chưa xoá được do ký ức mới 🥀")
+
 # --- Meme ---
 @bot.tree.command(name="meme", description="Random meme Việt Nam")
 async def meme(interaction: discord.Interaction, so_luong: int = 1):
@@ -127,6 +110,7 @@ async def meme(interaction: discord.Interaction, so_luong: int = 1):
                         await interaction.followup.send(f"Meme #{i+1} lỗi r bro 💀")
     except Exception as e:
         await interaction.followup.send(f"Lỗi vl: {e} 😭🙏")
+
 # --- XỬ LÝ CHAT ---
 @bot.event
 async def on_message(message):
@@ -142,22 +126,13 @@ async def on_message(message):
             async with message.channel.typing():
                 model_id = MODELS_CONFIG[CURRENT_MODEL]
                 
-                # Logic chọn SDK
-                if CURRENT_MODEL in ["120B", "Llama-Maverick", "Kimi"]:
-                    # Dùng Groq SDK
-                    chat_completion = groq_client.chat.completions.create(
-                        messages=chat_history[user_id],
-                        model=model_id,
-                        temperature=0.7
-                    )
-                    reply = chat_completion.choices[0].message.content
-                else:
-                    # Dùng OpenRouter SDK (cho tất cả free + Llama-Free)
-                    res = or_client.chat.completions.create(
-                        model=model_id,
-                        messages=chat_history[user_id]
-                    )
-                    reply = res.choices[0].message.content
+                # Chỉ dùng Groq SDK thôi
+                chat_completion = groq_client.chat.completions.create(
+                    messages=chat_history[user_id],
+                    model=model_id,
+                    temperature=0.7
+                )
+                reply = chat_completion.choices[0].message.content
                 
                 await message.reply(reply if reply else "GAH DAYUM💔😭🙏")
         except Exception as e:
