@@ -1,4 +1,5 @@
 import discord
+import random
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -22,7 +23,7 @@ MODELS_CONFIG = {
 # 2. Danh sách Model cho Slash Command
 MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
-    app_commands.Choice(name="Llama 4 Maverick (Groq)(phân tích đc ảnh)", value="Llama-Maverick"),  # emoji mắt = support ảnh
+    app_commands.Choice(name="Llama 4 Maverick (Groq) 👁️", value="Llama-Maverick"),  # emoji mắt = support ảnh
     app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi")
 ]
 
@@ -57,6 +58,14 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
     CURRENT_MODEL = chon_model.value
     vision_status = "👁️ Nhìn đc ảnh" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌ Ko nhìn đc ảnh"
     await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** ({vision_status}) 🔥")
+# --- random model ---
+@bot.tree.command(name="random", description="random 1 model bất kì")
+async def random_model(interaction: discord.Interaction):
+    global CURRENT_MODEL
+    choice = random.choice(MODEL_CHOICES)
+    CURRENT_MODEL = choice.value
+    vision_status = "👁️" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌"
+    await interaction.response.send_message(f"đã bốc trúng model: **{choice.name}** {vision_status}.")
 
 # --- LỆNH SLASH VẼ ẢNH ---
 @bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
