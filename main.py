@@ -64,7 +64,7 @@ async def random_model(interaction: discord.Interaction):
     global CURRENT_MODEL
     choice = random.choice(MODEL_CHOICES)
     CURRENT_MODEL = choice.value
-    vision_status = "👁️" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌"
+    vision_status = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
     await interaction.response.send_message(f"đã bốc trúng model: **{choice.name}** {vision_status}.")
 
 # --- LỆNH SLASH VẼ ẢNH ---
