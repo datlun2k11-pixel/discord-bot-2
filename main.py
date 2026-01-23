@@ -120,6 +120,25 @@ async def meme(interaction: discord.Interaction, so_luong: int = 1):
                         await interaction.followup.send(f"Meme #{i+1} lỗi r bro 💀")
     except Exception as e:
         await interaction.followup.send(f"Lỗi vl: {e} 😭🙏")
+# --- ship ---
+@bot.tree.command(name="ship", description="Checking tình yêu hoặc tình bạn")
+@app_commands.describe(user1="Thứ nhất", user2="Thứ hai")
+async def ship(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
+    pts = random.randint(0, 100)
+    
+    if pts > 80:
+        msg = f"OTP này real vl, {pts}% lận. Cưới lẹ đi t ăn cỗ (joke) 🥀🔥"
+    elif pts > 50:
+        msg = f"Cx đc, {pts}%. Nhm chắc làm friendzone th 🐧💔"
+    else:
+        msg = f"Có {pts}% th à? bruh."
+        
+    embed = discord.Embed(
+        title="Shipping checking",
+        description=f"**{user1.display_name}** x **{user2.display_name}**\n\n**Kết quả:** {msg}",
+        color=0xff0000 if pts < 50 else 0x00ff00
+    )
+    await interaction.response.send_message(embed=embed)
 
 # --- HÀM DOWNLOAD ẢNH TỪ DISCORD ---
 async def download_image(attachment):
