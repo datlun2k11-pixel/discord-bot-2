@@ -144,14 +144,20 @@ async def ship(interaction: discord.Interaction, user1: discord.Member, user2: d
 async def check_gay(interaction: discord.Interaction, target: discord.Member):
     rate = random.randint(0, 100)
     
-    if rate < 30:
+    if rate < 35:
         result = f"Chỉ cs {rate}% th. thẳng như cột thu lôi luôn, coi chừng bị sét đánh=))"
     elif rate <= 70:
         result = f"T thấy {rate}% khá cấn đó bro, nghi m vl🥀."
     else:
-        result = f"bro af, tận {rate}%, t nghĩ m... 🏳️‍🌈 thật r 😭🔥"
+        result = f"bro à. Tận {rate}%, t nghĩ m... '🏳️‍🌈' thật r 😭🔥"
 
-    await interaction.response.send_message(f"Đo độ 🏳️‍🌈 của **{target.display_name}**:\n**Kết quả:** {result}")
+    embed = discord.Embed(
+        title="Checking Gay",
+        description=f"**{interaction.user.display_name}** checking **{target.display_name}**\n\n**Kết quả:** {result}",
+        color=0xff0000 if rate < 50 else 0x00ff00
+    )
+    await interaction.response.send_message(embed=embed)
+
 # --- HÀM DOWNLOAD ẢNH TỪ DISCORD ---
 async def download_image(attachment):
     """Download ảnh từ Discord và convert sang base64"""
