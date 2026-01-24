@@ -113,7 +113,14 @@ async def on_message(message):
     if message.author == bot.user: return
     if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         user_id = str(message.author.id)
-        if user_id not in chat_history: chat_history[user_id] = [{"role": "system", "content": system_instruction}]
+        
+        # Tạo system instruction có tên user
+        sys_msg = f"Mày là GenA-bot, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. <@1458799287910535324> là userID của GenA-bot. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+        
+        if user_id not in chat_history: 
+            chat_history[user_id] = [{"role": "system", "content": sys_msg}]
+        else:
+            chat_history[user_id][0] = {"role": "system", "content": sys_msg}
         
         has_img = len(message.attachments) > 0 and "image" in message.attachments[0].content_type
         if has_img and not MODELS_CONFIG[CURRENT_MODEL]["vision"]:
@@ -136,7 +143,7 @@ async def on_message(message):
                 
                 chat_history[user_id].append({"role": "user", "content": message.content or "[Ảnh]"})
                 chat_history[user_id].append({"role": "assistant", "content": reply})
-                chat_history[user_id] = chat_history[user_id][-8:]
+                chat_history[user_id] = chat_history[user_id][-8:]  # giữ 8 nha
                 await message.reply(reply or "Tịt r 💔")
             except Exception as e: await message.reply(f"ngừng chat đi bây, có lỗi: {e} 💀")
 
