@@ -74,21 +74,21 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="meme", description="Random meme VN")
+@app_commands.describe(count="Số lượng meme muốn lấy (1-10)")
 async def meme(interaction: discord.Interaction, count: int = 1):
     await interaction.response.defer()
-    if not (1 <= count <= 5):  # sửa so_luong -> count nè
-        return await interaction.followup.send("chỉ từ 1-5 cái")
+    if not (1 <= count <= 10): return await interaction.followup.send("chỉ từ 1-10 cái (rate limit vì spam nhiều có thể gây lag🥀)")
     try:
         async with aiohttp.ClientSession() as session:
             for i in range(count):
                 async with session.get("https://phimtat.vn/api/random-meme/") as resp:
                     if resp.status == 200:
-                        e = discord.Embed(title=f"Meme #{i+1}", color=0xff69b4)
+                        random_color = random.randint(0, 0xFFFFFF)  # màu random đây nè
+                        e = discord.Embed(title=f"Meme #{i+1}", color=random_color)
                         e.set_image(url=str(resp.url))
                         await interaction.followup.send(embed=e)
-    except Exception as e:  # thêm Exception để bắt lỗi rõ hơn
-        await interaction.followup.send(f"Meme gặp trục trặc r bro🥀😭 {e}")
-
+    except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
+        
 @bot.tree.command(name="ship", description="Check OTP")
 async def ship(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
     pts = random.randint(0, 100)
