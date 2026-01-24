@@ -1,7 +1,7 @@
 import discord
 import random
 import os, urllib.parse, base64
-import aiohttp # <--- Thiếu cái này là /meme với vision cút luôn
+import aiohttp
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -19,6 +19,15 @@ MODELS_CONFIG = {
     "Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "vision": True},
     "Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False}
 }
+
+GROQ_TOOLS = [
+    {
+        "type": "builtin_function",
+        "function": {
+            "name": "$web_search", 
+        }
+    }
+]
 
 MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
@@ -54,7 +63,7 @@ async def on_ready():
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
-    vision_status = "👁️ Nhìn đc ảnh" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌ Ko nhìn đc ảnh"
+    vision_status = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
     await interaction.response.send_message(f"Đã chuyển sang model **{chon_model.name}** ({vision_status}) 🔥")
 
 @bot.tree.command(name="random", description="random 1 model bất kì")
@@ -111,7 +120,7 @@ async def check_gay(interaction: discord.Interaction, target: discord.Member):
     embed = discord.Embed(title="Gay Test", description=f"{target.display_name}: {rate}%\n{result}", color=0xff0000 if rate > 50 else 0x00ff00)
     await interaction.response.send_message(embed=embed)
 
-# --- XỬ LÝ CHAT & VISION ---
+# --- XỬ LÝ CHAT & VISION & SEARCH ---
 async def download_image(attachment):
     try:
         async with aiohttp.ClientSession() as session:
@@ -128,33 +137,50 @@ async def on_message(message):
         if user_id not in chat_history:
             chat_history[user_id] = [{"role": "system", "content": system_instruction}]
         
-        has_img = len(message.attachments) > 0 and "image" in message.attachments[0].content_type
-        if has_img and not MODELS_CONFIG[CURRENT_MODEL]["vision"]:
-            return await message.reply("Model này mù, đổi sang Llama Maverick đi! 💀")
-
-        async with message.channel.typing():
-            try:
-                content = [{"type": "text", "text": message.content or "Soi ảnh này đi m"}]
-                if has_img:
-                    img_b64 = await download_image(message.attachments[0])
-                    if img_b64: content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}})
+        has_image = len(message.attachments) > 0 and message.attachments[0].content_type.startswith('image/')
+        
+        if has_image and not MODELS_CONFIG[CURRENT_MODEL]["vision"]:
+            await message.reply("Model này mù ảnh m ơi 💀 Đổi con Maverick đi!")
+            return
+        
+        try:
+            async with message.channel.typing():
+                model_id = MODELS_CONFIG[CURRENT_MODEL]["id"]
                 
-                msg_obj = {"role": "user", "content": content if has_img else message.content}
+                if has_image and MODELS_CONFIG[CURRENT_MODEL]["vision"]:
+                    image_base64 = await download_image(message.attachments[0])
+                    user_message = {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": message.content or "Phân tích ảnh"},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+                        ]
+                    }
+                else:
+                    user_message = {"role": "user", "content": message.content}
                 
-                res = groq_client.chat.completions.create(
-                    messages=chat_history[user_id] + [msg_obj],
-                    model=MODELS_CONFIG[CURRENT_MODEL]["id"]
+                temp_history = chat_history[user_id].copy()
+                temp_history.append(user_message)
+                
+                use_tools = GROQ_TOOLS if CURRENT_MODEL in ["120B", "Kimi"] else None
+                
+                chat_completion = groq_client.chat.completions.create(
+                    messages=temp_history,
+                    model=model_id,
+                    tools=use_tools,
+                    tool_choice="auto" if use_tools else None,
+                    temperature=0.7
                 )
-                reply = res.choices[0].message.content
                 
-                # Lưu history (chỉ lưu text cho đỡ tốn quota)
-                chat_history[user_id].append({"role": "user", "content": message.content or "[Ảnh]"})
+                reply = chat_completion.choices[0].message.content
+                
+                chat_history[user_id].append(user_message)
                 chat_history[user_id].append({"role": "assistant", "content": reply})
-                chat_history[user_id] = chat_history[user_id][-10:] # Giữ 10 câu gần nhất thôi
-                
-                await message.reply(reply or "T tịt 1 tí r💔")
-            except Exception as e:
-                await message.reply(f"Oẳng r: {e} 💀")
+                chat_history[user_id] = chat_history[user_id][-10:] 
+
+                await message.reply(reply if reply else "GAH DAYUM💔😭🙏")
+        except Exception as e:
+            await message.reply(f"Lỗi tung đít r m: {e} 💀")
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
