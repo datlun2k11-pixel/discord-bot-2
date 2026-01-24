@@ -75,7 +75,8 @@ async def imagine(interaction: discord.Interaction, prompt: str):
 @bot.tree.command(name="meme", description="Random meme VN")
 async def meme(interaction: discord.Interaction, count: int = 1):
     await interaction.response.defer()
-    if not (1 <= so_luong <= 5): return await interaction.followup.send("chỉ từ 1-5 cái")
+    if not (1 <= count <= 5):  # sửa so_luong -> count nè
+        return await interaction.followup.send("chỉ từ 1-5 cái")
     try:
         async with aiohttp.ClientSession() as session:
             for i in range(count):
@@ -84,7 +85,8 @@ async def meme(interaction: discord.Interaction, count: int = 1):
                         e = discord.Embed(title=f"Meme #{i+1}", color=0xff69b4)
                         e.set_image(url=str(resp.url))
                         await interaction.followup.send(embed=e)
-    except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
+    except Exception as e:  # thêm Exception để bắt lỗi rõ hơn
+        await interaction.followup.send(f"Meme gặp trục trặc r bro🥀😭 {e}")
 
 @bot.tree.command(name="ship", description="Check OTP")
 async def ship(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
