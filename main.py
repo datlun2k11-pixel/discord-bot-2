@@ -168,7 +168,7 @@ async def on_message(message):
                     messages=temp_history,
                     model=model_id,
                     tools=use_tools,
-                    tool_choice="auto" if use_tools else None,
+                    tool_choice="auto" if use_tools else "none",
                     temperature=0.7
                 )
                 
@@ -177,7 +177,7 @@ async def on_message(message):
                 chat_history[user_id].append(user_message)
                 chat_history[user_id].append({"role": "assistant", "content": reply})
                 chat_history[user_id] = chat_history[user_id][-10:] 
-
+                
                 await message.reply(reply if reply else "GAH DAYUM💔😭🙏")
         except Exception as e:
             await message.reply(f"Lỗi tung đít r m: {e} 💀")
