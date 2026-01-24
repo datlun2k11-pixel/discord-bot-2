@@ -60,9 +60,10 @@ async def random_model(interaction: discord.Interaction):
 
 @bot.tree.command(name="clear", description="Xóa ký ức")
 async def clear(interaction: discord.Interaction):
-    chat_history[str(interaction.user.id)] = [{"role": "system", "content": system_instruction}]
+    user_id = str(interaction.user.id)
+    sys_msg = f"Mày là GenA-bot, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenA-bot. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+    chat_history[user_id] = [{"role": "system", "content": sys_msg}]
     await interaction.response.send_message("Đã xóa sạch ký ức")
-
 # --- LỆNH VÔ TRI ---
 @bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
 async def imagine(interaction: discord.Interaction, prompt: str):
