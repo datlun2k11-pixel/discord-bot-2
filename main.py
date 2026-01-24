@@ -175,6 +175,9 @@ async def on_message(message):
                 )
                 
                 reply = chat_completion.choices[0].message.content
+                reply = res.choices[0].message.content
+                if "</think>" in reply:
+                reply = reply.split("</think>")[-1].strip() # Cắt phăng cái phần suy nghĩ đi 💀
                 
                 chat_history[user_id].append(user_message)
                 chat_history[user_id].append({"role": "assistant", "content": reply})
