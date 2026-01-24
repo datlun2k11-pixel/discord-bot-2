@@ -136,7 +136,7 @@ async def on_message(message):
                 
                 chat_history[user_id].append({"role": "user", "content": message.content or "[Ảnh]"})
                 chat_history[user_id].append({"role": "assistant", "content": reply})
-                chat_history[user_id] = chat_history[user_id][-10:]
+                chat_history[user_id] = chat_history[user_id][-8:]
                 await message.reply(reply or "Tịt r 💔")
             except Exception as e: await message.reply(f"ngừng chat đi bây, có lỗi: {e} 💀")
 
