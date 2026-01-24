@@ -30,7 +30,7 @@ def home(): return "GenA-bot đang quẩy Groq + Vision! 🔥💀"
 
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
-system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m-t, viết teencode, dùng emoticon kèm icon 💔, 🥀, 🔥, 💀, 🐧. Trả lời cực ngắn."
+system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân).<@1458799287910535324> là userID của GenA-bot. viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
 chat_history = {}
 intents = discord.Intents.default()
 intents.message_content = True
@@ -61,7 +61,7 @@ async def random_model(interaction: discord.Interaction):
 @bot.tree.command(name="clear", description="Xóa ký ức")
 async def clear(interaction: discord.Interaction):
     chat_history[str(interaction.user.id)] = [{"role": "system", "content": system_instruction}]
-    await interaction.response.send_message("Xóa sạch r 💀")
+    await interaction.response.send_message("Đã xóa sạch ký ức")
 
 # --- LỆNH VÔ TRI ---
 @bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
@@ -73,29 +73,29 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="meme", description="Random meme VN")
-async def meme(interaction: discord.Interaction, so_luong: int = 1):
+async def meme(interaction: discord.Interaction, count: int = 1):
     await interaction.response.defer()
-    if not (1 <= so_luong <= 5): return await interaction.followup.send("1-5 cái thôi m 💀")
+    if not (1 <= so_luong <= 5): return await interaction.followup.send("chỉ từ 1-5 cái")
     try:
         async with aiohttp.ClientSession() as session:
-            for i in range(so_luong):
+            for i in range(count):
                 async with session.get("https://phimtat.vn/api/random-meme/") as resp:
                     if resp.status == 200:
                         e = discord.Embed(title=f"Meme #{i+1}", color=0xff69b4)
                         e.set_image(url=str(resp.url))
                         await interaction.followup.send(embed=e)
-    except: await interaction.followup.send("Meme hỏng r 😭")
+    except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
 
 @bot.tree.command(name="ship", description="Check OTP")
 async def ship(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
     pts = random.randint(0, 100)
-    msg = "OTP real vl🥀🔥" if pts > 80 else "Friendzone 🐧💔" if pts > 50 else "Cút 💀"
+    msg = "OTP real vl🥀🔥" if pts > 80 else "Friendzone ok đó 🐧💔" if pts > 50 else "nah, khó mà cưới nhau 💀"
     await interaction.response.send_message(f"**{user1.display_name}** x **{user2.display_name}**: {pts}% - {msg}")
 
 @bot.tree.command(name="check_gay", description="Đo độ gay")
 async def check_gay(interaction: discord.Interaction, target: discord.Member):
     rate = random.randint(0, 100)
-    res = "Thẳng tắp 🗼" if rate < 35 else "Nghi m vl🥀" if rate <= 70 else "🏳️‍🌈 thật r 😭🔥"
+    res = "Thẳng tắp lun á bro🗣️🔥" if rate < 35 else "Nghi m vl🥀" if rate <= 70 else "🏳️‍🌈 thật r 😭🔥"
     await interaction.response.send_message(f"{target.display_name}: {rate}% - {res}")
 
 # --- XỬ LÝ CHAT ---
@@ -136,7 +136,7 @@ async def on_message(message):
                 chat_history[user_id].append({"role": "assistant", "content": reply})
                 chat_history[user_id] = chat_history[user_id][-10:]
                 await message.reply(reply or "Tịt r 💔")
-            except Exception as e: await message.reply(f"Lỗi: {e} 💀")
+            except Exception as e: await message.reply(f"ngừng chat đi bây, có lỗi: {e} 💀")
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
