@@ -22,9 +22,9 @@ MODELS_CONFIG = {
 
 GROQ_TOOLS = [
     {
-        "type": "builtin_function",
+        "type": "function", # Sửa cái này từ builtin_function thành function
         "function": {
-            "name": "$web_search", 
+            "name": "web_search", # Bỏ dấu $ đi luôn cho chắc
         }
     }
 ]
