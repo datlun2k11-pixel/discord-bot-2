@@ -17,9 +17,9 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODELS_CONFIG = {
     "120B": {"id": "openai/gpt-oss-120b", "vision": False},
     "Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "vision": True},
-    "Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False}
+    "Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False},
+    "Qwen3": {"id": "qwen/qwen3-32b", "vision": False}
 }
-
 GROQ_TOOLS = [
     {
         "type": "function", # Sửa cái này từ builtin_function thành function
@@ -32,7 +32,8 @@ GROQ_TOOLS = [
 MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
     app_commands.Choice(name="Llama 4 Maverick (Groq) 👁️", value="Llama-Maverick"),
-    app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi")
+    app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi"),
+    app_commands.Choice(name="Qwen 3-32B (Groq)", value="Qwen3")
 ]
 
 CURRENT_MODEL = "Llama-Maverick"
@@ -69,7 +70,8 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
 @bot.tree.command(name="random", description="random 1 model bất kì")
 async def random_model(interaction: discord.Interaction):
     global CURRENT_MODEL
-    choice = random.choice(MODEL_CHOICES)
+    # Nó bốc trong MODEL_CHOICES nên m nhớ thêm Qwen vào list đó như t bảo ở trên 🐧
+    choice = random.choice(MODEL_CHOICES) 
     CURRENT_MODEL = choice.value
     vision_status = "(👁️✅)" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "(👁️❌)"
     await interaction.response.send_message(f"đã bốc trúng model: **{choice.name}** {vision_status}.")
