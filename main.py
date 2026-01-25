@@ -97,7 +97,9 @@ async def meme(interaction: discord.Interaction, count: int = 1):
 async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
     await interaction.response.defer()
 
-    members = [m for m in interaction.guild.members if not m.bot]
+        members = [m for m in interaction.guild.members if not m.bot]
+    print(f"Debug: Tổng member ko bot = {len(members)}")  # thêm dòng này
+    print(f"Debug: User đang xài: {interaction.user.display_name}")  # check thêm
 
     if len(members) < 2:
         await interaction.followup.send("Server ít người quá, ship ai đây bro? 🥀😭")
