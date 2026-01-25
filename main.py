@@ -26,11 +26,11 @@ MODEL_CHOICES = [
 CURRENT_MODEL = "Llama-Maverick"
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenA-bot đang quẩy Groq + Vision! 🔥💀"
+def home(): return "GenniAI đang quẩy Groq + Vision! 🔥💀"
 
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
-system_instruction = "Mày là GenA-bot, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân).<@1458799287910535324> là userID của GenA-bot. viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
+system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân).<@1458799287910535324> là userID của GenA-bot. viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
 chat_history = {}
 intents = discord.Intents.default()
 intents.message_content = True
@@ -61,7 +61,7 @@ async def random_model(interaction: discord.Interaction):
 @bot.tree.command(name="clear", description="Xóa ký ức")
 async def clear(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
-    sys_msg = f"Mày là GenA-bot, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenA-bot. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+    sys_msg = f"Mày là GenniAI, một AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenA-bot. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
     chat_history[user_id] = [{"role": "system", "content": sys_msg}]
     await interaction.response.send_message("Đã xóa sạch ký ức")
 # --- LỆNH VÔ TRI ---
