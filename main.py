@@ -72,7 +72,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/bot_info` `/clear` `/imagine` `/meme` `/ship` `/check_gay`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.6.0 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v9.6.5 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -87,6 +87,34 @@ async def clear(interaction: discord.Interaction):
     sys_msg = f"Mày là GenniAI, một AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
     chat_history[user_id] = [{"role": "system", "content": sys_msg}]
     await interaction.response.send_message("Đã xóa sạch ký ức")
+
+@bot.tree.command(name="update_log", description="Xem update log mới nhất của GenniAI")
+async def updatelog(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="GenniAI Update Log",
+        description="Những Update mới của bot",
+        color=0xff69b5
+    )
+    
+    embed.add_field(
+        name="v9.6.5 - Update logs",
+        value="• Thêm lệnh `/updatelog` để xem update\n"
+              "• Fix visual ở `/imagine` fallback\n"
+              "• Fixing bugs",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="v9.6.0 - The info",
+        value="• Chỉnh lại system prompt\n"
+              "• Fix những lỗi lặt vặt\n"
+              "• Đã thêm 'bot_info' để check thông tin bot ez hơn",
+        inline=False
+    )
+    
+    embed.set_footer(text="Update tiếp theo: có thể thêm slash commands | Owner: Đạt")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=False)  # muốn ẩn thì đổi thành True
 # --- LỆNH VÔ TRI ---
 @bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI free forever")
 async def imagine(interaction: discord.Interaction, prompt: str):
