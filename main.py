@@ -30,7 +30,7 @@ def home(): return "GenniAI đang quẩy Groq + Vision! 🔥💀"
 
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
-system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân).<@1458799287910535324> là userID của GenA-bot. viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
+system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân).<@1458799287910535324> là userID của GenniAI. viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
 chat_history = {}
 intents = discord.Intents.default()
 intents.message_content = True
@@ -62,7 +62,7 @@ async def random_model(interaction: discord.Interaction):
 @bot.tree.command(name="clear", description="Xóa ký ức")
 async def clear(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
-    sys_msg = f"Mày là GenniAI, một AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenA-bot. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+    sys_msg = f"Mày là GenniAI, một AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
     chat_history[user_id] = [{"role": "system", "content": sys_msg}]
     await interaction.response.send_message("Đã xóa sạch ký ức")
 # --- LỆNH VÔ TRI ---
@@ -90,10 +90,10 @@ async def meme(interaction: discord.Interaction, count: int = 1):
                         await interaction.followup.send(embed=e)
     except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
         
-@bot.tree.command(name="ship", description="Check OTP kiểu Tinder fake profile nhây vl")
+@bot.tree.command(name="ship", description="Check OTP (random hoặc option)")
 @app_commands.describe(
-    user1="Crush 1 (để trống random lun)",
-    user2="Crush 2 (để trống random lun)"
+    user1="Người thứ 1 (để trống để random)",
+    user2="Người thứ 2 (để trống để random)"
 )
 async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
     await interaction.response.defer()
@@ -123,10 +123,10 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
             caption = "Swipe left cái nhẹ, next đi bro 💀😭"
 
     embed = discord.Embed(title="Tinder Ship 🔥", color=0xff69b4)
-    embed.add_field(name="👤 Người 1", value=f"**{user1.display_name}** ({user1.mention})", inline=True)
-    embed.add_field(name="👤 Người 2", value=f"**{user2.display_name}** ({user2.mention})", inline=True)
-    embed.add_field(name="💖 OTP", value=f"{match_pct}% - {caption}", inline=False)
-    embed.set_footer(text=f"GenniAI shipper chính hãng 💔 | Debug: {len(members)} members")
+    embed.add_field(name="Người thứ 1 🩹", value=f"**{user1.display_name}** ({user1.mention})", inline=True)
+    embed.add_field(name="Người thứ 2 💔", value=f"**{user2.display_name}** ({user2.mention})", inline=True)
+    embed.add_field(name="💞 OTP 💞", value=f"{match_pct}% - {caption}", inline=False)
+    embed.set_footer(text=f"GenniAI shipper chính hãng ❤️‍🩹 | Debug: {len(members)} members")
 
     embed.set_thumbnail(url=user1.display_avatar.url)
     embed.set_image(url=user2.display_avatar.url)
