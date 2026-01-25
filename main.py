@@ -97,22 +97,19 @@ async def meme(interaction: discord.Interaction, count: int = 1):
 async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
     await interaction.response.defer()
 
-    # Lấy tất cả member ko phải bot
     members = [m for m in interaction.guild.members if not m.bot]
 
-    # Nếu server siêu ít người (dưới 2), fallback ship với chính mày cho vui
     if len(members) < 2:
         user1 = interaction.user
         user2 = interaction.user
         caption = "Server vắng hoe, ship với chính mày lun bro... tự yêu bản thân đi 😭💔"
-        match_pct = random.randint(70, 100)  # buff cho tự tin
+        match_pct = random.randint(70, 100)
     else:
-        # Random bình thường
         if user1 is None:
             user1 = random.choice(members)
         if user2 is None:
             available = [m for m in members if m != user1]
-            user2 = random.choice(available) if available else user1  # fallback trùng
+            user2 = random.choice(available) if available else user1
 
         match_pct = random.randint(0, 100)
         if match_pct >= 90:
@@ -124,14 +121,12 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
         else:
             caption = "Swipe left cái nhẹ, next đi bro 💀😭"
 
-    # Tạo embed đẹp lung linh
     embed = discord.Embed(title="Tinder Ship 🔥", color=0xff69b4)
     embed.add_field(name="👤 Người 1", value=f"**{user1.display_name}** ({user1.mention})", inline=True)
     embed.add_field(name="👤 Người 2", value=f"**{user2.display_name}** ({user2.mention})", inline=True)
     embed.add_field(name="💖 OTP", value=f"{match_pct}% - {caption}", inline=False)
-    embed.set_footer(text="GenA-bot shipper chính hãng 💔 | Debug: {len(members)} members")
+    embed.set_footer(text=f"GenA-bot shipper chính hãng 💔 | Debug: {len(members)} members")
 
-    # Avatar cho đẹp
     embed.set_thumbnail(url=user1.display_avatar.url)
     embed.set_image(url=user2.display_avatar.url)
 
