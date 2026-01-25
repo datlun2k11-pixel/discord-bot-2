@@ -34,6 +34,7 @@ system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phươ
 chat_history = {}
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True  # Thêm dòng này để bot thấy hết member
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
