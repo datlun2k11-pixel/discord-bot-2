@@ -72,7 +72,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/bot_info` `/clear` `/imagine` `/meme` `/ship` `/check_gay`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.5.4 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v9.6.0 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -88,13 +88,31 @@ async def clear(interaction: discord.Interaction):
     chat_history[user_id] = [{"role": "system", "content": sys_msg}]
     await interaction.response.send_message("Đã xóa sạch ký ức")
 # --- LỆNH VÔ TRI ---
-@bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI")
+@bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI free forever")
 async def imagine(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer()
-    url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt)}?width=1024&height=1024&nologo=true"
-    embed = discord.Embed(title="Hàng về!", description=f"Prompt: `{prompt}`", color=0xff69b4)
-    embed.set_image(url=url)
-    await interaction.followup.send(embed=embed)
+    # Dùng AI FREE FOREVER — free, no key, better than Pollinations
+    encoded_prompt = urllib.parse.quote(prompt)
+    url = f"https://ai-bot-free.p.rapidapi.com/ai/image/generate?prompt={encoded_prompt}"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers={"X-RapidAPI-Host": "ai-bot-free.p.rapidapi.com"}) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    img_url = data.get("image_url")
+                    if img_url:
+                        embed = discord.Embed(title="Hàng về!", description=f"Prompt: `{prompt}`", color=0xff69b4)
+                        embed.set_image(url=img_url)
+                        return await interaction.followup.send(embed=embed)
+                # fallback nếu lỗi
+                raise Exception("Không lấy đc ảnh")
+    except Exception as e:
+        # Fallback to Pollinations nếu lỗi
+        fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
+        embed = discord.Embed(title="Hàng về (fallback)!", description=f"Prompt: `{prompt}`", color=0xff69b4)
+        embed.set_image(url=fallback_url)
+        await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="meme", description="Random meme VN")
 @app_commands.describe(count="Số lượng meme muốn lấy (1-10)")
