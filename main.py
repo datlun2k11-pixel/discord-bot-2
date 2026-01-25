@@ -89,12 +89,42 @@ async def meme(interaction: discord.Interaction, count: int = 1):
                         await interaction.followup.send(embed=e)
     except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
         
-@bot.tree.command(name="ship", description="Check OTP")
-async def ship(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
-    pts = random.randint(0, 100)
-    msg = "OTP real vl🥀🔥" if pts > 80 else "Friendzone ok đó 🐧💔" if pts > 50 else "nah, khó mà cưới nhau 💀"
-    await interaction.response.send_message(f"**{user1.display_name}** x **{user2.display_name}**: {pts}% - {msg}")
+@bot.tree.command(name="ship", description="Check OTP kiểu Tinder fake profile")
+@app_commands.describe(
+    user1="người thứ 1 (hoặc để trống random)",
+    user2="người thứ 2 (hoặc để trống random)"
+)
+async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
+    await interaction.response.defer()
 
+    members = [m for m in interaction.guild.members if not m.bot and m != interaction.user]
+
+    if user1 is None:
+        user1 = random.choice(members)
+    if user2 is None:
+        user2 = random.choice([m for m in members if m != user1])
+
+    match_pct = random.randint(0, 100)
+    if match_pct >= 90:
+        caption = "OTP đỉnh cao, cưới lun đi brooo 🔥🥹"
+    elif match_pct >= 70:
+        caption = "Match chất vl, nhắn tin lẹ nào m! 🐧💕"
+    elif match_pct >= 40:
+        caption = "Ổn ổn... nhưng chắc friendzone thôi á 🥀"
+    else:
+        caption = "Swipe left nhẹ tay, next đi bro 💀😭"
+
+    embed = discord.Embed(title="Tinder Ship 🔥", color=0xff69b4)
+    embed.add_field(name="👤 Người 1", value=f"**{user1.display_name}** ({user1.mention})", inline=True)
+    embed.add_field(name="👤 Người 2", value=f"**{user2.display_name}** ({user2.mention})", inline=True)
+    embed.add_field(name="💞 OTP 💞", value=f"{match_pct}% - {caption}", inline=False)
+    embed.set_footer(text="GenA-bot shipper chính hãng 💔")
+
+    embed.set_thumbnail(url=user1.display_avatar.url)
+    embed.set_image(url=user2.display_avatar.url)
+
+    await interaction.followup.send(embed=embed)
+    
 @bot.tree.command(name="check_gay", description="Đo độ gay")
 async def check_gay(interaction: discord.Interaction, target: discord.Member):
     rate = random.randint(0, 100)
