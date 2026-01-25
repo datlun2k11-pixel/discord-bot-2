@@ -89,44 +89,49 @@ async def meme(interaction: discord.Interaction, count: int = 1):
                         await interaction.followup.send(embed=e)
     except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
         
-@bot.tree.command(name="ship", description="Check OTP kiểu Tinder fake profile")
+@bot.tree.command(name="ship", description="Check OTP kiểu Tinder fake profile nhây vl")
 @app_commands.describe(
-    user1="Crush 1 (hoặc để trống random)",
-    user2="Crush 2 (hoặc để trống random)"
+    user1="Crush 1 (để trống random lun)",
+    user2="Crush 2 (để trống random lun)"
 )
 async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
     await interaction.response.defer()
 
-        members = [m for m in interaction.guild.members if not m.bot]
-    print(f"Debug: Tổng member ko bot = {len(members)}")  # thêm dòng này
-    print(f"Debug: User đang xài: {interaction.user.display_name}")  # check thêm
+    # Lấy tất cả member ko phải bot
+    members = [m for m in interaction.guild.members if not m.bot]
 
+    # Nếu server siêu ít người (dưới 2), fallback ship với chính mày cho vui
     if len(members) < 2:
-        await interaction.followup.send("Server ít người quá, ship ai đây bro? 🥀😭")
-        return
-
-    if user1 is None:
-        user1 = random.choice(members)
-    if user2 is None:
-        available = [m for m in members if m != user1]
-        user2 = random.choice(available) if available else user1  # fallback
-
-    match_pct = random.randint(0, 100)
-    if match_pct >= 90:
-        caption = "OTP đỉnh cao, cưới lun đi brooo 🔥🥹"
-    elif match_pct >= 70:
-        caption = "Match chất vl, nhắn tin lẹ nào m! 🐧💕"
-    elif match_pct >= 40:
-        caption = "Ổn ổn... nhưng chắc friendzone thôi á 🥀"
+        user1 = interaction.user
+        user2 = interaction.user
+        caption = "Server vắng hoe, ship với chính mày lun bro... tự yêu bản thân đi 😭💔"
+        match_pct = random.randint(70, 100)  # buff cho tự tin
     else:
-        caption = "Swipe left nhẹ tay, next đi bro 💀😭"
+        # Random bình thường
+        if user1 is None:
+            user1 = random.choice(members)
+        if user2 is None:
+            available = [m for m in members if m != user1]
+            user2 = random.choice(available) if available else user1  # fallback trùng
 
+        match_pct = random.randint(0, 100)
+        if match_pct >= 90:
+            caption = "OTP đỉnh của chóp, cưới lun đi brooo 🔥🥹"
+        elif match_pct >= 70:
+            caption = "Match chất vl, nhắn tin lẹ nào m! 🐧💕"
+        elif match_pct >= 40:
+            caption = "Ổn ổn thôi... friendzone hơi nặng á 🥀"
+        else:
+            caption = "Swipe left cái nhẹ, next đi bro 💀😭"
+
+    # Tạo embed đẹp lung linh
     embed = discord.Embed(title="Tinder Ship 🔥", color=0xff69b4)
     embed.add_field(name="👤 Người 1", value=f"**{user1.display_name}** ({user1.mention})", inline=True)
     embed.add_field(name="👤 Người 2", value=f"**{user2.display_name}** ({user2.mention})", inline=True)
-    embed.add_field(name="💞 OTP 💞", value=f"{match_pct}% - {caption}", inline=False)
-    embed.set_footer(text="GenniAI shipper chính hãng ❤️‍🔥")
+    embed.add_field(name="💖 OTP", value=f"{match_pct}% - {caption}", inline=False)
+    embed.set_footer(text="GenA-bot shipper chính hãng 💔 | Debug: {len(members)} members")
 
+    # Avatar cho đẹp
     embed.set_thumbnail(url=user1.display_avatar.url)
     embed.set_image(url=user2.display_avatar.url)
 
