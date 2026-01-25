@@ -61,16 +61,26 @@ async def random_model(interaction: discord.Interaction):
     
 @bot.tree.command(name="bot_info", description="Info bot + model đang quẩy")
 async def bot_info(interaction: discord.Interaction):
-    v = "(👁️✅)" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "(👁️❌)"
-    embed = discord.Embed(title="GenniAI Info 🔥💀", color=0xff69b5, timestamp=discord.utils.utcnow())
+    latency = round(bot.latency * 1000)  # ms
+    v = "️👁️ Visionable" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌ Non-vision"
+    
+    embed = discord.Embed(title="GenniAI Status", color=0xff69b5, timestamp=discord.utils.utcnow())
     embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
     embed.add_field(name="Client ID", value="`1458799287910535324`", inline=True)
+    embed.add_field(name="Commands", value="`/model` `/random` `/bot_info` `/clear` `/imagine` `/meme` `/ship` `/check_gay`", inline=True)
+    
+    embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
+    embed.add_field(name="Version", value="v9.5.2 - Groq Vision Edition", inline=True)  # mày tự edit version nếu muốn
+    
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
-    embed.add_field(name="Dev", value="<@1155129530122510376> (Đạt)", inline=False)
-    embed.set_footer(text="Powered by Groq | Uptime: quẩy 24/7 🐧🥀")
+    embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
+    
+    embed.set_footer(text="Powered by Groq | Online frequently")
+    
     await interaction.response.send_message(embed=embed)
-
+    
 @bot.tree.command(name="clear", description="Xóa ký ức")
 async def clear(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
