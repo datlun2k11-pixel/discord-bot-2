@@ -48,16 +48,28 @@ async def on_ready():
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
-    v = "👁️" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌"
-    await interaction.response.send_message(f"Đã chuyển sang **{chon_model.name}** {v} 🔥")
+    v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
+    await interaction.response.send_message(f"Đã chuyển sang **{chon_model.name}** ({v}) 🔥")
 
 @bot.tree.command(name="random", description="Random 1 model bất kì")
 async def random_model(interaction: discord.Interaction):
     global CURRENT_MODEL
     choice = random.choice(MODEL_CHOICES)
     CURRENT_MODEL = choice.value
-    v = "👁️" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌"
-    await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** {v} 🎲")
+    v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
+    await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v}) ")
+    
+@bot.tree.command(name="bot_info", description="Info bot + model đang quẩy")
+async def bot_info(interaction: discord.Interaction):
+    v = "(👁️✅)" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "(👁️❌)"
+    embed = discord.Embed(title="GenniAI Info 🔥💀", color=0xff69b5, timestamp=discord.utils.utcnow())
+    embed.set_thumbnail(url=bot.user.avatar.url if bot.user.avatar else None)
+    embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
+    embed.add_field(name="Client ID", value="`1458799287910535324`", inline=True)
+    embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
+    embed.add_field(name="Dev", value="<@1155129530122510376> (Đạt)", inline=False)
+    embed.set_footer(text="Powered by Groq | Uptime: quẩy 24/7 🐧🥀")
+    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="clear", description="Xóa ký ức")
 async def clear(interaction: discord.Interaction):
