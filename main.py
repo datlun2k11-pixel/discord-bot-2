@@ -126,7 +126,7 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
     embed.add_field(name="👤 Người 1", value=f"**{user1.display_name}** ({user1.mention})", inline=True)
     embed.add_field(name="👤 Người 2", value=f"**{user2.display_name}** ({user2.mention})", inline=True)
     embed.add_field(name="💖 OTP", value=f"{match_pct}% - {caption}", inline=False)
-    embed.set_footer(text=f"GenA-bot shipper chính hãng 💔 | Debug: {len(members)} members")
+    embed.set_footer(text=f"GenniAI shipper chính hãng 💔 | Debug: {len(members)} members")
 
     embed.set_thumbnail(url=user1.display_avatar.url)
     embed.set_image(url=user2.display_avatar.url)
@@ -154,7 +154,7 @@ async def on_message(message):
         user_id = str(message.author.id)
         
         # Tạo system instruction có tên user
-        sys_msg = f"Mày là GenA-bot, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. người dev ra mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt) .<@1458799287910535324> là userID của GenA-bot. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+        sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. người dev ra mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt) .<@1458799287910535324> là userID của GenA-bot. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
         
         if user_id not in chat_history: 
             chat_history[user_id] = [{"role": "system", "content": sys_msg}]
