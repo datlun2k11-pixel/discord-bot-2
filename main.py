@@ -91,18 +91,23 @@ async def meme(interaction: discord.Interaction, count: int = 1):
         
 @bot.tree.command(name="ship", description="Check OTP kiểu Tinder fake profile")
 @app_commands.describe(
-    user1="người thứ 1 (hoặc để trống random)",
-    user2="người thứ 2 (hoặc để trống random)"
+    user1="Crush 1 (hoặc để trống random)",
+    user2="Crush 2 (hoặc để trống random)"
 )
 async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
     await interaction.response.defer()
 
-    members = [m for m in interaction.guild.members if not m.bot and m != interaction.user]
+    members = [m for m in interaction.guild.members if not m.bot]
+
+    if len(members) < 2:
+        await interaction.followup.send("Server ít người quá, ship ai đây bro? 🥀😭")
+        return
 
     if user1 is None:
         user1 = random.choice(members)
     if user2 is None:
-        user2 = random.choice([m for m in members if m != user1])
+        available = [m for m in members if m != user1]
+        user2 = random.choice(available) if available else user1  # fallback
 
     match_pct = random.randint(0, 100)
     if match_pct >= 90:
@@ -118,7 +123,7 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
     embed.add_field(name="👤 Người 1", value=f"**{user1.display_name}** ({user1.mention})", inline=True)
     embed.add_field(name="👤 Người 2", value=f"**{user2.display_name}** ({user2.mention})", inline=True)
     embed.add_field(name="💞 OTP 💞", value=f"{match_pct}% - {caption}", inline=False)
-    embed.set_footer(text="GenA-bot shipper chính hãng 💔")
+    embed.set_footer(text="GenniAI shipper chính hãng ❤️‍🔥")
 
     embed.set_thumbnail(url=user1.display_avatar.url)
     embed.set_image(url=user2.display_avatar.url)
