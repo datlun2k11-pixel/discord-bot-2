@@ -72,7 +72,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/bot_info` `/clear` `/imagine` `/meme` `/ship` `/check_gay`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.5.2 - Groq Vision Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v9.5.4 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -176,7 +176,7 @@ async def on_message(message):
         user_id = str(message.author.id)
         
         # Tạo system instruction có tên user
-        sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. người dev ra mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+        sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
         
         if user_id not in chat_history: 
             chat_history[user_id] = [{"role": "system", "content": sys_msg}]
