@@ -69,10 +69,10 @@ async def bot_info(interaction: discord.Interaction):
     
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
     embed.add_field(name="Client ID", value="`1458799287910535324`", inline=True)
-    embed.add_field(name="Commands", value="`/model` `/random` `/bot_info` `/clear` `/imagine` `/meme` `/ship` `/check_gay`", inline=True)
+    embed.add_field(name="Commands", value="`/model` `/random` `/bot_info` `/clear` `/meme` `/ship` `/check_gay`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.6.5 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v9.7.1 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -97,6 +97,14 @@ async def updatelog(interaction: discord.Interaction):
     )
     
     embed.add_field(
+        name="v9.7.1 - The deletion",
+        value="• Xoá hoàn toàn lệnh imagine\n"
+              "• Xoá bỏ debug chỗ bot_info\n"
+              "• Fix 1 số lỗi nhỏ",
+        inline=False
+    )
+    
+    embed.add_field(
         name="v9.6.5 - Update logs",
         value="• Thêm lệnh `/updatelog` để xem update\n"
               "• Fix visual ở `/imagine` fallback\n"
@@ -104,44 +112,10 @@ async def updatelog(interaction: discord.Interaction):
         inline=False
     )
     
-    embed.add_field(
-        name="v9.6.0 - The info",
-        value="• Chỉnh lại system prompt\n"
-              "• Fix những lỗi lặt vặt\n"
-              "• Đã thêm 'bot_info' để check thông tin bot ez hơn",
-        inline=False
-    )
-    
-    embed.set_footer(text="Update tiếp theo: có thể thêm slash commands | Owner: Đạt")
+    embed.set_footer(text="Update tiếp theo: pending | Owner: Đạt")
     
     await interaction.response.send_message(embed=embed, ephemeral=False)  # muốn ẩn thì đổi thành True
 # --- LỆNH VÔ TRI ---
-@bot.tree.command(name="imagine", description="Vẽ ảnh bằng AI free forever")
-async def imagine(interaction: discord.Interaction, prompt: str):
-    await interaction.response.defer()
-    # Dùng AI FREE FOREVER — free, no key, better than Pollinations
-    encoded_prompt = urllib.parse.quote(prompt)
-    url = f"https://ai-bot-free.p.rapidapi.com/ai/image/generate?prompt={encoded_prompt}"
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers={"X-RapidAPI-Host": "ai-bot-free.p.rapidapi.com"}) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    img_url = data.get("image_url")
-                    if img_url:
-                        embed = discord.Embed(title="Hàng về!", description=f"Prompt: `{prompt}`", color=0xff69b4)
-                        embed.set_image(url=img_url)
-                        return await interaction.followup.send(embed=embed)
-                # fallback nếu lỗi
-                raise Exception("Không lấy đc ảnh")
-    except Exception as e:
-        # Fallback to Pollinations nếu lỗi
-        fallback_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1024&height=1024&nologo=true"
-        embed = discord.Embed(title="Hàng về (fallback)!", description=f"Prompt: `{prompt}`", color=0xff69b4)
-        embed.set_image(url=fallback_url)
-        await interaction.followup.send(embed=embed)
-
 @bot.tree.command(name="meme", description="Random meme VN")
 @app_commands.describe(count="Số lượng meme muốn lấy (1-10)")
 async def meme(interaction: discord.Interaction, count: int = 1):
