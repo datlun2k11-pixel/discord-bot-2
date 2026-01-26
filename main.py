@@ -121,19 +121,16 @@ async def updatelog(interaction: discord.Interaction):
         description="Những Update mới của bot",
         color=0xff69b5
     )
-        
         embed.add_field(
         name="v9.9.5 - latex",
         value="• Thêm lệnh `/latex` để render công thức toán\n• BUG FIXED AGAIN\n• -",
         inline=False
     )
-    
     embed.add_field(
         name="v9.9.0 - 8ball",
         value="• Thêm lệnh `/8ball`\n• -\n• -",
         inline=False
     )
-    
     embed.set_footer(text="Update tiếp theo: pending | Owner: Đạt")
     
     await interaction.response.send_message(embed=embed, ephemeral=False)
