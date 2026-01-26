@@ -98,7 +98,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.8.1 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v9.9.0 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -120,20 +120,21 @@ async def updatelog(interaction: discord.Interaction):
         title="GenniAI Update Log",
         description="Những Update mới của bot",
         color=0xff69b5
+        )
+        
+        embed.add_field(
+        name="v9.9.0 - 8ball",
+        value="• Thêm lệnh `/8ball`\n"
+              "• -\n"
+              "• -",
+        inline=False
     )
+    
     embed.add_field(
         name="v9.8.1 - question",
         value="• Thêm lệnh `/ask` để hỏi ở bất cứ đâu\n"
               "• Thay `imagine` thành `ask`\n"
               "• Fixing bugs",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="v9.7.1 - The deletion",
-        value="• Xoá hoàn toàn lệnh imagine\n"
-              "• Xoá bỏ debug chỗ bot_info\n"
-              "• Fix 1 số lỗi nhỏ",
         inline=False
     )
     
@@ -156,7 +157,34 @@ async def meme(interaction: discord.Interaction, count: int = 1):
                         e.set_image(url=str(resp.url))
                         await interaction.followup.send(embed=e)
     except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
-        
+
+@bot.tree.command(name="8ball", description="Hỏi gì đó yes/no, bot trả lời ngẫu nhiên")
+@app_commands.describe(question="Hỏi 1 câu hỏi yes/no...")
+async def eight_ball(interaction: discord.Interaction, question: str):
+    responses = [
+        "có nha 🔥",
+        "chx đâu m ơi 💔", 
+        "có cl 😭🥀",
+        "chắc chắn rồi đó m 🐧💕",
+        "đừng mơ nữa 💀",
+        "50/50 thoy 🎲",
+        "hên xui đó m 😇",
+        "next câu khác đi 🥀",
+        "t thấy có vẻ khả thi đó 👀",
+        "ko nha, tỉnh lại đi m 🐧"
+    ]
+    answer = random.choice(responses)
+    
+    embed = discord.Embed(
+        title="🎱 Magic 8-Ball", 
+        color=random.randint(0, 0xFFFFFF)
+    )
+    embed.add_field(name="Câu hỏi", value=f"*{question}*", inline=False)
+    embed.add_field(name="Trả lời", value=f"**{answer}**", inline=False)
+    embed.set_footer(text="Đừng tin sái cổ nha | GenniAI 🔮")
+    
+    await interaction.response.send_message(embed=embed)
+
 @bot.tree.command(name="ship", description="Check OTP (random hoặc option)")
 @app_commands.describe(
     user1="Người thứ 1 (để trống để random)",
