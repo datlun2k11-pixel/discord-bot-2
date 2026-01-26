@@ -121,7 +121,7 @@ async def updatelog(interaction: discord.Interaction):
         description="Những Update mới của bot",
         color=0xff69b5
     )
-        embed.add_field(
+    embed.add_field(
         name="v9.9.5 - latex",
         value="• Thêm lệnh `/latex` để render công thức toán\n• BUG FIXED AGAIN\n• -",
         inline=False
