@@ -58,6 +58,36 @@ async def random_model(interaction: discord.Interaction):
     CURRENT_MODEL = choice.value
     v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
     await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v}) ")
+
+@bot.tree.command(name="ask", description="Hỏi GenniAI bí mật, chỉ bạn thấy kết quả")
+@app_commands.describe(question="đặt câu hỏi")
+async def ask(interaction: discord.Interaction, question: str):
+    # Bước này cực quan trọng để bot hiện "GenniAI is thinking..." nhưng chỉ m thấy
+    await interaction.response.defer(ephemeral=True)
+    
+    user_id = str(interaction.user.id)
+    # Lấy system instruction nhây vl của m
+    sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+    
+    try:
+        # Gọi Groq y hệt như cái on_message m đang làm
+        res = groq_client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": question}
+            ],
+            model=MODELS_CONFIG[CURRENT_MODEL]["id"]
+        )
+        
+        reply = res.choices[0].message.content
+        # Làm sạch cái tag <think> nếu dùng DeepSeek
+        reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
+        
+        # Gửi kết quả ẩn danh
+        await interaction.followup.send(f"**Câu hỏi:** {question}\n**Trả lời:** {reply}", ephemeral=True)
+        
+    except Exception as e:
+        await interaction.followup.send(f"Lỗi r bro, cút lẹ: {e} 💀", ephemeral=True)
     
 @bot.tree.command(name="bot_info", description="Info bot + model đang quẩy")
 async def bot_info(interaction: discord.Interaction):
@@ -69,10 +99,10 @@ async def bot_info(interaction: discord.Interaction):
     
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
     embed.add_field(name="Client ID", value="`1458799287910535324`", inline=True)
-    embed.add_field(name="Commands", value="`/model` `/random` `/bot_info` `/clear` `/meme` `/ship` `/check_gay`", inline=True)
+    embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.7.1 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v9.8.0 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -95,20 +125,19 @@ async def updatelog(interaction: discord.Interaction):
         description="Những Update mới của bot",
         color=0xff69b5
     )
+    embed.add_field(
+        name="v9.8.0 - question",
+        value="• Thêm lệnh `/ask` để hỏi ở bất cứ đâu\n"
+              "• Thay `imagine` thành `ask`\n"
+              "• Fixing bugs",
+        inline=False
+    )
     
     embed.add_field(
         name="v9.7.1 - The deletion",
         value="• Xoá hoàn toàn lệnh imagine\n"
               "• Xoá bỏ debug chỗ bot_info\n"
               "• Fix 1 số lỗi nhỏ",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="v9.6.5 - Update logs",
-        value="• Thêm lệnh `/updatelog` để xem update\n"
-              "• Fix visual ở `/imagine` fallback\n"
-              "• Fixing bugs",
         inline=False
     )
     
