@@ -164,7 +164,7 @@ async def latex(interaction: discord.Interaction, formula: str):
         
         await interaction.followup.send(embed=embed)
     except Exception as e:
-        await interaction.followup.send(f"Lại lỗi r cái thằng "nghiệp dư" này: {e} 🐧")
+                await interaction.followup.send(f"Lại lỗi r cái thằng 'nghiệp dư' này: {e} 🐧")
 
 @bot.tree.command(name="8ball", description="Hỏi gì đó yes/no, bot trả lời ngẫu nhiên")
 @app_commands.describe(question="Hỏi 1 câu hỏi yes/no...")
