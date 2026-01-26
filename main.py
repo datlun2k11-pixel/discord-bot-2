@@ -122,8 +122,8 @@ async def updatelog(interaction: discord.Interaction):
         color=0xff69b5
     )
     embed.add_field(
-        name="v9.9.5 - latex",
-        value="• Thêm lệnh `/latex` để render công thức toán\n• BUG FIXED AGAIN\n• -",
+        name="v9.9.6 - latex",
+        value="• Thêm lệnh `/latex` để render công thức toán\n• Fixing ko render đc\n• -",
         inline=False
     )
     embed.add_field(
@@ -152,14 +152,13 @@ async def meme(interaction: discord.Interaction, count: int = 1):
     except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
 
 @bot.tree.command(name="latex", description="Render công thức toán học")
-@app_commands.describe(formula="Nhập công thức...")
+@app_commands.describe(formula="Nhập công thức (đừng thêm dấu $ nha bro)")
 async def latex(interaction: discord.Interaction, formula: str):
-    # Tạo URL render ảnh từ công thức LaTeX
-    encoded_formula = urllib.parse.quote(rf"\text{{ }} \bm{{{formula}}}")
-    render_url = f"https://latex.codecogs.com/png.json?%5Cdpi%7B300%7D%20%5Cbg_white%20{encoded_formula}"
+    encoded_formula = urllib.parse.quote(formula)
+    render_url = f"https://latex.codecogs.com/png.image?\dpi{{300}}\bg_white \bm{{{encoded_formula}}}"
     
-    embed = discord.Embed(title="GenniAI LaTeX Renderer", color=0x00ff00)
-    embed.set_image(url=f"https://latex.codecogs.com/png.image?%5Cdpi%7B300%7D%20%5Cbg_white%20{encoded_formula}")
+    embed = discord.Embed(title="GenniAI LaTeX Renderer 🧠", color=0x00ff00)
+    embed.set_image(url=render_url)
     embed.set_footer(text=f"Formula: {formula}")
     
     await interaction.response.send_message(embed=embed)
