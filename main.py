@@ -98,7 +98,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.9.0 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v9.9.5 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -122,19 +122,19 @@ async def updatelog(interaction: discord.Interaction):
         color=0xff69b5
     )
         
+        embed.add_field(
+        name="v9.9.5 - latex",
+        value="• Thêm lệnh `/latex` để render công thức toán\n• BUG FIXED AGAIN\n• -",
+        inline=False
+    )
+    
     embed.add_field(
         name="v9.9.0 - 8ball",
         value="• Thêm lệnh `/8ball`\n• -\n• -",
         inline=False
     )
     
-    embed.add_field(
-        name="v9.8.1 - question",
-        value="• Thêm lệnh `/ask` để hỏi ở bất cứ đâu\n• Thay `imagine` thành `ask`\n• Fixing bugs",
-        inline=False
-    )
-    
-    embed.set_footer(text="Update tiếp theo: new model? | Owner: Đạt")
+    embed.set_footer(text="Update tiếp theo: pending | Owner: Đạt")
     
     await interaction.response.send_message(embed=embed, ephemeral=False)
 # --- LỆNH VÔ TRI ---
@@ -153,6 +153,19 @@ async def meme(interaction: discord.Interaction, count: int = 1):
                         e.set_image(url=str(resp.url))
                         await interaction.followup.send(embed=e)
     except: await interaction.followup.send("Meme gặp trục trặc r bro🥀😭")
+
+@bot.tree.command(name="latex", description="Render công thức toán học")
+@app_commands.describe(formula="Nhập công thức...")
+async def latex(interaction: discord.Interaction, formula: str):
+    # Tạo URL render ảnh từ công thức LaTeX
+    encoded_formula = urllib.parse.quote(rf"\text{{ }} \bm{{{formula}}}")
+    render_url = f"https://latex.codecogs.com/png.json?%5Cdpi%7B300%7D%20%5Cbg_white%20{encoded_formula}"
+    
+    embed = discord.Embed(title="GenniAI LaTeX Renderer", color=0x00ff00)
+    embed.set_image(url=f"https://latex.codecogs.com/png.image?%5Cdpi%7B300%7D%20%5Cbg_white%20{encoded_formula}")
+    embed.set_footer(text=f"Formula: {formula}")
+    
+    await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="8ball", description="Hỏi gì đó yes/no, bot trả lời ngẫu nhiên")
 @app_commands.describe(question="Hỏi 1 câu hỏi yes/no...")
