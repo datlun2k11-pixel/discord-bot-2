@@ -120,27 +120,23 @@ async def updatelog(interaction: discord.Interaction):
         title="GenniAI Update Log",
         description="Những Update mới của bot",
         color=0xff69b5
-        )
+    )
         
-        embed.add_field(
+    embed.add_field(
         name="v9.9.0 - 8ball",
-        value="• Thêm lệnh `/8ball`\n"
-              "• -\n"
-              "• -",
+        value="• Thêm lệnh `/8ball`\n• -\n• -",
         inline=False
     )
     
     embed.add_field(
         name="v9.8.1 - question",
-        value="• Thêm lệnh `/ask` để hỏi ở bất cứ đâu\n"
-              "• Thay `imagine` thành `ask`\n"
-              "• Fixing bugs",
+        value="• Thêm lệnh `/ask` để hỏi ở bất cứ đâu\n• Thay `imagine` thành `ask`\n• Fixing bugs",
         inline=False
     )
     
-    embed.set_footer(text="Update tiếp theo: pending | Owner: Đạt")
+    embed.set_footer(text="Update tiếp theo: new model? | Owner: Đạt")
     
-    await interaction.response.send_message(embed=embed, ephemeral=False)  # muốn ẩn thì đổi thành True
+    await interaction.response.send_message(embed=embed, ephemeral=False)
 # --- LỆNH VÔ TRI ---
 @bot.tree.command(name="meme", description="Random meme VN")
 @app_commands.describe(count="Số lượng meme muốn lấy (1-10)")
