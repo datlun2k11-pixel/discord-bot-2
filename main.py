@@ -62,24 +62,23 @@ async def random_model(interaction: discord.Interaction):
     v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
     await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v}) ")
 
-@bot.tree.command(name="personal", description="Set sys prompt riêng cho riêng, để trống để reset về mặc định")
-@app_commands.describe(prompt="Prompt mới (vd: 'Mày là bot nghiêm túc, không nhây nữa...')")
-async def set_prompt(interaction: discord.Interaction, prompt: str = None):
+@bot.tree.command(name="personal", description="Set sys prompt riêng, để trống để reset về mặc định")
+@app_commands.describe(prompt="Chỉnh lại tính cách mới... (để trống để reset)")
+async def personal(interaction: discord.Interaction, prompt: str = None):
     user_id = str(interaction.user.id)
-    
     if not prompt:
         custom_prompts.pop(user_id, None)
         if user_id in chat_history:
-            default_sys = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+            default_sys = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời ngắn gọn."
             chat_history[user_id][0] = {"role": "system", "content": default_sys}
-        await interaction.response.send_message("Đã reset về prompt gốc của GenniAI r nha 🔥")
+        await interaction.response.send_message("Đã reset về prompt gốc của GenniAI")
         return
     
     custom_prompts[user_id] = prompt
     if user_id in chat_history:
         chat_history[user_id][0] = {"role": "system", "content": prompt}
     
-    await interaction.response.send_message(f"Đã set prompt mới cho m rồi đó! 💀\n**Preview:** ```{prompt[:100]}{'...' if len(prompt) > 100 else ''}```")
+    await interaction.response.send_message(f"Đã set prompt mới\n**Preview:** ```{prompt[:100]}{'...' if len(prompt) > 100 else ''}```")
 
 @bot.tree.command(name="ask", description="Hỏi GenniAI bí mật, chỉ bạn thấy kết quả")
 @app_commands.describe(question="đặt câu hỏi")
@@ -91,7 +90,7 @@ async def ask(interaction: discord.Interaction, question: str):
     if user_id in custom_prompts:
         sys_msg = custom_prompts[user_id]
     else:
-        sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+        sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧.... Trả lời ngắn gọn."
     
     try:
         res = groq_client.chat.completions.create(
@@ -123,7 +122,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay` `/set_prompt`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v10.0.0 - Groq Edition", inline=True)
+    embed.add_field(name="Version", value="v10.0.1 - Groq Edition", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -150,8 +149,8 @@ async def updatelog(interaction: discord.Interaction):
         color=0xff69b5
     )
     embed.add_field(
-        name="v10.0.0 - custom_prompt",
-        value="• Thêm lệnh `/personal` để tùy chỉnh tính cách bot\n• Thêm model `GPT-OSS-Safeguard-20B`\n• Update lệnh `/random` để bao gồm model mới",
+        name="v10.0.1 - custom_prompt",
+        value="• Thêm lệnh `/personal` để tùy chỉnh tính cách bot\n• Thêm model `GPT-OSS-Safeguard-20B`\n• Fixing bugs",
         inline=False
     )
     embed.add_field(
@@ -273,7 +272,7 @@ async def on_message(message):
         if user_id in custom_prompts:
             sys_msg = custom_prompts[user_id]
         else:
-            sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+            sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời ngắn gọn."
         
         if user_id not in chat_history: 
             chat_history[user_id] = [{"role": "system", "content": sys_msg}]
@@ -282,7 +281,7 @@ async def on_message(message):
         
         has_img = len(message.attachments) > 0 and "image" in message.attachments[0].content_type
         if has_img and not MODELS_CONFIG[CURRENT_MODEL]["vision"]:
-            return await message.reply("Model này mù, đổi sang Llama Maverick đi! 💀")
+            return await message.reply("nếu muốn phân tích ảnh, hãy dùng lệnh `/model` và chọn model `Llama 4 Maverick`.")
 
         async with message.channel.typing():
             try:
