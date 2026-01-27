@@ -13,14 +13,16 @@ MODELS_CONFIG = {
     "120B": {"id": "openai/gpt-oss-120b", "vision": False},
     "Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "vision": True},
     "Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False},
-    "Qwen3": {"id": "qwen/qwen3-32b", "vision": False}
+    "Qwen3": {"id": "qwen/qwen3-32b", "vision": False},
+    "GPT-Safeguard": {"id": "openai/gpt-oss-safeguard-20b", "vision": False}
 }
 
 MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
     app_commands.Choice(name="Llama 4 Maverick (Groq) 👁️", value="Llama-Maverick"),
     app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi"),
-    app_commands.Choice(name="Qwen 3-32B (Groq)", value="Qwen3")
+    app_commands.Choice(name="Qwen 3-32B (Groq)", value="Qwen3"),
+    app_commands.Choice(name="GPT-OSS-Safeguard-20B (Groq) 🛡️", value="GPT-Safeguard")
 ]
 
 CURRENT_MODEL = "Llama-Maverick"
@@ -32,9 +34,10 @@ def run_flask(): app.run(host="0.0.0.0", port=8000)
 
 system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân).<@1458799287910535324> là userID của GenniAI. viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
 chat_history = {}
+custom_prompts = {}  # Lưu sys prompt riêng theo user
 intents = discord.Intents.default()
 intents.message_content = True
-intents.members = True  # Thêm dòng này để bot thấy hết member
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.event
@@ -59,14 +62,36 @@ async def random_model(interaction: discord.Interaction):
     v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
     await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v}) ")
 
+@bot.tree.command(name="personal", description="Set sys prompt riêng cho riêng, để trống để reset về mặc định")
+@app_commands.describe(prompt="Prompt mới (vd: 'Mày là bot nghiêm túc, không nhây nữa...')")
+async def set_prompt(interaction: discord.Interaction, prompt: str = None):
+    user_id = str(interaction.user.id)
+    
+    if not prompt:
+        custom_prompts.pop(user_id, None)
+        if user_id in chat_history:
+            default_sys = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+            chat_history[user_id][0] = {"role": "system", "content": default_sys}
+        await interaction.response.send_message("Đã reset về prompt gốc của GenniAI r nha 🔥")
+        return
+    
+    custom_prompts[user_id] = prompt
+    if user_id in chat_history:
+        chat_history[user_id][0] = {"role": "system", "content": prompt}
+    
+    await interaction.response.send_message(f"Đã set prompt mới cho m rồi đó! 💀\n**Preview:** ```{prompt[:100]}{'...' if len(prompt) > 100 else ''}```")
+
 @bot.tree.command(name="ask", description="Hỏi GenniAI bí mật, chỉ bạn thấy kết quả")
 @app_commands.describe(question="đặt câu hỏi")
 async def ask(interaction: discord.Interaction, question: str):
     await interaction.response.defer(ephemeral=True)
     
     user_id = str(interaction.user.id)
-    # Đã sửa message.author.id thành interaction.user.id cho m r nha 💀
-    sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+    
+    if user_id in custom_prompts:
+        sys_msg = custom_prompts[user_id]
+    else:
+        sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
     
     try:
         res = groq_client.chat.completions.create(
@@ -87,7 +112,7 @@ async def ask(interaction: discord.Interaction, question: str):
 
 @bot.tree.command(name="bot_info", description="Info bot + model đang quẩy")
 async def bot_info(interaction: discord.Interaction):
-    latency = round(bot.latency * 1000)  # ms
+    latency = round(bot.latency * 1000)
     v = "️👁️ Visionable" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌ Non-vision"
     
     embed = discord.Embed(title="GenniAI Status", color=0xff69b5, timestamp=discord.utils.utcnow())
@@ -95,10 +120,10 @@ async def bot_info(interaction: discord.Interaction):
     
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
     embed.add_field(name="Client ID", value="`1458799287910535324`", inline=True)
-    embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay`", inline=True)
+    embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay` `/set_prompt`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v9.9.8 - Groq Edition", inline=True)  # mày tự edit version nếu muốn
+    embed.add_field(name="Version", value="v10.0.0 - Groq Edition", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
@@ -110,7 +135,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="clear", description="Xóa ký ức")
 async def clear(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
-    sys_msg = f"Mày là GenniAI, một AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+    if user_id in custom_prompts:
+        sys_msg = custom_prompts[user_id]
+    else:
+        sys_msg = f"Mày là GenniAI, một AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
     chat_history[user_id] = [{"role": "system", "content": sys_msg}]
     await interaction.response.send_message("Đã xóa sạch ký ức")
 
@@ -122,18 +150,19 @@ async def updatelog(interaction: discord.Interaction):
         color=0xff69b5
     )
     embed.add_field(
-        name="v9.9.8 - deletion",
-        value="• Xoá bỏ lệnh 'LaTeX` \n• -\n• -",
+        name="v10.0.0 - custom_prompt",
+        value="• Thêm lệnh `/set_prompt` để tùy chỉnh tính cách bot\n• Thêm model `GPT-OSS-Safeguard-20B`\n• Update lệnh `/random` để bao gồm model mới",
         inline=False
     )
     embed.add_field(
-        name="v9.9.7 - latex",
-        value="• Thêm lệnh `/latex` để render công thức toán\n• Fixing ko render đc\n• -",
+        name="v9.9.8 - deletion",
+        value="• Xoá bỏ lệnh 'LaTeX` \n• -\n• -",
         inline=False
     )
     embed.set_footer(text="Update tiếp theo: pending | Owner: Đạt")
     
     await interaction.response.send_message(embed=embed, ephemeral=False)
+
 # --- LỆNH VÔ TRI ---
 @bot.tree.command(name="meme", description="Random meme VN")
 @app_commands.describe(count="Số lượng meme muốn lấy (1-10)")
@@ -145,7 +174,7 @@ async def meme(interaction: discord.Interaction, count: int = 1):
             for i in range(count):
                 async with session.get("https://phimtat.vn/api/random-meme/") as resp:
                     if resp.status == 200:
-                        random_color = random.randint(0, 0xFFFFFF)  # màu random đây nè
+                        random_color = random.randint(0, 0xFFFFFF)
                         e = discord.Embed(title=f"Meme #{i+1}", color=random_color)
                         e.set_image(url=str(resp.url))
                         await interaction.followup.send(embed=e)
@@ -241,8 +270,10 @@ async def on_message(message):
     if bot.user.mentioned_in(message) or isinstance(message.channel, discord.DMChannel):
         user_id = str(message.author.id)
         
-        # Tạo system instruction có tên user
-        sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
+        if user_id in custom_prompts:
+            sys_msg = custom_prompts[user_id]
+        else:
+            sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{message.author.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
         
         if user_id not in chat_history: 
             chat_history[user_id] = [{"role": "system", "content": sys_msg}]
@@ -270,7 +301,7 @@ async def on_message(message):
                 
                 chat_history[user_id].append({"role": "user", "content": message.content or "[Ảnh]"})
                 chat_history[user_id].append({"role": "assistant", "content": reply})
-                chat_history[user_id] = chat_history[user_id][-8:]  # giữ 8 nha
+                chat_history[user_id] = chat_history[user_id][-8:]
                 await message.reply(reply or "Tịt r 💔")
             except Exception as e: await message.reply(f"ngừng chat đi bây, có lỗi: {e} 💀")
 
