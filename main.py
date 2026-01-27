@@ -151,7 +151,7 @@ async def updatelog(interaction: discord.Interaction):
     )
     embed.add_field(
         name="v10.0.0 - custom_prompt",
-        value="• Thêm lệnh `/set_prompt` để tùy chỉnh tính cách bot\n• Thêm model `GPT-OSS-Safeguard-20B`\n• Update lệnh `/random` để bao gồm model mới",
+        value="• Thêm lệnh `/personal` để tùy chỉnh tính cách bot\n• Thêm model `GPT-OSS-Safeguard-20B`\n• Update lệnh `/random` để bao gồm model mới",
         inline=False
     )
     embed.add_field(
