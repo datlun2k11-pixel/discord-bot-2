@@ -11,7 +11,7 @@ load_dotenv()
 # --- Setup SiliconFlow Client ---
 client = OpenAI(
     api_key=os.getenv("SILICONFLOW_API_KEY"),  # Đổi env var nha m
-    base_url="https://api.siliconflow.cn/v1"
+    base_url="https://api.siliconflow.com/v1"
 )
 
 # --- Model Config SiliconFlow ---
