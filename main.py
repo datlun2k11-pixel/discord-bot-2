@@ -24,7 +24,6 @@ MODELS_CONFIG = {
     "Kimi-K2": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False},
     
     # Mới thêm 🚀
-    "Kimi-Dev": {"id": "moonshotai/kimi-dev-72b", "vision": False},  # Code pro
     "Qwen3": {"id": "Qwen/Qwen3-235B-A22B", "vision": False},  # Reasoning + Creative
     "GLM-4.5": {"id": "zai-org/glm-4.5", "vision": False},  # Agent/Tool use
     "MiniMax-M1": {"id": "MiniMax/MiniMax-M1", "vision": False},  # Context 1M tokens đọc file dài
@@ -40,9 +39,6 @@ MODEL_CHOICES = [
     app_commands.Choice(name="🧠 DeepSeek-R1 Reasoning", value="DeepSeek-R1"),
     app_commands.Choice(name="🧠 Qwen3 235B Reasoning", value="Qwen3"),
     
-    # Coding models 💻
-    app_commands.Choice(name="💻 Kimi-Dev 72B (Code Pro)", value="Kimi-Dev"),
-    
     # General/Agent 🤖
     app_commands.Choice(name="🔥 DeepSeek-V3 General", value="DeepSeek-V3"),
     app_commands.Choice(name="🚀 GLM-4.5 Agentic", value="GLM-4.5"),
@@ -53,7 +49,7 @@ MODEL_CHOICES = [
     app_commands.Choice(name="🆓 Qwen2.5-7B (FREE)", value="Qwen2.5-Free")
 ]
 
-CURRENT_MODEL = "DeepSeek-V3"  # Default
+CURRENT_MODEL = "Kimi-K2"  # Default
 
 app = Flask(__name__)
 @app.route('/')
@@ -81,7 +77,7 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
     v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
-    await interaction.response.send_message(f"Đã chuyển sang **{chon_model.name}** ({v}) 🔥")
+    await interaction.response.send_message(f"Đã chuyển sang **{chon_model.name}** ({v})")
 
 @bot.tree.command(name="random", description="Random 1 model bất kì")
 async def random_model(interaction: discord.Interaction):
@@ -89,7 +85,7 @@ async def random_model(interaction: discord.Interaction):
     choice = random.choice(MODEL_CHOICES)
     CURRENT_MODEL = choice.value
     v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
-    await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v}) 🎲")
+    await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v})")
 
 @bot.tree.command(name="personal", description="Set sys prompt riêng, để trống để reset về mặc định")
 @app_commands.describe(prompt="Chỉnh lại tính cách mới... (để trống để reset)")
@@ -151,7 +147,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay` `/personal`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v11.5.0 - SiliconFlow Edition", inline=True)
+    embed.add_field(name="Version", value="v11.5.1 - SiliconFlow Edition", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Provider", value="SiliconFlow.cn 🔥", inline=False)
@@ -179,8 +175,8 @@ async def updatelog(interaction: discord.Interaction):
         color=0xff69b5
     )
     embed.add_field(
-        name="v11.5.0 - new models",
-        value="• Thêm nhiều models hơn",
+        name="v11.5.1 - new models",
+        value="• Thêm nhiều models hơn\n• Fix 1 số lỗi, cải thiện câu trả lời\n• Loại bỏ Kimi-dev vì nó rep quá lâu",
         inline=False
     )
     embed.add_field(
@@ -222,12 +218,14 @@ async def eight_ball(interaction: discord.Interaction, question: str):
         "hên xui đó m 😇",
         "next câu khác đi 🥀",
         "t thấy có vẻ khả thi đó 👀",
-        "ko nha, tỉnh lại đi m 🐧"
+        "ko nha, tỉnh lại đi m 🐧",
+        "chắc chắn 100% 🥹🔥",
+        "luôn luôn lun á 🔥💀"
     ]
     answer = random.choice(responses)
     
     embed = discord.Embed(
-        title="🎱 Magic 8-Ball", 
+        title=" Magic 8-Ball", 
         color=random.randint(0, 0xFFFFFF)
     )
     embed.add_field(name="Câu hỏi", value=f"*{question}*", inline=False)
@@ -333,7 +331,7 @@ async def on_message(message):
                 chat_history[user_id] = chat_history[user_id][-8:]
                 await message.reply(reply or "Tịt r 💔")
             except Exception as e: 
-                await message.reply(f"ngừng chat đi bây, có lỗi: {e} 💀")
+                await message.reply(f"có lỗi xảy ra vs bot, ngừng tí nha. {e} ")
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
