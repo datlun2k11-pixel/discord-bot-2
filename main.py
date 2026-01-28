@@ -391,4 +391,4 @@ async def on_message(message):
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
-    bot.run(os.getenv("DISCORD_TOKEN")
+    bot.run(os.getenv("DISCORD_TOKEN"))
