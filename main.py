@@ -24,15 +24,11 @@ MODELS_CONFIG = {
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False, "provider": "groq"},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "vision": False, "provider": "groq"},
     "Groq-GPT-Safeguard": {"id": "openai/gpt-oss-safeguard-20b", "vision": False, "provider": "groq"},
-    
-    # --- SiliconFlow Models ---
-    "SF-DeepSeek-V3.2": {"id": "deepseek-ai/DeepSeek-V3.2", "vision": False, "provider": "siliconflow"},
-    "SF-DeepSeek-V3.1": {"id": "deepseek-ai/DeepSeek-V3.1", "vision": False, "provider": "siliconflow"},
-    "SF-Qwen3-32B": {"id": "qwen/qwen3-32b-instruct", "vision": False, "provider": "siliconflow"},
-    "SF-Qwen3-VL": {"id": "qwen/qwen3-vl-2b-instruct", "vision": True, "provider": "siliconflow"},
-    "SF-GLM-4.6V": {"id": "THUDM/glm-4.6v-0521", "vision": True, "provider": "siliconflow"},
-    "SF-MiniMax-M2.1": {"id": "MiniMax/MiniMax-M2.1", "vision": False, "provider": "siliconflow"},
-    "SF-LLaMA-3.3-70B": {"id": "meta-llama/llama-3.3-70b-instruct", "vision": False, "provider": "siliconflow"},
+       # --- SiliconFlow Models (Hàng Real t vừa thêm nè 🔥) ---
+    "SF-DeepSeek-V3": {"id": "deepseek-ai/DeepSeek-V3", "vision": False, "provider": "siliconflow"},
+    "SF-DeepSeek-R1": {"id": "deepseek-ai/DeepSeek-R1", "vision": False, "provider": "siliconflow"},
+    "SF-Qwen2.5-72B": {"id": "Qwen/Qwen2.5-72B-Instruct", "vision": False, "provider": "siliconflow"},
+    "SF-Llama-3.1-70B": {"id": "meta-llama/Meta-Llama-3.1-70B-Instruct", "vision": False, "provider": "siliconflow"},
 }
 
 MODEL_CHOICES = [
@@ -43,14 +39,11 @@ MODEL_CHOICES = [
     app_commands.Choice(name="Qwen 3-32B (Groq)", value="Groq-Qwen3"),
     app_commands.Choice(name="GPT-OSS-Safeguard (Groq) 🛡️", value="Groq-GPT-Safeguard"),
     
-    # SiliconFlow choices
-    app_commands.Choice(name="DeepSeek V3.2 (SF) 🆕", value="SF-DeepSeek-V3.2"),
-    app_commands.Choice(name="DeepSeek V3.1 (SF)", value="SF-DeepSeek-V3.1"),
-    app_commands.Choice(name="Qwen 3-32B (SF)", value="SF-Qwen3-32B"),
-    app_commands.Choice(name="Qwen 3-VL (SF) 👁️🆕", value="SF-Qwen3-VL"),
-    app_commands.Choice(name="GLM-4.6V (SF) 👁️🆕", value="SF-GLM-4.6V"),
-    app_commands.Choice(name="MiniMax M2.1 (SF) 🆕", value="SF-MiniMax-M2.1"),
-    app_commands.Choice(name="LLaMA 3.3 70B (SF) 🆕", value="SF-LLaMA-3.3-70B"),
+     # Thêm mấy con hàng Real này vào menu chọn cho nó uy tín
+    app_commands.Choice(name="DeepSeek V3 (SF) - Siêu Khôn 🔥", value="SF-DeepSeek-V3"),
+    app_commands.Choice(name="DeepSeek R1 (SF) - Suy Luận 🧠", value="SF-DeepSeek-R1"),
+    app_commands.Choice(name="Qwen 2.5 72B (SF) 🍵", value="SF-Qwen2.5-72B"),
+    app_commands.Choice(name="Llama 3.1 70B (SF) 🥀", value="SF-Llama-3.1-70B"),
 ]
 
 CURRENT_MODEL = "Groq-Llama-Maverick"  # Mặc định vẫn là Groq
@@ -170,8 +163,6 @@ async def ask(interaction: discord.Interaction, question: str):
         )
         
         reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
-        
-        provider = "🔵 Groq" if MODELS_CONFIG[CURRENT_MODEL]["provider"] == "groq" else "🟣 SiliconFlow"
         await interaction.followup.send(
             f"**Provider:** {provider}\n"
             f"**Model:** {CURRENT_MODEL}\n"
@@ -198,7 +189,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/list_models` `/ask` `/bot_info` `/clear` `/personal` `/meme` `/ship` `/check_gay` `/update_log`", inline=False)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v11.0 - Multi-Provider Edition", inline=True)
+    embed.add_field(name="Version", value="v11.5.1 - Multi-Provider Edition", inline=True)
     
     embed.add_field(name="Provider", value=provider, inline=True)
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
@@ -272,9 +263,7 @@ async def on_message(message):
                 # Lưu lịch sử (chỉ lưu text)
                 chat_history[user_id].append({"role": "user", "content": message.content or "[Ảnh]"})
                 chat_history[user_id].append({"role": "assistant", "content": reply})
-                chat_history[user_id] = chat_history[user_id][-8:]  # Giữ 8 tin nhắn gần nhất
-                
-                provider_tag = "🔵" if config["provider"] == "groq" else "🟣"
+                chat_history[user_id] = chat_history[user_id][-8:]  # Giữ 8 tin nhắn gần nhấn
                 await message.reply(f"{provider_tag} {reply or 'Tịt r 💔'}")
                 
             except Exception as e: 
