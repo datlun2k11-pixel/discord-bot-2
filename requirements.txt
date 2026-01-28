@@ -1,5 +1,5 @@
 discord.py
-openai
+groq
 python-dotenv
 Flask
 aiohttp
