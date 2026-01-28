@@ -1,6 +1,6 @@
-discord.p
+discord.py
 groq
-python-dotenv
-aiohttp
-Flask
 openai
+python-dotenv
+flask
+aiohttp
