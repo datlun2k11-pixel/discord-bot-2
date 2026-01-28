@@ -1,83 +1,40 @@
 import discord, random, os, urllib.parse, base64, aiohttp, asyncio
 from discord.ext import commands
 from discord import app_commands
-from openai import OpenAI  # Đổi từ Groq sang OpenAI client
+from groq import Groq
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
 
 load_dotenv()
+groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# --- Setup SiliconFlow Client ---
-client = OpenAI(
-    api_key=os.getenv("SILICONFLOW_API_KEY"),  # Đổi env var nha m
-    base_url="https://api.siliconflow.com/v1"
-)
-
-# --- Model Config SiliconFlow ---
 MODELS_CONFIG = {
-    # DeepSeek (ngon lành)
-    "DeepSeek-V3": {"id": "deepseek-ai/DeepSeek-V3", "vision": False},
-    "DeepSeek-R1": {"id": "deepseek-ai/DeepSeek-R1", "vision": False},
-    "DeepSeek-V3.2": {"id": "deepseek-ai/DeepSeek-V3.2", "vision": False},
-    "DeepSeek-VL2": {"id": "deepseek-ai/deepseek-vl2", "vision": True},
-    
-    # Kimi (Moonshot) - đỉnh của chóp
-    "Kimi-K2": {"id": "moonshotai/Kimi-K2-Instruct-0905", "vision": False},
-    "Kimi-Dev": {"id": "moonshotai/Kimi-Dev-72B", "vision": False},  # Code pro
-    "Kimi-Thinking": {"id": "moonshotai/Kimi-K2-Thinking", "vision": False},  # Reasoning
-    
-    # Qwen (Alibaba)
-    "Qwen2.5-VL": {"id": "Qwen/Qwen2.5-VL-32B-Instruct", "vision": True},
-    "Qwen3-Thinking": {"id": "Qwen/Qwen3-235B-A22B-Thinking-2507", "vision": False},  # Reasoning mới
-    "Qwen3-Instruct": {"id": "Qwen/Qwen3-235B-A22B-Instruct-2507", "vision": False},  # Bản non-thinking
-    "Qwen2.5-Free": {"id": "Qwen/Qwen2.5-7B-Instruct", "vision": False},  # MIỄN PHÍ 🆓
-    
-    # MiniMax (Context 1M tokens)
-    "MiniMax-M1": {"id": "MiniMaxAI/MiniMax-M1-80k", "vision": False},  # Đọc file dài
-    
-    # GLM (thay thế 4.5)
-    "GLM-4.7": {"id": "zai-org/GLM-4.7", "vision": False}
+    "120B": {"id": "openai/gpt-oss-120b", "vision": False},
+    "Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "vision": True},
+    "Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False},
+    "Qwen3": {"id": "qwen/qwen3-32b", "vision": False},
+    "GPT-Safeguard": {"id": "openai/gpt-oss-safeguard-20b", "vision": False}
 }
 
 MODEL_CHOICES = [
-    # Vision 👁️
-    app_commands.Choice(name="👁️ DeepSeek-VL2 Vision", value="DeepSeek-VL2"),
-    app_commands.Choice(name="👁️ Qwen2.5-VL 32B Vision", value="Qwen2.5-VL"),
-    
-    # Coding 💻
-    app_commands.Choice(name="💻 Kimi-Dev 72B (Code King)", value="Kimi-Dev"),
-    app_commands.Choice(name="💻 Qwen2.5-Coder (if available)", value="Qwen2.5-Coder"),
-    
-    # Reasoning 🧠
-    app_commands.Choice(name="🧠 DeepSeek-R1", value="DeepSeek-R1"),
-    app_commands.Choice(name="🧠 Kimi-K2-Thinking", value="Kimi-Thinking"),
-    app_commands.Choice(name="🧠 Qwen3-235B-Thinking", value="Qwen3-Thinking"),
-    
-    # Long Context 📜 (1M tokens)
-    app_commands.Choice(name="📜 MiniMax-M1-80k (1M Context)", value="MiniMax-M1"),
-    
-    # General 🔥
-    app_commands.Choice(name="🔥 DeepSeek-V3", value="DeepSeek-V3"),
-    app_commands.Choice(name="🔥 DeepSeek-V3.2", value="DeepSeek-V3.2"),
-    app_commands.Choice(name="🥀 Kimi-K2-Instruct", value="Kimi-K2"),
-    app_commands.Choice(name="🚀 GLM-4.7", value="GLM-4.7"),
-    
-    # FREE 🆓
-    app_commands.Choice(name="🆓 Qwen2.5-7B (FREE tier)", value="Qwen2.5-Free")
+    app_commands.Choice(name="GPT-OSS-120B (Groq)", value="120B"),
+    app_commands.Choice(name="Llama 4 Maverick (Groq) 👁️", value="Llama-Maverick"),
+    app_commands.Choice(name="Kimi K2 (Groq)", value="Kimi"),
+    app_commands.Choice(name="Qwen 3-32B (Groq)", value="Qwen3"),
+    app_commands.Choice(name="GPT-OSS-Safeguard-20B (Groq) 🛡️", value="GPT-Safeguard")
 ]
 
-CURRENT_MODEL = "Kimi-K2"  # Default
-
+CURRENT_MODEL = "Llama-Maverick"
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenniAI đang quẩy SiliconFlow! 🔥💀"
+def home(): return "GenniAI đang quẩy Groq + Vision! 🔥💀"
 
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
 system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân).<@1458799287910535324> là userID của GenniAI. viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon (biểu cảm bằng ký tự) kèm với các icon 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời cực ngắn gọn."
 chat_history = {}
-custom_prompts = {}
+custom_prompts = {}  # Lưu sys prompt riêng theo user
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -86,7 +43,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"Bot {bot.user} ready r! (≧▽≦) | SiliconFlow Edition")
+    print(f"Bot {bot.user} ready r! (≧▽≦)")
 
 # --- LỆNH QUẢN LÝ ---
 @bot.tree.command(name="model", description="Đổi model AI")
@@ -95,7 +52,7 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
     v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
-    await interaction.response.send_message(f"Đã chuyển sang **{chon_model.name}** ({v})")
+    await interaction.response.send_message(f"Đã chuyển sang **{chon_model.name}** ({v}) ")
 
 @bot.tree.command(name="random", description="Random 1 model bất kì")
 async def random_model(interaction: discord.Interaction):
@@ -103,7 +60,7 @@ async def random_model(interaction: discord.Interaction):
     choice = random.choice(MODEL_CHOICES)
     CURRENT_MODEL = choice.value
     v = "👁️✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "👁️❌"
-    await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v})")
+    await interaction.response.send_message(f"Đã bốc trúng: **{choice.name}** ({v}) ")
 
 @bot.tree.command(name="personal", description="Set sys prompt riêng, để trống để reset về mặc định")
 @app_commands.describe(prompt="Chỉnh lại tính cách mới... (để trống để reset)")
@@ -114,14 +71,14 @@ async def personal(interaction: discord.Interaction, prompt: str = None):
         if user_id in chat_history:
             default_sys = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧,.... Trả lời ngắn gọn."
             chat_history[user_id][0] = {"role": "system", "content": default_sys}
-        await interaction.response.send_message("Đã reset về prompt gốc của GenniAI 🥀")
+        await interaction.response.send_message("Đã reset về prompt gốc của GenniAI")
         return
     
     custom_prompts[user_id] = prompt
     if user_id in chat_history:
         chat_history[user_id][0] = {"role": "system", "content": prompt}
     
-    await interaction.response.send_message(f"Đã set prompt mới\n**Preview:** ```{prompt[:100]}{'...' if len(prompt) > 100 else ''}``` 🔥")
+    await interaction.response.send_message(f"Đã set prompt mới\n**Preview:** ```{prompt[:100]}{'...' if len(prompt) > 100 else ''}```")
 
 @bot.tree.command(name="ask", description="Hỏi GenniAI bí mật, chỉ bạn thấy kết quả")
 @app_commands.describe(question="đặt câu hỏi")
@@ -136,7 +93,7 @@ async def ask(interaction: discord.Interaction, question: str):
         sys_msg = f"Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. owner của mày có userID là <@1155129530122510376> (có tên ngoài đời là Đạt)(không được nhắc về owner của mày trừ khi có người hỏi) .<@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧.... Trả lời ngắn gọn."
     
     try:
-        res = client.chat.completions.create(  # Đổi từ groq_client sang client
+        res = groq_client.chat.completions.create(
             messages=[
                 {"role": "system", "content": sys_msg},
                 {"role": "user", "content": question}
@@ -162,16 +119,15 @@ async def bot_info(interaction: discord.Interaction):
     
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
     embed.add_field(name="Client ID", value="`1458799287910535324`", inline=True)
-    embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay` `/personal`", inline=True)
+    embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay` `/set_prompt`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v11.5.5 - SiliconFlow Edition", inline=True)
+    embed.add_field(name="Version", value="v11.8.1 - Groq Edition", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
-    embed.add_field(name="Provider", value="SiliconFlow.cn 🔥", inline=False)
     embed.add_field(name="Owner", value="<@1155129530122510376> (Đạt)", inline=False)
     
-    embed.set_footer(text="Powered by SiliconFlow | Online frequently")
+    embed.set_footer(text="Powered by Groq | Online frequently")
     
     await interaction.response.send_message(embed=embed)
     
@@ -183,7 +139,7 @@ async def clear(interaction: discord.Interaction):
     else:
         sys_msg = f"Mày là GenniAI, một AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). Người chat: <@{interaction.user.id}>. <@1458799287910535324> là userID của GenniAI. viết teencode, dùng emoticon kèm 💔🥀🔥💀🐧. Trả lời ngắn gọn."
     chat_history[user_id] = [{"role": "system", "content": sys_msg}]
-    await interaction.response.send_message("Đã xóa sạch ký ức 🧹💔")
+    await interaction.response.send_message("Đã xóa sạch ký ức")
 
 @bot.tree.command(name="update_log", description="Xem update log mới nhất của GenniAI")
 async def updatelog(interaction: discord.Interaction):
@@ -193,13 +149,13 @@ async def updatelog(interaction: discord.Interaction):
         color=0xff69b5
     )
     embed.add_field(
-        name="v11.5.1 - new models",
-        value="• Thêm nhiều models hơn\n• Fix 1 số lỗi, cải thiện câu trả lời\n• Loại bỏ Kimi-dev vì nó rep quá lâu\n • Xoá 1 số model ko tồn tại",
+        name="v11.8.1 - deletion",
+        value="• Xoá bỏ Silicon, sử dụng Groq trở lại \n• -\n• -",
         inline=False
     )
     embed.add_field(
-        name="v11.0.0 - SiliconFlow Migration",
-        value="• Chuyển từ Groq sang SiliconFlow API\n• Thêm model DeepSeek-VL2 Vision\n• Thêm model Qwen2.5-VL Vision\n• Thêm model DeepSeek-R1 Reasoning\n• Xóa các model cũ của Groq",
+        name="v10.0.1 - custom_prompt",
+        value="• Thêm lệnh `/personal` để tùy chỉnh tính cách bot\n• Thêm model `GPT-OSS-Safeguard-20B`\n• Fixing bugs",
         inline=False
     )
     embed.set_footer(text="Update tiếp theo: pending | Owner: Đạt")
@@ -236,14 +192,12 @@ async def eight_ball(interaction: discord.Interaction, question: str):
         "hên xui đó m 😇",
         "next câu khác đi 🥀",
         "t thấy có vẻ khả thi đó 👀",
-        "ko nha, tỉnh lại đi m 🐧",
-        "chắc chắn 100% 🥹🔥",
-        "luôn luôn lun á 🔥💀"
+        "ko nha, tỉnh lại đi m 🐧"
     ]
     answer = random.choice(responses)
     
     embed = discord.Embed(
-        title=" Magic 8-Ball", 
+        title="🎱 Magic 8-Ball", 
         color=random.randint(0, 0xFFFFFF)
     )
     embed.add_field(name="Câu hỏi", value=f"*{question}*", inline=False)
@@ -327,7 +281,7 @@ async def on_message(message):
         
         has_img = len(message.attachments) > 0 and "image" in message.attachments[0].content_type
         if has_img and not MODELS_CONFIG[CURRENT_MODEL]["vision"]:
-            return await message.reply("nếu muốn phân tích ảnh, hãy dùng lệnh `/model` và chọn model có 👁️ (DeepSeek-VL2 hoặc Qwen2.5-VL).")
+            return await message.reply("nếu muốn phân tích ảnh, hãy dùng lệnh `/model` và chọn model `Llama 4 Maverick`.")
 
         async with message.channel.typing():
             try:
@@ -336,7 +290,7 @@ async def on_message(message):
                     img = await download_image(message.attachments[0])
                     if img: content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img}"}})
                 
-                res = client.chat.completions.create(  # Đổi từ groq_client sang client
+                res = groq_client.chat.completions.create(
                     messages=chat_history[user_id] + [{"role": "user", "content": content if has_img else message.content}],
                     model=MODELS_CONFIG[CURRENT_MODEL]["id"]
                 )
@@ -348,8 +302,7 @@ async def on_message(message):
                 chat_history[user_id].append({"role": "assistant", "content": reply})
                 chat_history[user_id] = chat_history[user_id][-8:]
                 await message.reply(reply or "Tịt r 💔")
-            except Exception as e: 
-                await message.reply(f"có lỗi xảy ra vs bot, ngừng tí nha. {e} ")
+            except Exception as e: await message.reply(f"ngừng chat đi bây, có lỗi: {e} 💀")
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
