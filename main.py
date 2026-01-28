@@ -16,37 +16,55 @@ client = OpenAI(
 
 # --- Model Config SiliconFlow ---
 MODELS_CONFIG = {
-    # Cũ (giữ lại)
+    # DeepSeek (ngon lành)
     "DeepSeek-V3": {"id": "deepseek-ai/DeepSeek-V3", "vision": False},
     "DeepSeek-R1": {"id": "deepseek-ai/DeepSeek-R1", "vision": False},
+    "DeepSeek-V3.2": {"id": "deepseek-ai/DeepSeek-V3.2", "vision": False},
     "DeepSeek-VL2": {"id": "deepseek-ai/deepseek-vl2", "vision": True},
-    "Qwen2.5-VL": {"id": "Qwen/Qwen2.5-VL-32B-Instruct", "vision": True},
-    "Kimi-K2": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False},
     
-    # Mới thêm 🚀
-    "Qwen3": {"id": "Qwen/Qwen3-235B-A22B", "vision": False},  # Reasoning + Creative
-    "GLM-4.5": {"id": "zai-org/glm-4.5", "vision": False},  # Agent/Tool use
-    "MiniMax-M1": {"id": "MiniMax/MiniMax-M1", "vision": False},  # Context 1M tokens đọc file dài
-    "Qwen2.5-Free": {"id": "Qwen/Qwen2.5-7B-Instruct", "vision": False}  # FREE tier 💸
+    # Kimi (Moonshot) - đỉnh của chóp
+    "Kimi-K2": {"id": "moonshotai/Kimi-K2-Instruct-0905", "vision": False},
+    "Kimi-Dev": {"id": "moonshotai/Kimi-Dev-72B", "vision": False},  # Code pro
+    "Kimi-Thinking": {"id": "moonshotai/Kimi-K2-Thinking", "vision": False},  # Reasoning
+    
+    # Qwen (Alibaba)
+    "Qwen2.5-VL": {"id": "Qwen/Qwen2.5-VL-32B-Instruct", "vision": True},
+    "Qwen3-Thinking": {"id": "Qwen/Qwen3-235B-A22B-Thinking-2507", "vision": False},  # Reasoning mới
+    "Qwen3-Instruct": {"id": "Qwen/Qwen3-235B-A22B-Instruct-2507", "vision": False},  # Bản non-thinking
+    "Qwen2.5-Free": {"id": "Qwen/Qwen2.5-7B-Instruct", "vision": False},  # MIỄN PHÍ 🆓
+    
+    # MiniMax (Context 1M tokens)
+    "MiniMax-M1": {"id": "MiniMaxAI/MiniMax-M1-80k", "vision": False},  # Đọc file dài
+    
+    # GLM (thay thế 4.5)
+    "GLM-4.7": {"id": "zai-org/GLM-4.7", "vision": False}
 }
 
 MODEL_CHOICES = [
-    # Vision models 👁️
+    # Vision 👁️
     app_commands.Choice(name="👁️ DeepSeek-VL2 Vision", value="DeepSeek-VL2"),
     app_commands.Choice(name="👁️ Qwen2.5-VL 32B Vision", value="Qwen2.5-VL"),
     
-    # Reasoning models 🧠
-    app_commands.Choice(name="🧠 DeepSeek-R1 Reasoning", value="DeepSeek-R1"),
-    app_commands.Choice(name="🧠 Qwen3 235B Reasoning", value="Qwen3"),
+    # Coding 💻
+    app_commands.Choice(name="💻 Kimi-Dev 72B (Code King)", value="Kimi-Dev"),
+    app_commands.Choice(name="💻 Qwen2.5-Coder (if available)", value="Qwen2.5-Coder"),
     
-    # General/Agent 🤖
-    app_commands.Choice(name="🔥 DeepSeek-V3 General", value="DeepSeek-V3"),
-    app_commands.Choice(name="🚀 GLM-4.5 Agentic", value="GLM-4.5"),
-    app_commands.Choice(name="🥀 Kimi-K2 General", value="Kimi-K2"),
-    app_commands.Choice(name="📜 MiniMax-M1 (1M Context)", value="MiniMax-M1"),
+    # Reasoning 🧠
+    app_commands.Choice(name="🧠 DeepSeek-R1", value="DeepSeek-R1"),
+    app_commands.Choice(name="🧠 Kimi-K2-Thinking", value="Kimi-Thinking"),
+    app_commands.Choice(name="🧠 Qwen3-235B-Thinking", value="Qwen3-Thinking"),
     
-    # FREE tier 🆓
-    app_commands.Choice(name="🆓 Qwen2.5-7B (FREE)", value="Qwen2.5-Free")
+    # Long Context 📜 (1M tokens)
+    app_commands.Choice(name="📜 MiniMax-M1-80k (1M Context)", value="MiniMax-M1"),
+    
+    # General 🔥
+    app_commands.Choice(name="🔥 DeepSeek-V3", value="DeepSeek-V3"),
+    app_commands.Choice(name="🔥 DeepSeek-V3.2", value="DeepSeek-V3.2"),
+    app_commands.Choice(name="🥀 Kimi-K2-Instruct", value="Kimi-K2"),
+    app_commands.Choice(name="🚀 GLM-4.7", value="GLM-4.7"),
+    
+    # FREE 🆓
+    app_commands.Choice(name="🆓 Qwen2.5-7B (FREE tier)", value="Qwen2.5-Free")
 ]
 
 CURRENT_MODEL = "Kimi-K2"  # Default
@@ -147,7 +165,7 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="Commands", value="`/model` `/random` `/ask` `/bot_info` `/clear` `/meme` `/ship` `/check_gay` `/personal`", inline=True)
     
     embed.add_field(name="Ping/Latency", value=f"{latency}ms {'nhanh' if latency < 100 else 'hơi lag'}", inline=True)
-    embed.add_field(name="Version", value="v11.5.1 - SiliconFlow Edition", inline=True)
+    embed.add_field(name="Version", value="v11.5.5 - SiliconFlow Edition", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**\n`{MODELS_CONFIG[CURRENT_MODEL]['id']}`\n{v}", inline=False)
     embed.add_field(name="Provider", value="SiliconFlow.cn 🔥", inline=False)
@@ -176,7 +194,7 @@ async def updatelog(interaction: discord.Interaction):
     )
     embed.add_field(
         name="v11.5.1 - new models",
-        value="• Thêm nhiều models hơn\n• Fix 1 số lỗi, cải thiện câu trả lời\n• Loại bỏ Kimi-dev vì nó rep quá lâu",
+        value="• Thêm nhiều models hơn\n• Fix 1 số lỗi, cải thiện câu trả lời\n• Loại bỏ Kimi-dev vì nó rep quá lâu\n • Xoá 1 số model ko tồn tại",
         inline=False
     )
     embed.add_field(
