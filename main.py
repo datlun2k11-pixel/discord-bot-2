@@ -139,7 +139,7 @@ async def list_models(interaction: discord.Interaction):
     embed.add_field(name="Groq Models", value=groq_text or "None", inline=True)
     embed.add_field(name="SiliconFlow Models", value=sf_text or "None", inline=True)
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
-    embed.set_footer(text=f"v13.0.0 | Total: {len(MODELS_CONFIG)} models")
+    embed.set_footer(text=f"v13.0.2 | Total: {len(MODELS_CONFIG)} models")
     
     await interaction.response.send_message(embed=embed)
 
@@ -203,7 +203,7 @@ async def bot_info(interaction: discord.Interaction):
         embed.set_thumbnail(url=bot.user.avatar.url)
     
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
-    embed.add_field(name="Version", value="v13.0.0", inline=True)
+    embed.add_field(name="Version", value="v13.0.2", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"{CURRENT_MODEL}\n{provider} | {v}", inline=False)
@@ -257,8 +257,8 @@ async def clear(interaction: discord.Interaction):
 async def updatelog(interaction: discord.Interaction):
     embed = discord.Embed(title="GenniAI Update Log", color=0xff69b5)
     embed.add_field(
-        name="v13.0.0 - Model Expansion",
-        value="• Thêm 3 model SiliconFlow mới\n• Fixing bugs\n• Note: toàn bộ model mới thêm đều là visionable",
+        name="v13.0.2 - Model Expansion",
+        value="• Thêm 3 model SiliconFlow mới\n• Fixing bugs\n• Note: toàn bộ model mới thêm đều là visionable\n • Fix lỗi bad request",
         inline=False
     )
     embed.add_field(
@@ -396,7 +396,7 @@ async def on_message(message):
                     if img_b64:
                         content = [
                             {"type": "text", "text": message.content or "Xem ảnh"},
-                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}"}}
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_b64}", "detail": "low"}}
                         ]
                         messages.append({"role": "user", "content": content})
                     else:
@@ -413,13 +413,18 @@ async def on_message(message):
                 reply = raw_reply.split("</think>")[-1].strip() if "</think>" in raw_reply else raw_reply
                 
                 # Lưu history
+                # Lưu history
                 chat_history[user_id].append({"role": "user", "content": message.content or "[Ảnh]"})
                 chat_history[user_id].append({"role": "assistant", "content": reply})
                 chat_history[user_id] = chat_history[user_id][-8:]
-                
+
+                # ← THÊM DÒNG NÀY ĐÂY
+                reply = reply[:3900] if reply else "Tịt r 💔"
+
                 # Gửi reply (KHÔNG CÓ ICON MÀU)
-                await message.reply(reply or "Tịt r 💔")
-                
+                await message.reply(reply)
+
+
             except Exception as e:
                 await message.reply(f"Lỗi: {str(e)[:80]}")
 
