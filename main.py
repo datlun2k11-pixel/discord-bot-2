@@ -24,9 +24,11 @@ MODELS_CONFIG = {
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False, "provider": "groq"},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "vision": False, "provider": "groq"},
     "Groq-GPT-Safeguard": {"id": "openai/gpt-oss-safeguard-20b", "vision": False, "provider": "groq"},
-    
     # --- SiliconFlow Models (Hàng Real t vừa thêm nè 🔥) ---
-      # --- SiliconFlow Models (Hàng Real t vừa thêm nè 🔥) ---
+    # --- SiliconFlow Vision Models (Rẻ + Xịn) ---
+    "SF-Qwen2.5-VL-7B": {"id": "Qwen/Qwen2.5-VL-7B-Instruct", "vision": True, "provider": "siliconflow"},
+    "SF-Qwen2.5-VL-32B": {"id": "Qwen/Qwen2.5-VL-32B-Instruct", "vision": True, "provider": "siliconflow"},
+    "SF-DeepSeek-VL2": {"id": "deepseek-ai/deepseek-vl2", "vision": True, "provider": "siliconflow"},
     "SF-DeepSeek-V3": {"id": "deepseek-ai/DeepSeek-V3", "vision": False, "provider": "siliconflow"},
     "SF-DeepSeek-R1": {"id": "deepseek-ai/DeepSeek-R1", "vision": False, "provider": "siliconflow"},
     "SF-Qwen2.5-72B": {"id": "Qwen/Qwen2.5-72B-Instruct", "vision": False, "provider": "siliconflow"},
@@ -42,7 +44,9 @@ MODEL_CHOICES = [
     app_commands.Choice(name="GPT-OSS-Safeguard (Groq)", value="Groq-GPT-Safeguard"),
     
     # SiliconFlow choices
-        # Thêm mấy con hàng Real này vào menu chọn cho nó uy tín
+    app_commands.Choice(name="Qwen2.5-VL 7B (SF) 👁️ Rẻ", value="SF-Qwen2.5-VL-7B"),
+    app_commands.Choice(name="Qwen2.5-VL 32B (SF) 👁️🔥", value="SF-Qwen2.5-VL-32B"),
+    app_commands.Choice(name="DeepSeek VL2 (SF) 👁️ Free", value="SF-DeepSeek-VL2"),
     app_commands.Choice(name="DeepSeek V3 (SF) - Siêu Khôn 🔥", value="SF-DeepSeek-V3"),
     app_commands.Choice(name="DeepSeek R1 (SF) - Suy Luận 🧠", value="SF-DeepSeek-R1"),
     app_commands.Choice(name="Qwen 2.5 72B (SF) 🍵", value="SF-Qwen2.5-72B"),
@@ -53,7 +57,7 @@ CURRENT_MODEL = "Groq-Llama-Maverick"
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenniAI v12.5.1 đang chạy Groq + SiliconFlow! 🔥"
+def home(): return "GenniAI đang chạy Groq + SiliconFlow! 🔥"
 
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
@@ -135,7 +139,7 @@ async def list_models(interaction: discord.Interaction):
     embed.add_field(name="Groq Models", value=groq_text or "None", inline=True)
     embed.add_field(name="SiliconFlow Models", value=sf_text or "None", inline=True)
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
-    embed.set_footer(text=f"v12.5.1 | Total: {len(MODELS_CONFIG)} models")
+    embed.set_footer(text=f"v13.0.0 | Total: {len(MODELS_CONFIG)} models")
     
     await interaction.response.send_message(embed=embed)
 
@@ -199,7 +203,7 @@ async def bot_info(interaction: discord.Interaction):
         embed.set_thumbnail(url=bot.user.avatar.url)
     
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
-    embed.add_field(name="Version", value="v12.8.1", inline=True)
+    embed.add_field(name="Version", value="v13.0.0", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"{CURRENT_MODEL}\n{provider} | {v}", inline=False)
@@ -253,13 +257,13 @@ async def clear(interaction: discord.Interaction):
 async def updatelog(interaction: discord.Interaction):
     embed = discord.Embed(title="GenniAI Update Log", color=0xff69b5)
     embed.add_field(
-        name="v12.8.1 - Imagine",
-        value="• Lệnh `/imagine` quay trở lại\n• Fixing bugs",
+        name="v13.0.0 - Model Expansion",
+        value="• Thêm 3 model SiliconFlow mới\n• Fixing bugs\n• Note: toàn bộ model mới thêm đều là visionable",
         inline=False
     )
     embed.add_field(
-        name="v12.5.1 - Model Expansion",
-        value="• Thêm 4 model SiliconFlow mới: DeepSeek-V3, DeepSeek-R1, Qwen2.5-72B, Llama-3.1-70B\n• Xóa icon tím/xanh khỏi tin nhắn\n• Tổng cộng 13 model từ 2 provider",
+        name="v12.8.1 - Imagine",
+        value="• Lệnh `/imagine` quay trở lại\n• Fixing bugs",
         inline=False
     )
     embed.set_footer(text="Next update: pending")
