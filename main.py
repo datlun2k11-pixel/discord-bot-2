@@ -199,7 +199,7 @@ async def bot_info(interaction: discord.Interaction):
         embed.set_thumbnail(url=bot.user.avatar.url)
     
     embed.add_field(name="Tên bot", value=f"{bot.user.name} ({bot.user.mention})", inline=True)
-    embed.add_field(name="Version", value="v12.5.1", inline=True)
+    embed.add_field(name="Version", value="v12.8.1", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms", inline=True)
     
     embed.add_field(name="Model hiện tại", value=f"{CURRENT_MODEL}\n{provider} | {v}", inline=False)
@@ -212,6 +212,36 @@ async def bot_info(interaction: discord.Interaction):
     
     await interaction.response.send_message(embed=embed)
 
+# --- LỆNH TẠO ẢNH ---
+@bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (SiliconFlow)")
+@app_commands.describe(prompt="mô tả ảnh m muốn tạo")
+async def imagine(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer() # Chờ AI vẽ tí, đừng hối 💀
+    
+    # Chọn model mặc định là FLUX.1-dev cho nó nét
+    image_model = "black-forest-labs/FLUX.1-dev" 
+    
+    try:
+        # Gọi API SiliconFlow để gen ảnh
+        response = siliconflow_client.images.generate(
+            model=image_model,
+            prompt=prompt,
+            n=1 # 1 cái thôi ko tốn tiền vl 💔
+        )
+        
+        image_url = response.data[0].url
+        
+        embed = discord.Embed(title=f"🎨 Ảnh của m nè bro!", color=0x00ff00)
+        embed.add_field(name="Prompt", value=prompt, inline=False)
+        embed.add_field(name="Model", value=image_model, inline=True)
+        embed.set_image(url=image_url)
+        embed.set_footer(text="Powered by SiliconFlow 🟣 | GenniAI")
+        
+        await interaction.followup.send(embed=embed)
+        
+    except Exception as e:
+        await interaction.followup.send(f"Vẽ tịt r, lỗi: {str(e)[:100]} 🥀", ephemeral=True)
+
 @bot.tree.command(name="clear", description="Xóa ký ức chat")
 async def clear(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
@@ -223,16 +253,16 @@ async def clear(interaction: discord.Interaction):
 async def updatelog(interaction: discord.Interaction):
     embed = discord.Embed(title="GenniAI Update Log", color=0xff69b5)
     embed.add_field(
+        name="v12.8.1 - Imagine",
+        value="• Lệnh `/imagine` quay trở lại\n• Fixing bugs",
+        inline=False
+    )
+    embed.add_field(
         name="v12.5.1 - Model Expansion",
         value="• Thêm 4 model SiliconFlow mới: DeepSeek-V3, DeepSeek-R1, Qwen2.5-72B, Llama-3.1-70B\n• Xóa icon tím/xanh khỏi tin nhắn\n• Tổng cộng 13 model từ 2 provider",
         inline=False
     )
-    embed.add_field(
-        name="v12.0.0 - Multi-Provider",
-        value="• Tích hợp SiliconFlow API\n• Hỗ trợ cả Groq và SiliconFlow\n• Thêm lệnh /list_models",
-        inline=False
-    )
-    embed.set_footer(text="Next update: Model performance metrics")
+    embed.set_footer(text="Next update: pending")
     
     await interaction.response.send_message(embed=embed)
 
@@ -298,7 +328,7 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
     embed.add_field(name="Người 1", value=f"{user1.display_name}", inline=True)
     embed.add_field(name="Người 2", value=f"{user2.display_name}", inline=True)
     embed.add_field(name="OTP", value=f"{match_pct}% - {caption}", inline=False)
-    embed.set_footer(text=f"Server: {len(members)} members")
+    embed.set_footer(text=f"đừng tin nha, kết quả là ngẫu nhiên | server: {len(members)}")
     
     await interaction.followup.send(embed=embed)
 
