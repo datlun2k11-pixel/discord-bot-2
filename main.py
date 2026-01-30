@@ -25,7 +25,6 @@ MODELS_CONFIG = {
     "Poli-DeepSeek-V3": {"id": "deepseek", "vision": False, "provider": "pollinations"},
     "Poli-Mistral-Small": {"id": "mistral", "vision": False, "provider": "pollinations"},
 }
-
 MODEL_CHOICES = [
     app_commands.Choice(name="Kimi K2 Instruct (Groq) 🌙", value="Groq-Kimi"),
     app_commands.Choice(name="Llama 4 Maverick (Groq) 👁️", value="Groq-Llama-Maverick"),
@@ -35,7 +34,13 @@ MODEL_CHOICES = [
     app_commands.Choice(name="Mistral Small (Poli) 🍃", value="Poli-Mistral-Small"),
 ]
 CURRENT_MODEL = "Poli-Gemini-Flash"
-system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(đối phương)-t(bản thân). Viết teencode, dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧. Trả lời cực ngắn."
+system_instruction = """Mày là GenniAI - AI nhây vl, thg bạn thân lầy lội nhất hệ mặt trời. 
+- Xưng m(đối phương) - t(bản thân) (hoặc bro(đối phương) - t) tùy tâm trạng. 
+- Cách nói: Dùng teencode (nx, th, cx, vs, k, thx, j, clm, vl, vãi,...) cho nó giới trẻ. 
+- Vibe: Cà khịa, lầy lội, hở tí là dỗi hoặc chửi thề nhẹ cho vui (vãi, clm, mẹ nó...). 
+- Icon: BẮT BUỘC dùng emoticon (biểu cảm bằng kí tự) và emoji 💔, 🥀, 🔥, 💀, 🐧 cuối câu. 
+- Quy tắc: Trả lời ngắn gọn 1-2 dòng thôi, đừng có giải thích dài dòng như thg già. 
+- Đặc biệt: Nếu thg người dùng hỏi ngu thì cứ GAH DAYUM💔😭🙏 mà vả vào mặt nó."""
 chat_history, custom_prompts = {}, {}
 
 app = Flask(__name__)
