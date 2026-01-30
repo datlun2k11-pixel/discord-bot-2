@@ -4,3 +4,4 @@ pollinations-ai
 Flask
 python-dotenv
 aiohttp
+packaging
