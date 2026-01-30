@@ -26,14 +26,14 @@ MODELS_CONFIG = {
     "Poli-Mistral-Small": {"id": "mistral", "vision": False, "provider": "pollinations"},
 }
 MODEL_CHOICES = [
-    app_commands.Choice(name="Kimi K2 Instruct (Groq) 🌙", value="Groq-Kimi"),
-    app_commands.Choice(name="Llama 4 Maverick (Groq) 👁️", value="Groq-Llama-Maverick"),
-    app_commands.Choice(name="Gemini Flash (Poli) ⚡", value="Poli-Gemini-Flash"),
-    app_commands.Choice(name="GPT-5 Mini (Poli) 🤖", value="Poli-GPT-5-Mini"),
-    app_commands.Choice(name="DeepSeek V3 (Poli) 🧠", value="Poli-DeepSeek-V3"),
-    app_commands.Choice(name="Mistral Small (Poli) 🍃", value="Poli-Mistral-Small"),
+    app_commands.Choice(name="Kimi K2 Instruct (Groq)", value="Groq-Kimi"),
+    app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Groq-Llama-Maverick"),
+    app_commands.Choice(name="Gemini Flash (Poli)", value="Poli-Gemini-Flash"),
+    app_commands.Choice(name="GPT-5 Mini (Poli)", value="Poli-GPT-5-Mini"),
+    app_commands.Choice(name="DeepSeek V3 (Poli)", value="Poli-DeepSeek-V3"),
+    app_commands.Choice(name="Mistral Small (Poli)", value="Poli-Mistral-Small"),
 ]
-CURRENT_MODEL = "Poli-Gemini-Flash"
+CURRENT_MODEL = "Groq-Llama-Maverick"
 system_instruction = """Mày là GenniAI - AI nhây vl, thg bạn thân lầy lội nhất hệ mặt trời. 
 - Xưng m(đối phương) - t(bản thân) (hoặc bro(đối phương) - t) tùy tâm trạng. 
 - Cách nói: Dùng teencode (nx, th, cx, vs, k, thx, j, clm, vl, vãi,...) cho nó giới trẻ. 
@@ -91,6 +91,7 @@ async def bot_info(interaction):
     embed = discord.Embed(title="GenniAI Status", color=0xff69b5, timestamp=discord.utils.utcnow())
     embed.add_field(name="Tên bot", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms", inline=True)
+    embed.add_field(name="Version", value="phiên bản - v13.2.1", inline=True)
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="Provider", value=MODELS_CONFIG[CURRENT_MODEL]["provider"].upper(), inline=True)
     embed.set_footer(text="Powered by Groq + Pollinations 💀")
@@ -99,7 +100,7 @@ async def bot_info(interaction):
 @bot.tree.command(name="update_log", description="Xem nhật ký cập nhật")
 async def update_log(interaction):
     embed = discord.Embed(title="GenniAI Update Log", color=0xff69b5)
-    embed.add_field(name="v15.0.0 - Pollinations Era", value="• Thay SiliconFlow thành Pollinations (Bú API Key xịn)\n• Thêm Gemini 3 Flash, GPT-5 Mini, Claude 4.5\n• Giữ nguyên toàn bộ cmd cũ cho m đỡ dỗi 🐧", inline=False)
+    embed.add_field(name="v13.2.1 - Pollinations Era", value="• Fixing lỗi ko nhìn đc ảnh\n• Cải thiện 1 số thứ\n• Tương lai có thể xoá Polinations", inline=False)
     embed.add_field(name="v13.0.2", value="• Thêm model SF cũ (Đã khai tử)\n• Fix lỗi cụt lủn 🥀", inline=False)
     await interaction.response.send_message(embed=embed)
 
@@ -141,41 +142,45 @@ async def clear(interaction):
 @bot.event
 async def on_message(message):
     if message.author.bot: return
-    
-    # DM ko cần tag, Server thì phải tag bot 🐧
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user.mentioned_in(message)
     
     if is_mentioned or is_dm:
         uid = str(message.author.id)
-        
-        # Nếu chưa có ký ức thì khởi tạo với Instruction nhây vl của t 💀
         if uid not in chat_history: 
             chat_history[uid] = [{"role": "system", "content": custom_prompts.get(uid, system_instruction)}]
         
         async with message.channel.typing():
             try:
-                # 1. Thêm câu m vừa chửi vào ký ức 🧠
-                user_msg = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
-                chat_history[uid].append({"role": "user", "content": user_msg})
+                content = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
                 
-                # 2. Bú API lấy câu trả lời (Gửi toàn bộ history đi để nó nhớ) 🔥
-                reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
+                # --- LOGIC SOI ẢNH 👁️ ---
+                if message.attachments:
+                    img_url = message.attachments[0].url
+                    # Ép dùng con Llama Maverick có Vision để soi
+                    vision_model = MODELS_CONFIG["Groq-Llama-Maverick"]
+                    
+                    prompt_v = content if content else "Soi cái ảnh này xem có j hay ko m 🐧"
+                    msgs = [{"role": "user", "content": [
+                        {"type": "text", "text": f"{system_instruction}\n\n{prompt_v}"},
+                        {"type": "image_url", "image_url": {"url": img_url}}
+                    ]}]
+                    
+                    # Gọi trực tiếp qua Groq client cho chuẩn bài
+                    response = groq_client.chat.completions.create(messages=msgs, model=vision_model["id"])
+                    reply = response.choices[0].message.content
                 
-                # 3. Lọc bỏ cái <think> nếu là model suy nghĩ 🐧
-                reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
-                
-                # 4. Lưu câu trả lời của Bot vào ký ức luôn 🥀
-                chat_history[uid].append({"role": "assistant", "content": reply})
-                
-                # 5. Cắt bớt ký ức cho đỡ tốn token (Giữ 10 câu gần nhất + 1 câu system) 💀
-                if len(chat_history[uid]) > 11:
-                    chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-8:]
-                
+                # --- CHAT TEXT THƯỜNG ---
+                else:
+                    chat_history[uid].append({"role": "user", "content": content})
+                    reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
+                    reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
+                    chat_history[uid].append({"role": "assistant", "content": reply})
+                    chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+
                 await message.reply(reply[:1900])
-                
             except Exception as e: 
-                await message.reply(f"Lỗi r m: {str(e)[:50]} 💔")
+                await message.reply(f"Mắt t bị mờ r m ơi: {str(e)[:50]} 💔")
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
