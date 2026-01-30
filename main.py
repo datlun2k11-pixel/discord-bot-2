@@ -135,31 +135,40 @@ async def clear(interaction):
 async def on_message(message):
     if message.author.bot: return
     
-    # Check xem có phải DM hoặc có tag bot ko 🐧
+    # DM ko cần tag, Server thì phải tag bot 🐧
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user.mentioned_in(message)
     
     if is_mentioned or is_dm:
         uid = str(message.author.id)
+        
+        # Nếu chưa có ký ức thì khởi tạo với Instruction nhây vl của t 💀
         if uid not in chat_history: 
             chat_history[uid] = [{"role": "system", "content": custom_prompts.get(uid, system_instruction)}]
         
         async with message.channel.typing():
             try:
-                # Gửi kèm lịch sử chat cho nó khôn 🧠
-                history = chat_history[uid] + [{"role": "user", "content": message.content}]
-                reply = await get_model_response(history, MODELS_CONFIG[CURRENT_MODEL])
+                # 1. Thêm câu m vừa chửi vào ký ức 🧠
+                user_msg = message.content.replace(f'<@!{bot.user.id}>', '').replace(f'<@{bot.user.id}>', '').strip()
+                chat_history[uid].append({"role": "user", "content": user_msg})
                 
+                # 2. Bú API lấy câu trả lời (Gửi toàn bộ history đi để nó nhớ) 🔥
+                reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
+                
+                # 3. Lọc bỏ cái <think> nếu là model suy nghĩ 🐧
                 reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
                 
-                # Lưu lại ký ức 🥀
-                chat_history[uid].append({"role": "user", "content": message.content})
+                # 4. Lưu câu trả lời của Bot vào ký ức luôn 🥀
                 chat_history[uid].append({"role": "assistant", "content": reply})
-                chat_history[uid] = chat_history[uid][-10:] # Giữ 10 câu gần nhất
+                
+                # 5. Cắt bớt ký ức cho đỡ tốn token (Giữ 10 câu gần nhất + 1 câu system) 💀
+                if len(chat_history[uid]) > 11:
+                    chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-8:]
                 
                 await message.reply(reply[:1900])
+                
             except Exception as e: 
-                await message.reply(f"Lỗi r m: {e} 💀")
+                await message.reply(f"Lỗi r m: {str(e)[:50]} 💔")
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
