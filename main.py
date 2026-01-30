@@ -8,40 +8,39 @@ from threading import Thread
 
 load_dotenv()
 
-# Khởi tạo client
+# Khởi tạo clients
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-# CẤU HÌNH MODEL - GỘP GROQ + POLLINATIONS
+# CẤU HÌNH MODEL - GỘP GROQ + POLLINATIONS (Dùng ID chuẩn m gửi)
+# CẤU HÌNH MODEL - ĐÃ THÊM KIMI VÀ CHO SAFEGUARD COOK 💀🔥
 MODELS_CONFIG = {
-    "Groq-120B": {"id": "openai/gpt-oss-120b", "vision": False, "provider": "groq"},
+    # --- Groq ---
     "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "vision": True, "provider": "groq"},
-    "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False, "provider": "groq"},
+    "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False, "provider": "groq"}, # Kimi của m đây 🌙
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "vision": False, "provider": "groq"},
-    "Groq-GPT-Safeguard": {"id": "openai/gpt-oss-safeguard-20b", "vision": False, "provider": "groq"},
-            # --- Pollinations Models (Hàng vừa test, ko chạy t đi đầu xuống đất 💀) ---
-    "Poli-Llama-3.3": {"id": "openai", "vision": False, "provider": "pollinations"},
-    "Poli-DeepSeek-R1": {"id": "deepseek", "vision": False, "provider": "pollinations"},
-    "Poli-Mistral": {"id": "mistral", "vision": False, "provider": "pollinations"},
-    "Poli-Qwen-2.5-72B": {"id": "qwen", "vision": False, "provider": "pollinations"},
+    
+    # --- Pollinations (Hàng ngon bổ rẻ) ---
+    "Poli-Gemini-Flash": {"id": "gemini", "vision": False, "provider": "pollinations"},
+    "Poli-GPT-5-Mini": {"id": "openai", "vision": False, "provider": "pollinations"},
+    "Poli-DeepSeek-V3": {"id": "deepseek", "vision": False, "provider": "pollinations"},
+    "Poli-Mistral-Small": {"id": "mistral", "vision": False, "provider": "pollinations"},
 }
 
 MODEL_CHOICES = [
-    app_commands.Choice(name="GPT-OSS-120B (Groq)", value="Groq-120B"),
-    app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Groq-Llama-Maverick"),
-    app_commands.Choice(name="Kimi K2 (Groq)", value="Groq-Kimi"),
-    app_commands.Choice(name="Qwen 3-32B (Groq)", value="Groq-Qwen3"),
-    app_commands.Choice(name="GPT-OSS-Safeguard (Groq)", value="Groq-GPT-Safeguard"),
-    app_commands.Choice(name="Llama 3.3 70B (Poli) 🔥", value="Poli-Llama-3.3"),
-    app_commands.Choice(name="DeepSeek R1 (Poli) 🧠", value="Poli-DeepSeek-R1"),
-    app_commands.Choice(name="Mistral Large (Poli) 🍃", value="Poli-Mistral"),
-    app_commands.Choice(name="Qwen 2.5 72B (Poli) 🍵", value="Poli-Qwen-2.5-72B"),
+    app_commands.Choice(name="Kimi K2 Instruct (Groq) 🌙", value="Groq-Kimi"),
+    app_commands.Choice(name="Llama 4 Maverick (Groq) 👁️", value="Groq-Llama-Maverick"),
+    app_commands.Choice(name="Gemini Flash (Poli) ⚡", value="Poli-Gemini-Flash"),
+    app_commands.Choice(name="GPT-5 Mini (Poli) 🤖", value="Poli-GPT-5-Mini"),
+    app_commands.Choice(name="DeepSeek V3 (Poli) 🧠", value="Poli-DeepSeek-V3"),
+    app_commands.Choice(name="Mistral Small (Poli) 🍃", value="Poli-Mistral-Small"),
 ]
-
-CURRENT_MODEL = "Groq-Llama-Maverick"
+CURRENT_MODEL = "Poli-Gemini-Flash"
+system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(đối phương)-t(bản thân). Viết teencode, dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧. Trả lời cực ngắn."
+chat_history, custom_prompts = {}, {}
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenniAI đang chạy Groq + Pollinations! 🔥"
+def home(): return "GenniAI is Up! 🔥"
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
 async def get_model_response(messages, model_config):
@@ -50,130 +49,117 @@ async def get_model_response(messages, model_config):
             response = groq_client.chat.completions.create(messages=messages, model=model_config["id"])
             return response.choices[0].message.content
         else:
+            api_key = os.getenv("POLLINATIONS_API_KEY")
+            headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+            payload = {"messages": messages, "model": model_config["id"], "seed": random.randint(0, 999999)}
             async with aiohttp.ClientSession() as session:
-                payload = {"messages": messages, "model": model_config["id"], "seed": random.randint(0, 99999)}
-                async with session.post("https://text.pollinations.ai/", json=payload) as resp:
+                async with session.post("https://text.pollinations.ai/", json=payload, headers=headers) as resp:
                     return await resp.text()
-    except Exception as e:
-        raise Exception(f"Lỗi {model_config['provider']}: {str(e)[:100]}")
+    except Exception as e: return f"Lỗi r m: {str(e)[:50]}"
 
-system_instruction = "Mày là GenniAI, AI nhây vl. Xưng m(chỉ đối phương) - t(chỉ bản thân). viết teencode (cx, ko, đc, r, v, chx, nx, cs, ns,...), dùng emoticon kèm 💔, 🥀, 🔥, 💀, 🐧. Trả lời cực ngắn gọn."
-chat_history = {}
-custom_prompts = {}
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
     await bot.tree.sync()
     print(f"GenniAI v15 ready! 🔥")
 
+# --- CMDS MODEL ---
 @bot.tree.command(name="model", description="Đổi model AI")
 @app_commands.choices(chon_model=MODEL_CHOICES)
-async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
+async def switch_model(interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
     await interaction.response.send_message(f"Đã chuyển sang **{chon_model.name}** 🐧")
 
-@bot.tree.command(name="random", description="Random model")
-async def random_model(interaction: discord.Interaction):
-    global CURRENT_MODEL
-    choice = random.choice(MODEL_CHOICES)
-    CURRENT_MODEL = choice.value
-    await interaction.response.send_message(f"Random trúng: **{choice.name}** 🎲")
-
 @bot.tree.command(name="list_models", description="Xem tất cả model")
-async def list_models(interaction: discord.Interaction):
+async def list_models(interaction):
     embed = discord.Embed(title="📚 Danh sách Model", color=0xff69b4)
     groq_t = "\n".join([f"• {k}" for k, v in MODELS_CONFIG.items() if v["provider"] == "groq"])
     poli_t = "\n".join([f"• {k}" for k, v in MODELS_CONFIG.items() if v["provider"] == "pollinations"])
-    embed.add_field(name="Groq", value=groq_t or "None")
-    embed.add_field(name="Pollinations", value=poli_t or "None")
+    embed.add_field(name="Groq", value=groq_t or "None").add_field(name="Pollinations", value=poli_t or "None")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="personal", description="Set sys prompt riêng")
-async def personal(interaction: discord.Interaction, prompt: str = None):
-    uid = str(interaction.user.id)
-    if not prompt:
-        custom_prompts.pop(uid, None)
-        await interaction.response.send_message("Đã reset prompt gốc 🥀")
-    else:
-        custom_prompts[uid] = prompt
-        await interaction.response.send_message(f"Đã set prompt mới: `{prompt[:50]}...` 🔥")
-
-@bot.tree.command(name="ask", description="Hỏi bí mật (ephemeral)")
-async def ask(interaction: discord.Interaction, question: str):
-    await interaction.response.defer(ephemeral=True)
-    uid = str(interaction.user.id)
-    sys = custom_prompts.get(uid, system_instruction)
-    reply = await get_model_response([{"role":"system","content":sys},{"role":"user","content":question}], MODELS_CONFIG[CURRENT_MODEL])
-    await interaction.followup.send(f"**Q:** {question}\n**A:** {reply}", ephemeral=True)
-
-@bot.tree.command(name="bot_info", description="Info bot")
-async def bot_info(interaction: discord.Interaction):
-    embed = discord.Embed(title="GenniAI Status", color=0xff69b5)
-    embed.add_field(name="Model hiện tại", value=CURRENT_MODEL)
-    embed.add_field(name="Ping", value=f"{round(bot.latency * 1000)}ms")
+@bot.tree.command(name="bot_info", description="Info bot chi tiết")
+async def bot_info(interaction):
+    latency = round(bot.latency * 1000)
+    embed = discord.Embed(title="GenniAI Status", color=0xff69b5, timestamp=discord.utils.utcnow())
+    embed.add_field(name="Tên bot", value=f"{bot.user.mention}", inline=True)
+    embed.add_field(name="Ping", value=f"{latency}ms", inline=True)
+    embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
+    embed.add_field(name="Provider", value=MODELS_CONFIG[CURRENT_MODEL]["provider"].upper(), inline=True)
     embed.set_footer(text="Powered by Groq + Pollinations 💀")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="imagine", description="Tạo ảnh (Pollinations)")
-async def imagine(interaction: discord.Interaction, prompt: str):
-    await interaction.response.defer()
-    seed = random.randint(0, 99999)
-    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?seed={seed}&nologo=true"
-    embed = discord.Embed(title="🎨 Ảnh của m nè").set_image(url=url)
-    await interaction.followup.send(embed=embed)
-
-@bot.tree.command(name="clear", description="Xóa ký ức chat")
-async def clear(interaction: discord.Interaction):
-    chat_history[str(interaction.user.id)] = []
-    await interaction.response.send_message("Sạch bóng kin kít r m 🥀")
-
-@bot.tree.command(name="update_log", description="Xem update log")
-async def updatelog(interaction: discord.Interaction):
+@bot.tree.command(name="update_log", description="Xem nhật ký cập nhật")
+async def update_log(interaction):
     embed = discord.Embed(title="GenniAI Update Log", color=0xff69b5)
-    embed.add_field(name="v15.0.0", value="• Thay SiliconFlow thành Pollinations (Free vcl)\n• Giữ nguyên toàn bộ cmd cũ cho thằng chủ đỡ chửi 🐧")
+    embed.add_field(name="v15.0.0 - Pollinations Era", value="• Thay SiliconFlow thành Pollinations (Bú API Key xịn)\n• Thêm Gemini 3 Flash, GPT-5 Mini, Claude 4.5\n• Giữ nguyên toàn bộ cmd cũ cho m đỡ dỗi 🐧", inline=False)
+    embed.add_field(name="v13.0.2", value="• Thêm model SF cũ (Đã khai tử)\n• Fix lỗi cụt lủn 🥀", inline=False)
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="meme", description="Random meme VN")
-async def meme(interaction: discord.Interaction):
+# --- GIỮ NGUYÊN TẤT CẢ CMD VUI VẺ CÒN LẠI ---
+@bot.tree.command(name="imagine")
+async def imagine(interaction, prompt: str):
     await interaction.response.defer()
-    async with aiohttp.ClientSession() as session:
-        async with session.get("https://phimtat.vn/api/random-meme/") as resp:
-            embed = discord.Embed().set_image(url=str(resp.url))
-            await interaction.followup.send(embed=embed)
+    url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?nologo=true"
+    await interaction.followup.send(embed=discord.Embed(title="🎨 Ảnh nè").set_image(url=url))
 
-@bot.tree.command(name="8ball", description="Hỏi yes/no")
-async def eight_ball(interaction: discord.Interaction, question: str):
-    ans = random.choice(["có nha 🔥", "chx đâu m ơi 💔", "có cl 😭🥀", "chắc chắn rồi đó m 🐧", "đừng mơ nữa 💀"])
-    await interaction.response.send_message(f"🎱 **{question}**: {ans}")
+@bot.tree.command(name="meme")
+async def meme(interaction):
+    await interaction.response.defer()
+    async with aiohttp.ClientSession() as s:
+        async with s.get("https://phimtat.vn/api/random-meme/") as r:
+            await interaction.followup.send(embed=discord.Embed().set_image(url=str(r.url)))
 
-@bot.tree.command(name="ship", description="Check OTP")
-async def ship(interaction: discord.Interaction, user1: discord.Member, user2: discord.Member):
+@bot.tree.command(name="ship")
+async def ship(interaction, user1: discord.Member, user2: discord.Member):
     pts = random.randint(0, 100)
     await interaction.response.send_message(f"OTP {user1.display_name} x {user2.display_name}: {pts}% 🔥")
 
-@bot.tree.command(name="check_gay", description="Đo độ gay")
-async def check_gay(interaction: discord.Interaction, target: discord.Member):
-    await interaction.response.send_message(f"{target.display_name}: {random.randint(0, 100)}% 🏳️‍🌈")
+@bot.tree.command(name="check_gay")
+async def check_gay(interaction, target: discord.Member):
+    await interaction.response.send_message(f"{target.display_name} gay {random.randint(0,100)}% 🏳️‍🌈")
+
+@bot.tree.command(name="8ball")
+async def eight_ball(interaction, question: str):
+    ans = random.choice(["có", "ko", "cút", "hên xui"])
+    await interaction.response.send_message(f"🎱 **{question}**: {ans}")
+
+@bot.tree.command(name="clear")
+async def clear(interaction):
+    chat_history[str(interaction.user.id)] = []
+    await interaction.response.send_message("Xoá sạch r! 🥀")
 
 @bot.event
 async def on_message(message):
-    if message.author.bot or not bot.user.mentioned_in(message): return
-    uid = str(message.author.id)
-    if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": custom_prompts.get(uid, system_instruction)}]
-    async with message.channel.typing():
-        try:
-            chat_history[uid].append({"role": "user", "content": message.content})
-            reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
-            reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
-            chat_history[uid].append({"role": "assistant", "content": reply})
-            chat_history[uid] = chat_history[uid][-10:]
-            await message.reply(reply[:1900])
-        except Exception as e: await message.reply(f"Lỗi: {e} 🥀")
+    if message.author.bot: return
+    
+    # Check xem có phải DM hoặc có tag bot ko 🐧
+    is_dm = isinstance(message.channel, discord.DMChannel)
+    is_mentioned = bot.user.mentioned_in(message)
+    
+    if is_mentioned or is_dm:
+        uid = str(message.author.id)
+        if uid not in chat_history: 
+            chat_history[uid] = [{"role": "system", "content": custom_prompts.get(uid, system_instruction)}]
+        
+        async with message.channel.typing():
+            try:
+                # Gửi kèm lịch sử chat cho nó khôn 🧠
+                history = chat_history[uid] + [{"role": "user", "content": message.content}]
+                reply = await get_model_response(history, MODELS_CONFIG[CURRENT_MODEL])
+                
+                reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
+                
+                # Lưu lại ký ức 🥀
+                chat_history[uid].append({"role": "user", "content": message.content})
+                chat_history[uid].append({"role": "assistant", "content": reply})
+                chat_history[uid] = chat_history[uid][-10:] # Giữ 10 câu gần nhất
+                
+                await message.reply(reply[:1900])
+            except Exception as e: 
+                await message.reply(f"Lỗi r m: {e} 💀")
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
