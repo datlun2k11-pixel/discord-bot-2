@@ -131,10 +131,12 @@ async def eight_ball(interaction, question: str):
     ans = random.choice(["có", "ko", "cút", "hên xui"])
     await interaction.response.send_message(f"🎱 **{question}**: {ans}")
 
-@bot.tree.command(name="clear")
+@bot.tree.command(name="clear", description="Xoá sạch ký ức nhưng giữ lại bản chất")
 async def clear(interaction):
-    chat_history[str(interaction.user.id)] = []
-    await interaction.response.send_message("Xoá sạch r! 🥀")
+    uid = str(interaction.user.id)
+    # Xoá hết nhưng phải nạp lại cái Instruction ngay lập tức 🧠
+    chat_history[uid] = [{"role": "system", "content": custom_prompts.get(uid, system_instruction)}]
+    await interaction.response.send_message("Đã reset ký ức, t lại nhây như mới r m ơi! 🥀🔥🐧")
 
 @bot.event
 async def on_message(message):
