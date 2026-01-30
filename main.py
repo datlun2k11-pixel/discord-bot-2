@@ -18,11 +18,11 @@ MODELS_CONFIG = {
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False, "provider": "groq"},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "vision": False, "provider": "groq"},
     "Groq-GPT-Safeguard": {"id": "openai/gpt-oss-safeguard-20b", "vision": False, "provider": "groq"},
-        # --- Pollinations Models (ID chuẩn 2026 nè m 🐧) ---
-    "Poli-Llama-3.3": {"id": "llama-3.3-70b", "vision": False, "provider": "pollinations"},
-    "Poli-DeepSeek-R1": {"id": "deepseek-r1", "vision": False, "provider": "pollinations"},
-    "Poli-Mistral": {"id": "mistral-large", "vision": False, "provider": "pollinations"},
-    "Poli-Qwen-2.5-72B": {"id": "qwen-2.5-72b", "vision": False, "provider": "pollinations"},
+            # --- Pollinations Models (Hàng vừa test, ko chạy t đi đầu xuống đất 💀) ---
+    "Poli-Llama-3.3": {"id": "openai", "vision": False, "provider": "pollinations"},
+    "Poli-DeepSeek-R1": {"id": "deepseek", "vision": False, "provider": "pollinations"},
+    "Poli-Mistral": {"id": "mistral", "vision": False, "provider": "pollinations"},
+    "Poli-Qwen-2.5-72B": {"id": "qwen", "vision": False, "provider": "pollinations"},
 }
 
 MODEL_CHOICES = [
