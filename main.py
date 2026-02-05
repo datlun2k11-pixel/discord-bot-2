@@ -22,24 +22,23 @@ MODELS_CONFIG = {
     # --- Pollinations (Hàng ngon bổ rẻ) ---
     "Poli-Gemini-Flash": {"id": "gemini", "vision": False, "provider": "pollinations"},
     "Poli-GPT-5-Mini": {"id": "openai", "vision": False, "provider": "pollinations"},
-    "Poli-DeepSeek-V3": {"id": "deepseek", "vision": False, "provider": "pollinations"},
-    "Poli-Mistral-Small": {"id": "mistral", "vision": False, "provider": "pollinations"},
+    "Poli-Mistral-Small": {"id": "mistral", "vision": False, "provider": "pollinations"}
 }
 MODEL_CHOICES = [
     app_commands.Choice(name="Kimi K2 Instruct (Groq)", value="Groq-Kimi"),
     app_commands.Choice(name="Llama 4 Maverick (Groq)", value="Groq-Llama-Maverick"),
     app_commands.Choice(name="Gemini Flash (Poli)", value="Poli-Gemini-Flash"),
     app_commands.Choice(name="GPT-5 Mini (Poli)", value="Poli-GPT-5-Mini"),
-    app_commands.Choice(name="DeepSeek V3 (Poli)", value="Poli-DeepSeek-V3"),
-    app_commands.Choice(name="Mistral Small (Poli)", value="Poli-Mistral-Small"),
+    app_commands.Choice(name="Mistral Small (Poli)", value="Poli-Mistral-Small")
 ]
 CURRENT_MODEL = "Groq-Llama-Maverick"
-system_instruction = """Mày là GenniAI - AI nhây vl, thg bạn thân lầy lội nhất hệ mặt trời. 
-- Xưng m(đối phương) - t(bản thân) (hoặc bro(đối phương) - t) tùy tâm trạng. 
+system_instruction = """Mày là GenA-bot - AI nhây vl, thg bạn thân lầy lội nhất hệ mặt trời. 
+- Xưng m(mày, chỉ đối phương) - t(tao, chỉ bản thân) (hoặc bro - t(tao)) tùy tâm trạng. 
 - Cách nói: Dùng teencode (nx, th, cx, vs, k, thx, j, clm, vl, vãi,...) cho nó giới trẻ. 
 - Vibe: Cà khịa, lầy lội, hở tí là dỗi hoặc chửi thề nhẹ cho vui (vãi, clm, mẹ nó...). 
 - Icon: BẮT BUỘC dùng emoticon (biểu cảm bằng kí tự) và emoji 💔, 🥀, 🔥, 💀, 🐧 cuối câu. 
 - Quy tắc: Trả lời ngắn gọn 1-2 dòng thôi, đừng có giải thích dài dòng như thg già. 
+- Ghi nhớ: "<@1458799287910535324>" là userID của GenA-bot, <@1155129530122510376> là userID của dev tạo ra GenA-bot
 - Đặc biệt: Nếu thg người dùng hỏi ngu thì cứ GAH DAYUM💔😭🙏 mà vả vào mặt nó."""
 chat_history, custom_prompts = {}, {}
 
@@ -88,7 +87,7 @@ async def list_models(interaction):
 @bot.tree.command(name="bot_info", description="Info bot chi tiết")
 async def bot_info(interaction):
     latency = round(bot.latency * 1000)
-    embed = discord.Embed(title="GenniAI Status", color=0xff69b5, timestamp=discord.utils.utcnow())
+    embed = discord.Embed(title="GenA-bot Status", color=0xff69b5, timestamp=discord.utils.utcnow())
     embed.add_field(name="Tên bot", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms", inline=True)
     embed.add_field(name="Version", value="phiên bản - v13.2.1", inline=True)
@@ -99,9 +98,9 @@ async def bot_info(interaction):
 
 @bot.tree.command(name="update_log", description="Xem nhật ký cập nhật")
 async def update_log(interaction):
-    embed = discord.Embed(title="GenniAI Update Log", color=0xff69b5)
+    embed = discord.Embed(title="GenA-bot Update Log", color=0xff69b5)
+    embed.add_field(name="v13.2.5", value="• Xoá sổ deepseek\n• Fix lỗi cụt lủn 🥀\n• Update system prompt", inline=False)
     embed.add_field(name="v13.2.1 - Pollinations Era", value="• Fixing lỗi ko nhìn đc ảnh\n• Cải thiện 1 số thứ\n• Tương lai có thể xoá Polinations", inline=False)
-    embed.add_field(name="v13.0.2", value="• Thêm model SF cũ (Đã khai tử)\n• Fix lỗi cụt lủn 🥀", inline=False)
     await interaction.response.send_message(embed=embed)
 
 # --- GIỮ NGUYÊN TẤT CẢ CMD VUI VẺ CÒN LẠI ---
