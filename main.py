@@ -48,9 +48,14 @@ chat_history, custom_prompts = {}, {}
 user_locks = {}  # Fix duplicate rep con đà điểu
 
 app = Flask(__name__)
-@app.route('/'): def home(): return "GenniAI Up! 🔥"
-def run_flask(): app.run(host="0.0.0.0", port=8000)
 
+@app.route('/')
+def home():
+    return "GenniAI Up! 🔥"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=8000)
+    
 def random_vibe():
     vibes = ["(¬‿¬)", "(ಠ_ಠ)", "(•_•)", "(ง •_•)ง", "(≧▽≦)", "ಠ益ಠ", "¯\\_(ツ)_/¯"]
     emojis = ["💔", "🥀", "🔥", "💀", "🐧", "😇", "🥹"]
