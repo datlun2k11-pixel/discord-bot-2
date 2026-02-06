@@ -183,17 +183,34 @@ async def clear(interaction):
 @bot.event
 async def on_message(message):
     if message.author.bot: return
-    if message.type == discord.MessageType.reply and message.reference: return  # Fix chồng reply
+    
+    # Fix: Chỉ skip nếu reply người khác, reply bot thì vẫn rep
+    if message.type == discord.MessageType.reply and message.reference:
+        try:
+            ref_msg = await message.channel.fetch_message(message.reference.message_id)
+            if ref_msg.author.id != bot.user.id:
+                return  # Reply người khác thì thôi, ko rep
+        except:
+            pass  # Lỗi fetch thì cứ xử lý tiếp
     
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user in message.mentions
     
-    if not (is_mentioned or is_dm): return  # Chỉ rep khi mention hoặc DM
+    # Check có phải reply bot ko
+    is_reply_to_bot = False
+    if message.type == discord.MessageType.reply and message.reference:
+        try:
+            ref_msg = await message.channel.fetch_message(message.reference.message_id)
+            is_reply_to_bot = (ref_msg.author.id == bot.user.id)
+        except:
+            pass
+    
+    if not (is_mentioned or is_dm or is_reply_to_bot): return
     
     uid = str(message.author.id)
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
-    if lock.locked(): return  # Fix duplicate trigger cùng lúc
+    if lock.locked(): return
     
     async with lock:
         if uid not in chat_history:
@@ -220,7 +237,7 @@ async def on_message(message):
             else:
                 chat_history[uid].append({"role": "user", "content": content or "nx"})
                 reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
-                reply = reply.split("</think>")[-1].strip() if "</think>" in reply else reply
+                reply = reply.split("]")[-1].strip() if "]" in reply else reply
                 chat_history[uid].append({"role": "assistant", "content": reply})
                 chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
             
