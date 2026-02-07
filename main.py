@@ -97,21 +97,21 @@ async def bot_info(interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="Version", value="v15.3.5 - Novita", inline=True)
+    embed.add_field(name="Version", value="v15.5.0 - Novita", inline=True)
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="Provider", value=MODELS_CONFIG[CURRENT_MODEL]["provider"].upper(), inline=True)
     embed.set_footer(text="Powered by Groq + Novita | By Datlun2k11")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="update_log", description="Nhật ký update lầy lội")
+@bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.2 - New command", value="• Vẫn debug:))\n• Đã thêm lệnh `/spring`\n• Chuẩn bị đón xuân nha mn🧧:3", inline=False)
+    embed.add_field(name="v15.5.0 - New command", value="• Vẫn debug:))\n• Đã thêm lệnh `/spring`\n• Cải thiện 1 số lệnh\n• Chuẩn bị đón xuân nha mn🧧:3", inline=False)
     embed.add_field(name="v15.3.5 - Debugging", value="• Tiếp tục fixing\n• Đang debug", inline=False)
     embed.set_footer(text="Updated ngày: 7/2/2026")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="imagine")
+@bot.tree.command(name="imagine", description="tạo ảnh bằng AI (nhưng dởm)")
 async def imagine(interaction, prompt: str):
     await interaction.response.defer(thinking=True)
     url = f"https://image.pollinations.ai/prompt/{prompt.replace(' ', '%20')}?nologo=true&model=flux"
@@ -120,16 +120,28 @@ async def imagine(interaction, prompt: str):
     embed.set_footer(text=f"Prompt: {prompt[:50]}... | {random_vibe()}")
     await interaction.followup.send(embed=embed)
 
-@bot.tree.command(name="meme")
-async def meme(interaction):
+@bot.tree.command(name="meme", description="meme random (tối đa 5 cái)")
+@app_commands.describe(amount="Số lượng meme (1-5)")
+async def meme(interaction: discord.Interaction, amount: int = 1):
+    # Giới hạn từ 1-5 thôi ko nó spam nát server
+    amount = max(1, min(amount, 5))
+    
     await interaction.response.defer()
+    
     async with aiohttp.ClientSession() as s:
-        async with s.get("https://phimtat.vn/api/random-meme/") as r:
-            url = str(r.url)
-            embed = discord.Embed(title="Meme random vl 🤡", color=0xff4500)
-            embed.set_image(url=url)
-            embed.set_footer(text=f"Meme hôm nay: {random_vibe()}")
-            await interaction.followup.send(embed=embed)
+        for i in range(amount):
+            async with s.get("https://phimtat.vn/api/random-meme/") as r:
+                url = str(r.url)
+                embed = discord.Embed(title=f"Meme thứ {i+1}", color=0xff4500)
+                embed.set_image(url=url)
+                embed.set_footer(text=f"Meme chất lượng cao | {random_vibe()}")
+                
+                if i == 0:
+                    await interaction.followup.send(embed=embed)
+                else:
+                    await message.channel.send(embed=embed)
+            # Delay nhẹ tí cho đỡ bị Discord liệt vào hàng spam
+            if amount > 1: await asyncio.sleep(0.5)
 
 @bot.tree.command(name="spring", description="Bốc thăm lì xì đầu năm lấy hên m ơi")
 async def spring(interaction: discord.Interaction):
@@ -160,13 +172,41 @@ async def spring(interaction: discord.Interaction):
     embed.set_footer(text=f"Tết nhất vui vẻ ko quạo nha bro {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="ship")
-async def ship(interaction, user1: discord.Member, user2: discord.Member):
-    pts = random.randint(0, 100)
-    title = "OTP siêu đỉnh" if pts > 80 else "Hài vl" if pts < 30 else "Cũng tạm"
-    embed = discord.Embed(title=f"{title} 💕", description=f"{user1.display_name} x {user2.display_name}: **{pts}%** 🔥\n{'Hẹn hò đi' if pts > 70 else 'Bạn bè thôi nhá' if pts < 40 else 'Cân nhắc đi m'}", color=0xff69b4)
-    embed.set_footer(text=random_vibe())
-    await interaction.response.send_message(embed=embed)
+@bot.tree.command(name="ship", description="Check OTP hoặc random một cặp trời đánh")
+@app_commands.describe(user1="Người thứ 1", user2="Người thứ 2")
+async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
+    await interaction.response.defer()
+    
+    # Lấy list member ko phải bot, nếu server bật intent members thì mới chuẩn nha
+    members = [m for m in interaction.guild.members if not m.bot]
+    
+    # Trường hợp ko chọn ai thì bot tự "đi chợ" chọn hộ
+    if user1 is None: 
+        user1 = random.choice(members)
+    if user2 is None: 
+        # Chọn đứa thứ 2 khác đứa thứ 1, nếu server có mỗi 1 mống thì đành chịu
+        remaining = [m for m in members if m.id != user1.id]
+        user2 = random.choice(remaining) if remaining else user1
+
+    if user1.id == user2.id:
+        caption = "Tự luyến à m? Ship vs chính mình luôn ghê vl 🤡"
+        match_pct = random.randint(80, 100)
+    else:
+        match_pct = random.randint(0, 100)
+        if match_pct >= 90: caption = "OTP đỉnh, cưới đi ko t cướp 🔥"
+        elif match_pct >= 70: caption = "Match chất đấy, nhắn tin lẹ đi 🐧"
+        elif match_pct >= 40: caption = "Cũng ổn... mà chắc là friendzone 🥀"
+        elif match_pct >= 10: caption = "Nhìn là thấy ko hạp r, swipe left đi 💀"
+        else: caption = "GAH DAYUM! Cứu vãn j tầm này nx ☠️"
+    
+    embed = discord.Embed(title="💖 Tinder Ship 2026 💖", color=0xff69b4)
+    embed.add_field(name="Partner 1", value=f"{user1.mention}", inline=True)
+    embed.add_field(name="Partner 2", value=f"{user2.mention}", inline=True)
+    embed.add_field(name="Tỉ lệ khớp", value=f"**{match_pct}%**\n=> *{caption}*", inline=False)
+    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/2589/2589175.png")
+    embed.set_footer(text=f"Server: {len(members)} mống | {random_vibe()}")
+    
+    await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="check_gay")
 async def check_gay(interaction, target: discord.Member):
