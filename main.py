@@ -183,7 +183,6 @@ async def clear(interaction):
 async def on_message(message):
     if message.author.bot: return
     
-    # Check điều kiện rep: DM, mention, hoặc reply bot
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
@@ -198,7 +197,6 @@ async def on_message(message):
     uid = str(message.author.id)
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
-    
     if lock.locked(): return
     
     async with lock:
@@ -225,27 +223,18 @@ async def on_message(message):
             # Xử lý chat thường
             else:
                 chat_history[uid].append({"role": "user", "content": content or "nx"})
+                # Cứ gọi model bth, lỗi 403 nó trả về chuỗi lỗi thì kệ m nó
                 reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
                 
-                # Check nếu reply có chứa lỗi 403 (fix theo ý m)
-                if "403" in reply and "balance" in reply.lower():
-                    # Trả về câu thông báo hết tiền sạch sẽ, ko lưu vào history để tránh lỗi loop
-                    await message.reply(f"Hết tiền Novita r m ơi, nạp $1 đi ko t nghỉ chơi luôn 💔😭 {random_vibe()}", mention_author=False)
-                    return 
-
                 reply = reply.split("]")[-1].strip() if "]" in reply else reply
                 chat_history[uid].append({"role": "assistant", "content": reply})
                 chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
             
-            if len(reply) > 1500: reply = reply[:1490] + "... (dài vl hỏi tiếp đi)"
-            await message.reply(reply, mention_author=False)
+            await message.reply(reply[:1900], mention_author=False)
         
         except Exception as e:
-            err_msg = str(e)
-            if "403" in err_msg:
-                await message.reply(f"Hết tiền Novita r m ơi, nạp $1 đi 💔 {random_vibe()}", mention_author=False)
-            else:
-                await message.reply(f"Bị lỗi con đà điểu r m: {err_msg[:50]} {random_vibe()} 💀", mention_author=False)
+            # Chỉ báo lỗi cực ngắn để m debug flow
+            await message.reply(f"Debug: {str(e)[:50]} {random_vibe()} ☠️", mention_author=False)
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
