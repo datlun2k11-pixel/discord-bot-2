@@ -102,11 +102,11 @@ async def switch_model(interaction, chon_model: app_commands.Choice[str]):
 
 @bot.tree.command(name="list_models", description="List model ngon bổ rẻ update")
 async def list_models(interaction):
-    embed = discord.Embed(title="📚 Model Ngon Bổ Rẻ 2026 🔥", color=0xff69b4, description="Rẻ thì Llama 3.2 1B gần free, chất thì Kimi K2.5/GLM-4.7 đi m!")
+    embed = discord.Embed(title="Cheap model 💸", color=0xff69b4, description="Checking model rẻ nhất")
     groq_t = "\n".join([f"• **{k}** ({v['provider'].upper()})" for k, v in MODELS_CONFIG.items() if v["provider"] == "groq"])
-    nova_t = "\n".join([f"• **{k}** (Nova - rẻ vl)" for k, v in MODELS_CONFIG.items() if v["provider"] == "novita"])
-    embed.add_field(name="Groq (nhanh chất)", value=groq_t or "None", inline=False)
-    embed.add_field(name="Novita (rẻ + ngon)", value=nova_t or "None", inline=False)
+    nova_t = "\n".join([f"• **{k}** (Nova)" for k, v in MODELS_CONFIG.items() if v["provider"] == "novita"])
+    embed.add_field(name="Groq (nhanh)", value=groq_t or "None", inline=False)
+    embed.add_field(name="Novita (rẻ)", value=nova_t or "None", inline=False)
     embed.set_footer(text=f"Pick đi {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 
@@ -116,7 +116,7 @@ async def bot_info(interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="Version", value="v15.2 - Novita", inline=True)
+    embed.add_field(name="Version", value="v15.2.3 - Novita", inline=True)
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="Provider", value=MODELS_CONFIG[CURRENT_MODEL]["provider"].upper(), inline=True)
     embed.set_footer(text="Powered by Groq + Novita | By Datlun2k11")
@@ -125,9 +125,9 @@ async def bot_info(interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update lầy lội")
 async def update_log(interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v15.2.3", value="• Fixing 1 số bugs\n• Sửa lỗi 403\n• Hết r:))", inline=False)
     embed.add_field(name="v15.2 - Fix Novita", value="• Base URL api.novita.ai/openai chuẩn\n• OpenAI SDK mượt\n• Vision vẫn ưu tiên OCR rẻ\n• Cố gắng fix lỗi dởm", inline=False)
-    embed.add_field(name="v15.1", value="• Embed đẹp, random vibe\n• Fix vision Nova", inline=False)
-    embed.set_footer(text="Cập nhật để nhây tốt hơn 💔🔥")
+    embed.set_footer(text="ngày cập nhật: 7/2/2026")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="imagine")
@@ -178,38 +178,27 @@ async def clear(interaction):
     uid = str(interaction.user.id)
     chat_history[uid] = [{"role": "system", "content": custom_prompts.get(uid, system_instruction)}]
     await interaction.response.send_message(f"Đã clear ký ức, t lại nhây như mới tinh m ơi! {random_vibe()} 🥀🔥")
-
-
+# --- MESSAGE HANDLER ---
 @bot.event
 async def on_message(message):
     if message.author.bot: return
     
-    # Fix: Chỉ skip nếu reply người khác, reply bot thì vẫn rep
-    if message.type == discord.MessageType.reply and message.reference:
-        try:
-            ref_msg = await message.channel.fetch_message(message.reference.message_id)
-            if ref_msg.author.id != bot.user.id:
-                return  # Reply người khác thì thôi, ko rep
-        except:
-            pass  # Lỗi fetch thì cứ xử lý tiếp
-    
+    # Check điều kiện rep: DM, mention, hoặc reply bot
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user in message.mentions
-    
-    # Check có phải reply bot ko
     is_reply_to_bot = False
-    if message.type == discord.MessageType.reply and message.reference:
+    if message.reference:
         try:
             ref_msg = await message.channel.fetch_message(message.reference.message_id)
             is_reply_to_bot = (ref_msg.author.id == bot.user.id)
-        except:
-            pass
-    
+        except: pass
+
     if not (is_mentioned or is_dm or is_reply_to_bot): return
     
     uid = str(message.author.id)
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
+    
     if lock.locked(): return
     
     async with lock:
@@ -223,30 +212,40 @@ async def on_message(message):
             for mention in message.mentions:
                 content = content.replace(mention.mention, "").strip()
             
+            # Xử lý ảnh (Vision)
             if message.attachments:
                 await message.add_reaction("👀")
                 img_url = message.attachments[0].url
                 vision_key = next((k for k, v in MODELS_CONFIG.items() if v["vision"]), "Groq-Llama-Maverick")
                 vision_model = MODELS_CONFIG[vision_key]
-                
                 prompt_v = content or "Soi ảnh này có drama gì hem m 🐧"
                 msgs = [{"role": "user", "content": [{"type": "text", "text": f"{system_instruction}\n\n{prompt_v}"}, {"type": "image_url", "image_url": {"url": img_url}}]}]
-                
-                reply = await get_model_response(msgs, vision_model) if vision_model["provider"] == "novita" else groq_client.chat.completions.create(messages=msgs, model=vision_model["id"]).choices[0].message.content
+                reply = await get_model_response(msgs, vision_model)
             
+            # Xử lý chat thường
             else:
                 chat_history[uid].append({"role": "user", "content": content or "nx"})
                 reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
+                
+                # Check nếu reply có chứa lỗi 403 (fix theo ý m)
+                if "403" in reply and "balance" in reply.lower():
+                    # Trả về câu thông báo hết tiền sạch sẽ, ko lưu vào history để tránh lỗi loop
+                    await message.reply(f"Hết tiền Novita r m ơi, nạp $1 đi ko t nghỉ chơi luôn 💔😭 {random_vibe()}", mention_author=False)
+                    return 
+
                 reply = reply.split("]")[-1].strip() if "]" in reply else reply
                 chat_history[uid].append({"role": "assistant", "content": reply})
                 chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
             
             if len(reply) > 1500: reply = reply[:1490] + "... (dài vl hỏi tiếp đi)"
-            
-            await message.reply(reply[:1900], mention_author=False)
+            await message.reply(reply, mention_author=False)
         
         except Exception as e:
-            await message.reply(f"Bị lỗi con đà điểu r m: {str(e)[:80]} {random_vibe()} 💔")
+            err_msg = str(e)
+            if "403" in err_msg:
+                await message.reply(f"Hết tiền Novita r m ơi, nạp $1 đi 💔 {random_vibe()}", mention_author=False)
+            else:
+                await message.reply(f"Bị lỗi con đà điểu r m: {err_msg[:50]} {random_vibe()} 💀", mention_author=False)
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
