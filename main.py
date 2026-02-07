@@ -17,48 +17,29 @@ novita_client = AsyncOpenAI(
     api_key=os.getenv("NOVITA_API_KEY")
 )
 
-# MODELS CONFIG - Ngon bổ rẻ Novita + Groq
 MODELS_CONFIG = {
     "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "vision": True, "provider": "groq"},
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "vision": False, "provider": "groq"},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "vision": False, "provider": "groq"},
-    
     "Nova-DeepSeek-OCR2": {"id": "deepseek/deepseek-ocr-2", "vision": True, "provider": "novita"},
     "Nova-Llama-3.2-1B": {"id": "meta-llama/llama-3.2-1b-instruct", "vision": False, "provider": "novita"},
-    "Nova-Llama-3.1-8B": {"id": "meta-llama/llama-3.1-8b-instruct", "vision": False, "provider": "novita"},
-    "Nova-Qwen3-VL-8B": {"id": "qwen/qwen3-vl-8b-instruct", "vision": True, "provider": "novita"},
-    "Nova-GPT-OSS-20B": {"id": "openai/gpt-oss-20b", "vision": False, "provider": "novita"},
-    "Nova-DeepSeek-V3.2": {"id": "deepseek/deepseek-v3.2", "vision": False, "provider": "novita"},
-    "Nova-GLM-4.7": {"id": "z-ai/glm-4.7-flash", "vision": False, "provider": "novita"},
-    "Nova-Kimi-K2.5": {"id": "moonshotai/kimi-k2.5", "vision": False, "provider": "novita"},
     "Nova-MiniMax-M2.1": {"id": "minimax/minimax-m2.1", "vision": False, "provider": "novita"}
 }
 
 MODEL_CHOICES = [app_commands.Choice(name=k.split("-",1)[1].replace("-", " ") + f" ({v['provider'].upper()})", value=k) for k,v in MODELS_CONFIG.items()]
-
 CURRENT_MODEL = "Nova-DeepSeek-OCR2"
+system_instruction = "Mày là GenA-bot - AI nhây vl, vibe GenZ teencode. Xưng m-t, icon emoticon đầy đủ."
 
-system_instruction = """Mày là GenA-bot - AI nhây vl, thg bạn thân lầy lội nhất hệ mặt trời. 
-- Xưng m - t, vibe GenZ teencode vl
-- Nhây lầy, cà khịa nhẹ, chửi thề vui vui
-- Icon + emoticon bắt buộc, rep ngắn gọn
-- Nếu hỏi ngu: GAH DAYUM💔😭🙏"""
-
-chat_history, custom_prompts = {}, {}
-user_locks = {}  # Fix duplicate rep con đà điểu
+chat_history, custom_prompts, user_locks = {}, {}, {}
 
 app = Flask(__name__)
-
 @app.route('/')
-def home():
-    return "GenniAI Up! 🔥"
-
-def run_flask():
-    app.run(host="0.0.0.0", port=8000)
+def home(): return "GenniAI Up! 🔥"
+def run_flask(): app.run(host="0.0.0.0", port=8000)
     
 def random_vibe():
-    vibes = ["(¬‿¬)", "(ಠ_ಠ)", "(•_•)", "(ง •_•)ง", "(≧▽≦)", "ಠ益ಠ", "¯\\_(ツ)_/¯"]
-    emojis = ["💔", "🥀", "🔥", "💀", "🐧", "😇", "🥹"]
+    vibes = ["(¬‿¬)", "(ಠ_ಠ)", "(•_•)", "(ง •_•)ง", "ಠ益ಠ"]
+    emojis = ["💔", "🥀", "💀", "☠️", "🔥"]
     return f"{random.choice(vibes)} {random.choice(emojis)}"
 
 async def get_model_response(messages, model_config):
@@ -66,42 +47,29 @@ async def get_model_response(messages, model_config):
         if model_config["provider"] == "groq":
             response = groq_client.chat.completions.create(messages=messages, model=model_config["id"])
             return response.choices[0].message.content
-        
         elif model_config["provider"] == "novita":
             response = await novita_client.chat.completions.create(
                 messages=messages, model=model_config["id"],
                 max_tokens=2048, temperature=0.7, stream=False
             )
             return response.choices[0].message.content
-    
     except Exception as e:
-        # Thay vì return chuỗi rác, t trả về nội dung lỗi để nó chạy tiếp xuống on_message
-        return f"ERROR_403_BALANCE: {str(e)}"
-
-# Trong on_message, đoạn chat thường sửa lại như này:
-            else:
-                chat_history[uid].append({"role": "user", "content": content or "nx"})
-                reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
-                
-                # Check lỗi nhưng ko dùng return để ngắt flow
-                if "ERROR_403_BALANCE" in reply:
-                    await message.reply(f"Hết tiền Novita r m ơi, nạp $1 đi ko t nghỉ chơi luôn 💔😭 {random_vibe()}", mention_author=False)
-                    # Gán đại 1 cái reply để nó lưu vào history và ko bị crash đoạn dưới
-                    reply = "Đang lỗi 403 nè thg lùn, debug đi ☠️"
-
-                reply = reply.split("]")[-1].strip() if "]" in reply else reply
-                chat_history[uid].append({"role": "assistant", "content": reply})
-                chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
-                
-                # Vẫn cho nó reply cái nội dung sau khi đã "sủa" câu hết tiền
-                await message.reply(f"Debug nội dung: {reply}", mention_author=False)
+        # TRẢ VỀ LỖI NHƯNG KO ĐƯỢC NGẮT (RETURN) Ở ĐÂY ĐỂ DEBUG
+        return f"DEBUG_ERROR_SYSTEM: {str(e)}"
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
     await bot.tree.sync()
-    print(f"GenA-bot v16 anti-đà-điểu ready! 🔥")
+    print(f"GenA-bot Ready to Debug! 🔥")
+# [CMDS CỦA M GẮN Ở ĐÂY NHÉ #]
+bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+
+@bot.event
+async def on_ready():
+    await bot.tree.sync()
+    print(f"GenA-bot v15.3.5 anti-đà-điểu ready! 🔥")
 
 # CMDs giữ nguyên xịn (t ko paste dài, copy từ code cũ m nhé: model, list_models, bot_info, update_log, imagine, meme, ship, check_gay, 8ball, clear)
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
@@ -115,11 +83,11 @@ async def switch_model(interaction, chon_model: app_commands.Choice[str]):
 
 @bot.tree.command(name="list_models", description="List model ngon bổ rẻ update")
 async def list_models(interaction):
-    embed = discord.Embed(title="Cheap model 💸", color=0xff69b4, description="Checking model rẻ nhất")
+    embed = discord.Embed(title="📚 Model rẻ của bot", color=0xff69b4, description="Rẻ thì Llama 3.2 1B gần free, chất thì Kimi K2.5/GLM-4.7 đi m!")
     groq_t = "\n".join([f"• **{k}** ({v['provider'].upper()})" for k, v in MODELS_CONFIG.items() if v["provider"] == "groq"])
-    nova_t = "\n".join([f"• **{k}** (Nova)" for k, v in MODELS_CONFIG.items() if v["provider"] == "novita"])
-    embed.add_field(name="Groq (nhanh)", value=groq_t or "None", inline=False)
-    embed.add_field(name="Novita (rẻ)", value=nova_t or "None", inline=False)
+    nova_t = "\n".join([f"• **{k}** (Nova - rẻ vl)" for k, v in MODELS_CONFIG.items() if v["provider"] == "novita"])
+    embed.add_field(name="Groq (nhanh chất)", value=groq_t or "None", inline=False)
+    embed.add_field(name="Novita (rẻ + ngon)", value=nova_t or "None", inline=False)
     embed.set_footer(text=f"Pick đi {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 
@@ -129,7 +97,7 @@ async def bot_info(interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="Version", value="v15.2.3 - Novita", inline=True)
+    embed.add_field(name="Version", value="v15.3.5 - Novita", inline=True)
     embed.add_field(name="Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="Provider", value=MODELS_CONFIG[CURRENT_MODEL]["provider"].upper(), inline=True)
     embed.set_footer(text="Powered by Groq + Novita | By Datlun2k11")
@@ -138,9 +106,9 @@ async def bot_info(interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update lầy lội")
 async def update_log(interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.2.3", value="• Fixing 1 số bugs\n• Sửa lỗi 403\n• Hết r:))", inline=False)
+    embed.add_field(name="v15.3.5", value="• Tiếp tục fixing\n• Đang debug", inline=False)
     embed.add_field(name="v15.2 - Fix Novita", value="• Base URL api.novita.ai/openai chuẩn\n• OpenAI SDK mượt\n• Vision vẫn ưu tiên OCR rẻ\n• Cố gắng fix lỗi dởm", inline=False)
-    embed.set_footer(text="ngày cập nhật: 7/2/2026")
+    embed.set_footer(text="Updated ngày: 7/2/2026")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="imagine")
@@ -191,7 +159,7 @@ async def clear(interaction):
     uid = str(interaction.user.id)
     chat_history[uid] = [{"role": "system", "content": custom_prompts.get(uid, system_instruction)}]
     await interaction.response.send_message(f"Đã clear ký ức, t lại nhây như mới tinh m ơi! {random_vibe()} 🥀🔥")
-# --- MESSAGE HANDLER ---
+
 @bot.event
 async def on_message(message):
     if message.author.bot: return
@@ -220,40 +188,32 @@ async def on_message(message):
         
         try:
             content = message.content
-            for mention in message.mentions:
-                content = content.replace(mention.mention, "").strip()
+            for mention in message.mentions: content = content.replace(mention.mention, "").strip()
             
-            # Xử lý ảnh
             if message.attachments:
-                await message.add_reaction("👀")
+                # Xử lý Vision bth...
                 img_url = message.attachments[0].url
-                # Ưu tiên model vision của Groq cho nó chắc ăn
-                vision_model = MODELS_CONFIG["Groq-Llama-Maverick"] 
-                msgs = [{"role": "user", "content": [{"type": "text", "text": f"{system_instruction}\n\n{content or 'soi đi m'}"}, {"type": "image_url", "image_url": {"url": img_url}}]}]
-                reply = groq_client.chat.completions.create(messages=msgs, model=vision_model["id"]).choices[0].message.content
-            
-            # Xử lý chat thường
+                msgs = [{"role": "user", "content": [{"type": "text", "text": f"{system_instruction}\n\n{content or 'nx'}"}, {"type": "image_url", "image_url": {"url": img_url}}]}]
+                reply = await get_model_response(msgs, MODELS_CONFIG["Nova-DeepSeek-OCR2"])
             else:
                 chat_history[uid].append({"role": "user", "content": content or "nx"})
                 reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
-                
-                # NẾU NOVITA LỖI (Hết tiền/403) -> NHẢY SANG GROQ NGAY VÀ LUÔN
-                if "403" in reply or "Lỗi r m" in reply:
-                    backup_model = MODELS_CONFIG["Groq-Llama-Maverick"]
-                    reply = groq_client.chat.completions.create(
-                        messages=chat_history[uid], 
-                        model=backup_model["id"]
-                    ).choices[0].message.content
 
-                reply = reply.split("]")[-1].strip() if "]" in reply else reply
-                chat_history[uid].append({"role": "assistant", "content": reply})
-                chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+            # CHECK LỖI 403 NHƯNG KHÔNG DÙNG RETURN ĐỂ NGẮT MẠCH
+            if "403" in reply or "DEBUG_ERROR_SYSTEM" in reply:
+                await message.reply(f"Hết tiền Novita r m ơi, nạp $1 đi ko t nghỉ chơi luôn 💔😭 {random_vibe()}", mention_author=False)
+                # Vẫn giữ nguyên reply lỗi để nó chạy tiếp xuống dưới lưu history
             
-            await message.reply(reply[:1900], mention_author=False)
+            # Xử lý format r gửi tiếp tin nhắn debug
+            reply = reply.split("]")[-1].strip() if "]" in reply else reply
+            chat_history[uid].append({"role": "assistant", "content": reply})
+            chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+            
+            # Gửi tin nhắn chính (hoặc tin nhắn chứa lỗi)
+            await message.reply(f"Flow tiếp tục -> {reply[:1800]}", mention_author=False)
         
         except Exception as e:
-            # Lỗi quá nặng thì chửi nhẹ cái r thôi
-            await message.reply(f"Đù má lag tí, hỏi lại đi m {random_vibe()} 🥀", mention_author=False)
+            await message.reply(f"Sập nguồn debug: {str(e)[:100]} 💀", mention_author=False)
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
