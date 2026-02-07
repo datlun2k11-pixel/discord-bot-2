@@ -223,22 +223,28 @@ async def on_message(message):
             for mention in message.mentions:
                 content = content.replace(mention.mention, "").strip()
             
-            # Xử lý ảnh (Vision)
+            # Xử lý ảnh
             if message.attachments:
                 await message.add_reaction("👀")
                 img_url = message.attachments[0].url
-                vision_key = next((k for k, v in MODELS_CONFIG.items() if v["vision"]), "Groq-Llama-Maverick")
-                vision_model = MODELS_CONFIG[vision_key]
-                prompt_v = content or "Soi ảnh này có drama gì hem m 🐧"
-                msgs = [{"role": "user", "content": [{"type": "text", "text": f"{system_instruction}\n\n{prompt_v}"}, {"type": "image_url", "image_url": {"url": img_url}}]}]
-                reply = await get_model_response(msgs, vision_model)
+                # Ưu tiên model vision của Groq cho nó chắc ăn
+                vision_model = MODELS_CONFIG["Groq-Llama-Maverick"] 
+                msgs = [{"role": "user", "content": [{"type": "text", "text": f"{system_instruction}\n\n{content or 'soi đi m'}"}, {"type": "image_url", "image_url": {"url": img_url}}]}]
+                reply = groq_client.chat.completions.create(messages=msgs, model=vision_model["id"]).choices[0].message.content
             
             # Xử lý chat thường
             else:
                 chat_history[uid].append({"role": "user", "content": content or "nx"})
-                # Cứ gọi model bth, lỗi 403 nó trả về chuỗi lỗi thì kệ m nó
                 reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
                 
+                # NẾU NOVITA LỖI (Hết tiền/403) -> NHẢY SANG GROQ NGAY VÀ LUÔN
+                if "403" in reply or "Lỗi r m" in reply:
+                    backup_model = MODELS_CONFIG["Groq-Llama-Maverick"]
+                    reply = groq_client.chat.completions.create(
+                        messages=chat_history[uid], 
+                        model=backup_model["id"]
+                    ).choices[0].message.content
+
                 reply = reply.split("]")[-1].strip() if "]" in reply else reply
                 chat_history[uid].append({"role": "assistant", "content": reply})
                 chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
@@ -246,8 +252,8 @@ async def on_message(message):
             await message.reply(reply[:1900], mention_author=False)
         
         except Exception as e:
-            # Chỉ báo lỗi cực ngắn để m debug flow
-            await message.reply(f"Debug: {str(e)[:50]} {random_vibe()} ☠️", mention_author=False)
+            # Lỗi quá nặng thì chửi nhẹ cái r thôi
+            await message.reply(f"Đù má lag tí, hỏi lại đi m {random_vibe()} 🥀", mention_author=False)
 
 if __name__ == "__main__":
     Thread(target=run_flask, daemon=True).start()
