@@ -106,8 +106,8 @@ async def bot_info(interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update lầy lội")
 async def update_log(interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.3.5", value="• Tiếp tục fixing\n• Đang debug", inline=False)
-    embed.add_field(name="v15.2 - Fix Novita", value="• Base URL api.novita.ai/openai chuẩn\n• OpenAI SDK mượt\n• Vision vẫn ưu tiên OCR rẻ\n• Cố gắng fix lỗi dởm", inline=False)
+    embed.add_field(name="v15.2 - New command", value="• Vẫn debug:))\n• Đã thêm lệnh `/spring`\n• Chuẩn bị đón xuân nha mn🧧:3", inline=False)
+    embed.add_field(name="v15.3.5 - Debugging", value="• Tiếp tục fixing\n• Đang debug", inline=False)
     embed.set_footer(text="Updated ngày: 7/2/2026")
     await interaction.response.send_message(embed=embed)
 
@@ -135,13 +135,21 @@ async def meme(interaction):
 async def spring(interaction: discord.Interaction):
     # List phần quà nhây
     rewards = [
-        "100.000 VNĐ (tiền ảo) 💸",
-        "1 cái bạt tai từ mẹ vì tội ngủ nướng 💀",
-        "Năm nay thoát ế (tin t đi, t thề) 💍",
-        "Được crush rep tin nhắn sau 3 năm 🥀",
-        "Lì xì 500k từ ông chú Viettel (bốc phét đấy) 🐧",
-        "Một năm ko deadline (mơ đi con) ☠️"
-    ]
+    "🧧 Lì xì 500k (tưởng tượng đi m) 💸",
+    "💀 1 vé quét sân, rửa bát xuyên Tết",
+    "💍 Năm nay chắc chắn có người yêu (AI nói dối đấy)",
+    "🥀 Crush xem story nhưng ko rep",
+    "🧨 1 tràng pháo tay cho sự nghèo của m",
+    "🥟 Một miếng bánh chưng toàn mỡ",
+    "🔥 Nhân phẩm bùng nổ: Được lì xì gấp đôi năm ngoái",
+    "🐧 Nhận được lời chúc 'Hay ăn chóng lớn' dù đã 18+",
+    "☠️ Bị hỏi: 'Bao giờ lấy vợ/chồng?' 100 lần",
+    "🌟 Vận may cả năm: Chơi bài toàn thắng (trừ lúc thua)",
+    "💸 Tiền vào như nước sông Đà, tiền ra như tát nước ao",
+    "🤡 1 suất làm 'con nhà người ta' trong truyền thuyết",
+    "🍑 Một cành đào nở toàn lá",
+    "🐍 Năm con Rắn, lươn lẹo ít thôi ko bị nghiệp quật"
+]
     gift = random.choice(rewards)
     
     embed = discord.Embed(
