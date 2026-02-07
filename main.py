@@ -68,9 +68,6 @@ async def get_model_response(messages, model_config):
             return response.choices[0].message.content
         
         elif model_config["provider"] == "novita":
-            if not os.getenv("NOVITA_API_KEY"):
-                return "Thiếu NOVITA key r m clm, nạp đi 🥀"
-            
             response = await novita_client.chat.completions.create(
                 messages=messages, model=model_config["id"],
                 max_tokens=2048, temperature=0.7, stream=False
@@ -78,10 +75,26 @@ async def get_model_response(messages, model_config):
             return response.choices[0].message.content
     
     except Exception as e:
-        err = str(e)[:100]
-        if "balance" in err.lower():
-            return f"Hết tiền Novita r m ơi, nạp $1 đi ko tao nghỉ chơi luôn 💔😭 {random_vibe()}"
-        return f"Lỗi r m: {err} đm, thử đổi model Groq đi {random_vibe()} 💀"
+        # Thay vì return chuỗi rác, t trả về nội dung lỗi để nó chạy tiếp xuống on_message
+        return f"ERROR_403_BALANCE: {str(e)}"
+
+# Trong on_message, đoạn chat thường sửa lại như này:
+            else:
+                chat_history[uid].append({"role": "user", "content": content or "nx"})
+                reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
+                
+                # Check lỗi nhưng ko dùng return để ngắt flow
+                if "ERROR_403_BALANCE" in reply:
+                    await message.reply(f"Hết tiền Novita r m ơi, nạp $1 đi ko t nghỉ chơi luôn 💔😭 {random_vibe()}", mention_author=False)
+                    # Gán đại 1 cái reply để nó lưu vào history và ko bị crash đoạn dưới
+                    reply = "Đang lỗi 403 nè thg lùn, debug đi ☠️"
+
+                reply = reply.split("]")[-1].strip() if "]" in reply else reply
+                chat_history[uid].append({"role": "assistant", "content": reply})
+                chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+                
+                # Vẫn cho nó reply cái nội dung sau khi đã "sủa" câu hết tiền
+                await message.reply(f"Debug nội dung: {reply}", mention_author=False)
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
