@@ -131,6 +131,27 @@ async def meme(interaction):
             embed.set_footer(text=f"Meme hôm nay: {random_vibe()}")
             await interaction.followup.send(embed=embed)
 
+@bot.tree.command(name="spring", description="Bốc thăm lì xì đầu năm lấy hên m ơi")
+async def spring(interaction: discord.Interaction):
+    # List phần quà nhây
+    rewards = [
+        "100.000 VNĐ (tiền ảo) 💸",
+        "1 cái bạt tai từ mẹ vì tội ngủ nướng 💀",
+        "Năm nay thoát ế (tin t đi, t thề) 💍",
+        "Được crush rep tin nhắn sau 3 năm 🥀",
+        "Lì xì 500k từ ông chú Viettel (bốc phét đấy) 🐧",
+        "Một năm ko deadline (mơ đi con) ☠️"
+    ]
+    gift = random.choice(rewards)
+    
+    embed = discord.Embed(
+        title="🧧 LÌ XÌ NHÂN PHẨM 2026 🧧",
+        description=f"Chúc mừng {interaction.user.mention} đã bốc được:\n**{gift}**",
+        color=0xff0000 # Màu đỏ cho nó may mắn
+    )
+    embed.set_footer(text=f"Tết nhất vui vẻ ko quạo nha bro {random_vibe()}")
+    await interaction.response.send_message(embed=embed)
+
 @bot.tree.command(name="ship")
 async def ship(interaction, user1: discord.Member, user2: discord.Member):
     pts = random.randint(0, 100)
