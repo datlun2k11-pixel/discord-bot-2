@@ -279,7 +279,7 @@ async def on_message(message):
             chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
             
             # Gửi tin nhắn chính (hoặc tin nhắn chứa lỗi)
-            await message.reply(f"Flow tiếp tục -> {reply[:1800]}", mention_author=False)
+            await message.reply(f"{reply[:1800]}", mention_author=False)
         
         except Exception as e:
             await message.reply(f"Sập nguồn debug: {str(e)[:100]} 💀", mention_author=False)
