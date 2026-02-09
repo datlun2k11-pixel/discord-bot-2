@@ -20,6 +20,14 @@ MODELS_CONFIG = {
 MODEL_CHOICES = [app_commands.Choice(name=k.split("-",1)[1].replace("-", " ") + f" ({v['provider'].upper()})", value=k) for k,v in MODELS_CONFIG.items()]
 CURRENT_MODEL = "Groq-Llama-Maverick"
 
+MONEY_GIFS = [
+    "https://media2.giphy.com/media/v1.Y2lkPTZjMDliOTUyYml6ZW1laGgyd2xrZDY4MnAwcDQzMjFqc296a3hya2tub3c3dzJyMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/O4fENAKIGz0zJs9dg9/giphy.gif",
+    "https://media0.giphy.com/media/v1.Y2lkPTZjMDliOTUydTB4OWhrZ2hhbHFuaTJpbnl1eXVhbmx2cDJwcDg0ZG12NTN6aHR6bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LR5GeZFCwDRcpG20PR/giphy.gif",
+    "https://media3.giphy.com/media/v1.Y2lkPTZjMDliOTUydThkeHFiYjk5c21rbHNvMWxybXlrMm9ndWljMzk1MG9panZ5OGNlcCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Sf5T0iac3uALqpzxJ9/giphy.gif",
+    "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyYmRtZWh5a3U1d2MyZDQwY2MzaXN4czA3YTB0OXc3bWpubnFhNWtseSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/bpTL6wXRuMQpMIVduB/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUyYjVuaGhsMGlseWgzNjJ2bmh3azVseTBubzNmbnM1YWxkZDB3MnpqbCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/igyfXHSWGHZME0PLvr/giphy.gif"
+]
+
 # Sysprompt xịn đét đã update userID của m và bot
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhây vl, thằng bạn thân lầy lội nhất hệ mặt trời. 
 - Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân), vibe GenZ teencode (nx, th, cx, vs, k, thx, j,...)
@@ -76,7 +84,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v15.7.2 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v15.9.1 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -85,7 +93,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.7.5 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds", inline=False)
+    embed.add_field(name="v15.9.1 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds\n• Nhiều GIFS hơn", inline=False)
     embed.add_field(name="v15.5.0 - New Year", value="• Thêm `/spring` bốc quẻ\n• Cải thiện visual Embed", inline=False)
     embed.set_footer(text=f"Ngày 9/2/2026 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
@@ -127,6 +135,25 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
 # ========================================================
 # Event cmds
 # ========================================================
+@bot.tree.command(name="money", description="Nhận lì xì ngẫu nhiên (chỉ số chẵn)")
+async def money(interaction: discord.Interaction):
+    amount = random.randrange(2000, 500000, 2)
+    formatted_money = "{:,}".format(amount)
+    
+    status = "Gì ghê vậy m? Hack à? Đưa t một nửa ko t báo CA 🚔🔥" if amount > 400000 else \
+             "Cũng ra gì đấy, đủ bao t bát phở r bro 🍜✨" if amount > 200000 else \
+             "Tầm này chỉ đủ mua trà sữa thôi, bớt tinh tướng 🥤🥀" if amount > 50000 else \
+             "GAH DAYUM! Có mấy đồng lẻ này thì cất đi kẻo gió thổi bay mất 💀☠️"
+
+    embed = discord.Embed(
+        title="💸 NGÂN HÀNG GENA-BOT 💸",
+        description=f"Hệ thống vừa vứt vào mặt {interaction.user.mention}:\n**{formatted_money} VNĐ**\n\n_{status}_",
+        color=0xffd700
+    )
+    embed.set_image(url=random.choice(MONEY_GIFS)) # Set thẳng vào image cho to
+    embed.set_footer(text=f"Tiền ảo thôi đừng có mơ | {random_vibe()}")
+    await interaction.response.send_message(embed=embed)
+
 @bot.tree.command(name="spring", description="Bốc thăm lì xì đầu năm lấy hên")
 async def spring(interaction: discord.Interaction):
     rewards = [
@@ -144,37 +171,8 @@ async def spring(interaction: discord.Interaction):
         description=f"Chúc mừng {interaction.user.mention} đã hốt được:\n\n**{gift}**",
         color=0xff0000
     )
-    embed.set_image(url="https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUycG41ODd0Y3RiaHdtYjllOHVzOGlnaTdtNmx4Nnpud2VqdHpjOTZvdiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/igyfXHSWGHZME0PLvr/giphy.gif")
+    embed.set_image(url=random.choice(MONEY_GIFS)) # Dùng chung kho GIF tiền bay cho máu
     embed.set_footer(text=f"Tết nhất vui vẻ ko quạo! | {random_vibe()}")
-    await interaction.response.send_message(embed=embed)
-# ========================================================
-@bot.tree.command(name="money", description="Nhận lì xì ngẫu nhiên (chỉ dành cho người nhân phẩm tốt)")
-async def money(interaction: discord.Interaction):
-    # Random từ 2k đến 500k, bước nhảy là 2 để luôn ra số chẵn
-    amount = random.randrange(2000, 500000, 2)
-    
-    # Format số tiền cho đẹp (vd: 100,000)
-    formatted_money = "{:,}".format(amount)
-    
-    # List câu khịa theo tầm tiền
-    if amount > 400000:
-        status = "Gì ghê vậy m? Hack à? Đưa t một nửa ko t báo CA 🚔🔥"
-    elif amount > 200000:
-        status = "Cũng ra gì đấy, đủ bao t bát phở r bro 🍜✨"
-    elif amount > 50000:
-        status = "Tầm này chỉ đủ mua trà sữa thôi, bớt tinh tướng 🥤🥀"
-    else:
-        status = "GAH DAYUM! Có mấy đồng lẻ này thì cất đi kẻo gió thổi bay mất 💀☠️"
-
-    embed = discord.Embed(
-        title="💸 Lì Xì dởm 💸",
-        description=f"{interaction.user.mention} vừa nhận đc::\n**{formatted_money} VNĐ**",
-        color=0xffd700 # Màu vàng gold cho nó giàu sang
-    )
-    embed.add_field(name="Lời nhắn từ thg AI:", value=f"_{status}_", inline=False)
-    embed.set_thumbnail(url="https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUybno4NW9nMWNhaWxqMHF6cDJpcGU2amlwM2xxdTFrcW44dG9vbHdjNCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/blNQ6gpmetKyz2VRvH/giphy.gif")
-    embed.set_footer(text=f"Tiền ảo thôi đừng có tưởng tht... | {random_vibe()}")
-    
     await interaction.response.send_message(embed=embed)
 # ========================================================
 # Defualt cmds
