@@ -3,4 +3,3 @@ groq
 aiohttp
 flask
 python-dotenv
-openai
