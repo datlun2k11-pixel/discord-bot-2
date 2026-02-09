@@ -85,7 +85,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.7.2 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\• New `/money` cmd:))", inline=False)
+    embed.add_field(name="v15.7.5 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds", inline=False)
     embed.add_field(name="v15.5.0 - New Year", value="• Thêm `/spring` bốc quẻ\n• Cải thiện visual Embed", inline=False)
     embed.set_footer(text=f"Ngày 9/2/2026 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
@@ -144,7 +144,7 @@ async def spring(interaction: discord.Interaction):
         description=f"Chúc mừng {interaction.user.mention} đã hốt được:\n\n**{gift}**",
         color=0xff0000
     )
-    embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHpwaG5oZzR4ZWZ4eG54eG54eG54eG54eG54eG54eG54eG54JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o6fJ8bY3mP8T3Y1eM/giphy.gif")
+    embed.set_image(url="https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUycG41ODd0Y3RiaHdtYjllOHVzOGlnaTdtNmx4Nnpud2VqdHpjOTZvdiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/igyfXHSWGHZME0PLvr/giphy.gif")
     embed.set_footer(text=f"Tết nhất vui vẻ ko quạo! | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
@@ -167,12 +167,12 @@ async def money(interaction: discord.Interaction):
         status = "GAH DAYUM! Có mấy đồng lẻ này thì cất đi kẻo gió thổi bay mất 💀☠️"
 
     embed = discord.Embed(
-        title="💸 NGÂN HÀNG GENA-BOT 💸",
-        description=f"Hệ thống vừa vứt vào mặt {interaction.user.mention}:\n**{formatted_money} VNĐ**",
+        title="💸 Lì Xì dởm 💸",
+        description=f"{interaction.user.mention} vừa nhận đc::\n**{formatted_money} VNĐ**",
         color=0xffd700 # Màu vàng gold cho nó giàu sang
     )
     embed.add_field(name="Lời nhắn từ thg AI:", value=f"_{status}_", inline=False)
-    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/2489/2489756.png")
+    embed.set_thumbnail(url="https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUybno4NW9nMWNhaWxqMHF6cDJpcGU2amlwM2xxdTFrcW44dG9vbHdjNCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/blNQ6gpmetKyz2VRvH/giphy.gif")
     embed.set_footer(text=f"Tiền ảo thôi đừng có tưởng tht... | {random_vibe()}")
     
     await interaction.response.send_message(embed=embed)
