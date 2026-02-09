@@ -54,7 +54,9 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 async def on_ready():
     await bot.tree.sync()
     print(f"GenA-bot Ready! 🔥")
+# ========================================================
 #CMDs
+# ========================================================
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
 @app_commands.choices(chon_model=MODEL_CHOICES)
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
@@ -67,27 +69,27 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
     )
     embed.set_footer(text=f"Current: {CURRENT_MODEL} | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
-
+# ========================================================
 @bot.tree.command(name="bot_info", description="Status bot xịn hơn tí")
 async def bot_info(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v15.7.0 - Groq Only", inline=True)
+    embed.add_field(name="📜 Version", value="v15.7.2 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
     await interaction.response.send_message(embed=embed)
-
+# ========================================================
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.7.0 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%", inline=False)
+    embed.add_field(name="v15.7.2 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\• New `/money` cmd:))", inline=False)
     embed.add_field(name="v15.5.0 - New Year", value="• Thêm `/spring` bốc quẻ\n• Cải thiện visual Embed", inline=False)
     embed.set_footer(text=f"Ngày 9/2/2026 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
-
+# ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
 async def imagine(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(thinking=True)
@@ -100,7 +102,7 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     embed.set_image(url=url)
     embed.set_footer(text=f"Ảo ma chưa? | {random_vibe()}")
     await interaction.followup.send(embed=embed)
-
+# ========================================================
 @bot.tree.command(name="meme", description="Meme random (1-5 cái)")
 @app_commands.describe(amount="Số lượng meme m mún (1-5)")
 async def meme(interaction: discord.Interaction, amount: int = 1):
@@ -121,8 +123,10 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
                         await interaction.followup.send(embed=embed)
                     else:
                         await interaction.channel.send(embed=embed)
-                await asyncio.sleep(0.8) # Chờ tí ko Discord nó trảm
-
+                        await asyncio.sleep(0.8) # Chờ tí ko Discord nó trảm
+# ========================================================
+# Event cmds
+# ========================================================
 @bot.tree.command(name="spring", description="Bốc thăm lì xì đầu năm lấy hên")
 async def spring(interaction: discord.Interaction):
     rewards = [
@@ -143,7 +147,38 @@ async def spring(interaction: discord.Interaction):
     embed.set_image(url="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOHpwaG5oZzR4ZWZ4eG54eG54eG54eG54eG54eG54eG54eG54JmVwPXYxX2ludGVybmFsX2dpZl9ieV9pZCZjdD1n/3o6fJ8bY3mP8T3Y1eM/giphy.gif")
     embed.set_footer(text=f"Tết nhất vui vẻ ko quạo! | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
+# ========================================================
+@bot.tree.command(name="money", description="Nhận lì xì ngẫu nhiên (chỉ dành cho người nhân phẩm tốt)")
+async def money(interaction: discord.Interaction):
+    # Random từ 2k đến 500k, bước nhảy là 2 để luôn ra số chẵn
+    amount = random.randrange(2000, 500000, 2)
+    
+    # Format số tiền cho đẹp (vd: 100,000)
+    formatted_money = "{:,}".format(amount)
+    
+    # List câu khịa theo tầm tiền
+    if amount > 400000:
+        status = "Gì ghê vậy m? Hack à? Đưa t một nửa ko t báo CA 🚔🔥"
+    elif amount > 200000:
+        status = "Cũng ra gì đấy, đủ bao t bát phở r bro 🍜✨"
+    elif amount > 50000:
+        status = "Tầm này chỉ đủ mua trà sữa thôi, bớt tinh tướng 🥤🥀"
+    else:
+        status = "GAH DAYUM! Có mấy đồng lẻ này thì cất đi kẻo gió thổi bay mất 💀☠️"
 
+    embed = discord.Embed(
+        title="💸 NGÂN HÀNG GENA-BOT 💸",
+        description=f"Hệ thống vừa vứt vào mặt {interaction.user.mention}:\n**{formatted_money} VNĐ**",
+        color=0xffd700 # Màu vàng gold cho nó giàu sang
+    )
+    embed.add_field(name="Lời nhắn từ thg AI:", value=f"_{status}_", inline=False)
+    embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/2489/2489756.png")
+    embed.set_footer(text=f"Tiền ảo thôi đừng có tưởng tht... | {random_vibe()}")
+    
+    await interaction.response.send_message(embed=embed)
+# ========================================================
+# Defualt cmds
+# ========================================================
 @bot.tree.command(name="ship", description="Check OTP hoặc random một cặp trời đánh")
 @app_commands.describe(user1="Đứa thứ nhất", user2="Đứa thứ hai")
 async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
@@ -169,7 +204,7 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
     embed.set_thumbnail(url="https://cdn-icons-png.flaticon.com/512/2589/2589175.png")
     embed.set_footer(text=f"Chúc 2 đứa hạnh phúc (hoặc ko) | {random_vibe()}")
     await interaction.followup.send(embed=embed)
-
+# ========================================================
 @bot.tree.command(name="check_gay", description="Đo độ 'thẳng' của 1 đứa")
 async def check_gay(interaction: discord.Interaction, target: discord.Member):
     pts = random.randint(0, 100)
@@ -193,7 +228,7 @@ async def eight_ball(interaction: discord.Interaction, question: str):
     embed.add_field(name="Phán:", value=f"**{random.choice(ans)}**", inline=False)
     embed.set_footer(text=random_vibe())
     await interaction.response.send_message(embed=embed)
-
+# ========================================================
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
     uid = str(interaction.user.id)
@@ -201,7 +236,7 @@ async def clear(interaction: discord.Interaction):
     current_sys = system_instruction.format(user_id=interaction.user.mention)
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã xoá não, t lại nhây như mới tinh m ơi! {random_vibe()} 🔥")
-
+# ========================================================
 @bot.event
 async def on_message(message):
     if message.author.bot: return
