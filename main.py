@@ -1,4 +1,4 @@
-import discord, random, os, asyncio
+import discord, random, os, asyncio, aiohttp, base64
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -8,13 +8,14 @@ from threading import Thread
 
 load_dotenv()
 
-# Clients - Chỉ dùng Groq cho nó nhanh gọn
+# Clients - Groq xịn đét 
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
+# Maverick 4 Vision Enabled (⌐■_■) ☠️
 MODELS_CONFIG = {
-    "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "provider": "groq"},
-    "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "provider": "groq"},
-    "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq"}
+    "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "provider": "groq", "vision": True},
+    "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "provider": "groq", "vision": False},
+    "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq", "vision": False}
 }
 
 MODEL_CHOICES = [app_commands.Choice(name=k.split("-",1)[1].replace("-", " ") + f" ({v['provider'].upper()})", value=k) for k,v in MODELS_CONFIG.items()]
@@ -25,10 +26,12 @@ MONEY_GIFS = [
     "https://media0.giphy.com/media/v1.Y2lkPTZjMDliOTUydTB4OWhrZ2hhbHFuaTJpbnl1eXVhbmx2cDJwcDg0ZG12NTN6aHR6bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LR5GeZFCwDRcpG20PR/giphy.gif",
     "https://media3.giphy.com/media/v1.Y2lkPTZjMDliOTUydThkeHFiYjk5c21rbHNvMWxybXlrMm9ndWljMzk1MG9panZ5OGNlcCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Sf5T0iac3uALqpzxJ9/giphy.gif",
     "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyYmRtZWh5a3U1d2MyZDQwY2MzaXN4czA3YTB0OXc3bWpubnFhNWtseSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/bpTL6wXRuMQpMIVduB/giphy.gif",
-    "https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUyYjVuaGhsMGlseWgzNjJ2bmh3azVseTBubzNmbnM1YWxkZDB3MnpqbCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/igyfXHSWGHZME0PLvr/giphy.gif"
+    "https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUyYjVuaGhsMGlseWgzNjJ2bmh3azVseTBubzNmbnM1YWxkZDB3MnpqbCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/igyfXHSWGHZME0PLvr/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUya3dyZWU4OWpkYXZmdG8zbHNwZHZrcXdkNGFpdnBxMDlkNW0yMDZ6YiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/hI0AT5kc1LfMgL2riP/giphy.gif",
+    "https://media0.giphy.com/media/v1.Y2lkPTZjMDliOTUyOWhvZXlmbzFxZTQxaXRlMHBnNXk4ZXBoOHE1ZmRsajdod2MydjBpdSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/BAuDY0LMXswC81LyiJ/giphy.gif",
+    "https://media1.giphy.com/media/v1.Y2lkPTZjMDliOTUybWwzbGE2b29oMGUxbTJqa2Z0OXpkMTVsa2RmcjF5OHZ3a3kzeWExYSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/IfPE0x5gfa5ctKpph6/giphy.gif"
 ]
 
-# Sysprompt xịn đét đã update userID của m và bot
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhây vl, thằng bạn thân lầy lội nhất hệ mặt trời. 
 - Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân), vibe GenZ teencode (nx, th, cx, vs, k, thx, j,...)
 - Nhây lầy, cà khịa nhẹ, thỉnh thoảng chửi thề nhẹ cho vui.
@@ -62,7 +65,7 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 async def on_ready():
     await bot.tree.sync()
     print(f"GenA-bot Ready! 🔥")
-# ========================================================
+
 #CMDs
 # ========================================================
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
@@ -84,7 +87,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v15.9.1 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v15.9.5 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -93,9 +96,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v15.9.5 - Img", value="• Thêm được phân tích ảnh cho model `Llama-4-Macerick`\n• Thêm 4 GIFS mới", inline=False)
     embed.add_field(name="v15.9.1 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds\n• Nhiều GIFS hơn", inline=False)
-    embed.add_field(name="v15.5.0 - New Year", value="• Thêm `/spring` bốc quẻ\n• Cải thiện visual Embed", inline=False)
-    embed.set_footer(text=f"Ngày 9/2/2026 | {random_vibe()}")
+    embed.set_footer(text=f"Ngày 10/2/2026 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
@@ -235,6 +238,7 @@ async def clear(interaction: discord.Interaction):
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã xoá não, t lại nhây như mới tinh m ơi! {random_vibe()} 🔥")
 # ========================================================
+
 @bot.event
 async def on_message(message):
     if message.author.bot: return
@@ -256,11 +260,8 @@ async def on_message(message):
     if lock.locked(): return
     
     async with lock:
-        # Gắn ID vào sysprompt cho bot nó biết ai đang xích mích với nó
         current_sys = system_instruction.format(user_id=message.author.mention)
-        
-        if uid not in chat_history:
-            chat_history[uid] = [{"role": "system", "content": current_sys}]
+        if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
         
         await message.channel.typing()
         
@@ -268,7 +269,19 @@ async def on_message(message):
             content = message.content
             for mention in message.mentions: content = content.replace(mention.mention, "").strip()
             
-            chat_history[uid].append({"role": "user", "content": content or "nx"})
+            user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
+            
+            # Logic soi ảnh xịn xò (•_•) 🔥
+            if message.attachments and MODELS_CONFIG[CURRENT_MODEL].get("vision"):
+                for att in message.attachments:
+                    if any(att.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
+                        img_data = base64.b64encode(await att.read()).decode('utf-8')
+                        user_msg["content"].append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{att.content_type};base64,{img_data}"}
+                        })
+
+            chat_history[uid].append(user_msg)
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
             chat_history[uid].append({"role": "assistant", "content": reply})
