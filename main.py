@@ -47,6 +47,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Đứa đang chat với mày là: {user_id}."""
 
 chat_history, user_locks = {}, {}
+last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
 app = Flask(__name__)
 @app.route('/')
@@ -66,24 +67,39 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)} (ಠ_ಠ)💔"
 
-@tasks.loop(minutes=45)
+@tasks.loop(minutes=5) # Check mỗi 5 phút để biết khi nào server vắng là sủa ngay
 async def auto_chat():
+    global last_msg_time
     channel_id = 1464203423191797841
     channel = bot.get_channel(channel_id)
+    
+    # Lấy giờ VN hiện tại
+    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+    now_vn = datetime.datetime.now(tz_VN)
+    
+    # Tính xem đã im lặng đủ 45 phút (2700 giây) chưa 🥀
+    if (now_vn - last_msg_time).total_seconds() < 45 * 60:
+        return # Chưa đủ im lặng thì cook, ko làm phiền m chat ☠️
+
     if channel:
-        # M phải lấy giờ VN nhét vào đây nữa nx 🥀
-        tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
-        now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+        now_str = now_vn.strftime("%H:%M:%S %d/%m/%Y")
         
         messages = [
             {
                 "role": "system", 
-                "content": system_instruction.format(user_id="mọi người", current_time=now) # THÊM CÁI NÀY VÀO ☠️
+                "content": system_instruction.format(user_id="mọi người", current_time=now_str)
             },
-            {"role": "user", "content": "Nói 1 câu khịa khi server đang vắng đi m"}
+            {"role": "user", "content": "Server vắng quá, khịa bọn nó một câu cho tụi nó ngoi lên đi m"}
         ]
-        reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
-        await channel.send(f"{reply[:1900]}")
+        
+        try:
+            reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
+            await channel.send(f"{reply[:1900]}")
+            
+            # Sủa xong thì cập nhật lại last_msg_time để 45p sau mới sủa tiếp (¬‿¬)
+            last_msg_time = now_vn 
+        except Exception as e:
+            print(f"Lỗi auto_chat: {e}")
 
 # --- 3. Khởi tạo Bot và on_ready ---
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
@@ -279,8 +295,12 @@ async def clear(interaction: discord.Interaction):
 # ========================================================
 @bot.event
 async def on_message(message):
-    if message.author.bot: return
+    global last_msg_time # Gọi nó ra để dùng ☠️
+    if not message.author.bot:
+        last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
     
+    if message.author.bot: return
+    # ... (code phía dưới giữ nguyên)
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
