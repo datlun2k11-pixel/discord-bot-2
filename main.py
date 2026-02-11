@@ -33,11 +33,13 @@ MONEY_GIFS = [
 ]
 
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhây vl, thằng bạn thân lầy lội nhất hệ mặt trời. 
+- Mày đang nhắn trên Discord
 - Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân), vibe GenZ teencode (nx, th, cx, vs, k, thx, j,...)
 - Nhây lầy, cà khịa nhẹ, thỉnh thoảng chửi thề nhẹ cho vui.
 - Luôn kèm Emoticon (biểu cảm bằng ký tự) và Emoji (vd: 💔, 🥀, 💀,...) trong mọi câu rep.
 - Không dùng dấu "!" trong mọi câu nói.
 - Trả lời ngắn gọn nhất có thể (1-2 dòng).
+- Developer của mày có userID là <@1155129530122510376> (Đạt) (đây chỉ là thông tin, không cần nhắc đến nhiều trong cuộc trò chuyện.)
 - Mày biết đứa đang chat với mày có UserID là {user_id}."""
 
 chat_history, user_locks = {}, {}
@@ -74,8 +76,8 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
     global CURRENT_MODEL
     CURRENT_MODEL = chon_model.value
     embed = discord.Embed(
-        title="✨ Model Switcheroo!", 
-        description=f"Đã lên đời **{chon_model.name}** r nhé bro\nNgon hơn hẳn thề! ༼ つ ◕_◕ ༽つ", 
+        title="Model switched", 
+        description=f"Đã lên đời **{chon_model.name}** r nhé bro\n(¬_¬)", 
         color=0x00ff9d
     )
     embed.set_footer(text=f"Current: {CURRENT_MODEL} | {random_vibe()}")
@@ -87,7 +89,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v15.9.5 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v15.9.8 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -96,9 +98,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v15.9.8 (lastest) - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.", inline=False)
     embed.add_field(name="v15.9.5 - Img", value="• Thêm được phân tích ảnh cho model `Llama-4-Macerick`\n• Thêm 4 GIFS mới", inline=False)
     embed.add_field(name="v15.9.1 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds\n• Nhiều GIFS hơn", inline=False)
-    embed.set_footer(text=f"Ngày 10/2/2026 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 11/2/2026 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
@@ -165,8 +168,9 @@ async def spring(interaction: discord.Interaction):
         "🧨 1 tràng pháo tay cho sự nghèo của m", "🥟 Một miếng bánh chưng toàn mỡ",
         "🔥 Nhân phẩm bùng nổ: Được lì xì gấp đôi", "🐧 Được chúc 'Hay ăn chóng lớn' (dù m già r)",
         "☠️ Bị hỏi 'Bao giờ lấy vợ?' 100 lần", "🌟 Vận may: Chơi bài toàn thắng (trừ lúc thua)",
-        "💸 Tiền vào như nước, ra như thác", "🤡 Làm 'con nhà người ta' trong 1 ngày",
-        "🍑 Một cành đào nở toàn lá xanh", "🐍 Năm Rắn, lươn ít thôi ko nghiệp quật"
+        "💸 Tiền vào như nước, ra như thác", "🤡 Làm `con nhà người ta` trong 1 ngày",
+        "🍑 Một cành đào nở toàn lá xanh", "🐍 Năm Rắn qua rồi, lươn ít thôi ko nghiệp quật",
+        "🏳️‍🌈 Bị 1 đứa LGBT dí (trong mơ)", "🐎 Năm Mã, đi đường cẩn thận ko bị ngựa đá đít"
     ]
     gift = random.choice(rewards)
     embed = discord.Embed(
