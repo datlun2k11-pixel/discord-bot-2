@@ -264,9 +264,17 @@ async def eight_ball(interaction: discord.Interaction, question: str):
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
     uid = str(interaction.user.id)
-    # Tự động lấy lại sysprompt xịn kèm ID của m
-    current_sys = system_instruction.format(user_id=f"{interaction.user.mention} (Tên: {interaction.user.display_name}, ID: {interaction.user.id})")
+    # Lấy giờ VN để format cho chuẩn 🥀
+    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+    now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+    
+    current_sys = system_instruction.format(
+        user_id=f"{interaction.user.mention} (Tên: {interaction.user.display_name})",
+        current_time=now
+    )
+    
     chat_history[uid] = [{"role": "system", "content": current_sys}]
+    # THÊM DÒNG NÀY VÀO LÀ HẾT CÂM NÈ ☠️
     await interaction.response.send_message(f"Đã xoá não, t lại nhây như mới tinh m ơi! {random_vibe()} 🔥")
 # ========================================================
 @bot.event
