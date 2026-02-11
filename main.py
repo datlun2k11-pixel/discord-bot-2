@@ -70,7 +70,7 @@ async def auto_chat():
     if channel:
         messages = [
             {"role": "system", "content": system_instruction.format(user_id="mọi người")},
-            {"role": "user", "content": "Ngẫu hứng nói 1 câu nhây vl cà khịa cả hội đi m"}
+            {"role": "user", "content": "Ngẫu hứng nói 1 câu nhây vl cà khịa server đi m"}
         ]
         reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
         await channel.send(f"{reply[:1900]}")
