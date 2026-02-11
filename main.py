@@ -331,13 +331,16 @@ async def on_message(message):
                             "type": "image_url",
                             "image_url": {"url": f"data:{att.content_type};base64,{img_data}"}
                         })
-
+                        # Gửi cho AI thì gửi full (có ảnh/file) để nó hiểu
             chat_history[uid].append(user_msg)
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
+            # NẾU LÀ TIN NHẮN CÓ ẢNH/FILE: Xóa cục data nặng nề đi, chỉ giữ lại text để lưu lịch sử (⌐■_■)
+            if isinstance(user_msg["content"], list):
+                # Thay thế bằng bản chỉ có text để đỡ tốn token lần sau 🥀
+                chat_history[uid][-1] = {"role": "user", "content": content or "nx"}
+
             chat_history[uid].append({"role": "assistant", "content": reply})
-            chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
-            
             await message.reply(f"{reply[:1900]}", mention_author=False)
         
         except Exception as e:
