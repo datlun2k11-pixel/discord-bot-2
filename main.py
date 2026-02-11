@@ -66,14 +66,21 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)} (ಠ_ಠ)💔"
 
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=45)
 async def auto_chat():
     channel_id = 1464203423191797841
     channel = bot.get_channel(channel_id)
     if channel:
+        # M phải lấy giờ VN nhét vào đây nữa nx 🥀
+        tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+        now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+        
         messages = [
-            {"role": "system", "content": system_instruction.format(user_id="mọi người")},
-            {"role": "user", "content": "Ngẫu hứng nói 1 câu nhây vl cà khịa server đi m"}
+            {
+                "role": "system", 
+                "content": system_instruction.format(user_id="mọi người", current_time=now) # THÊM CÁI NÀY VÀO ☠️
+            },
+            {"role": "user", "content": "Nói 1 câu khịa khi server đang vắng đi m"}
         ]
         reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
         await channel.send(f"{reply[:1900]}")
