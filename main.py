@@ -106,7 +106,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v16.0.0 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v16.0.5 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -115,9 +115,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v16.0.0 (lastest) - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.\n• Sửa logic, fix thêm sys_prompt\n• Thêm tính năng `thỉnh thoảng chat 1 câu`.", inline=False)
+    embed.add_field(name="v16.0.5 (lastest) - File", value="• Sửa lỗi logic\n• Bot có thể đọc đc file đính kèm (nhưng vẫn còn hạn chế về thể loại).", inline=False)
+    embed.add_field(name="v16.0.0 - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.\n• Sửa logic, fix thêm sys_prompt\n• Thêm tính năng `thỉnh thoảng chat 1 câu`.", inline=False)
     embed.add_field(name="v15.9.5 - Img", value="• Thêm được phân tích ảnh cho model `Llama-4-Macerick`\n• Thêm 4 GIFS mới", inline=False)
-    embed.add_field(name="v15.9.1 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds\n• Nhiều GIFS hơn", inline=False)
     embed.set_footer(text=f"Updated Ngày 11/2/2026 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
@@ -278,26 +278,32 @@ async def on_message(message):
     uid = str(message.author.id)
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
-    
     if lock.locked(): return
     
     async with lock:
-        # Check phát bít luôn cả tên lẫn ID, nắm thóp 100% (¬‿¬)
+        # Nhận diện m từ đầu tới chân nè (¬‿¬)
         current_sys = system_instruction.format(user_id=f"{message.author.mention} (Tên: {message.author.display_name}, ID: {message.author.id})")
-        
-        if uid not in chat_history: 
-            chat_history[uid] = [{"role": "system", "content": current_sys}]
+        if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
         
         await message.channel.typing()
         
         try:
             content = message.content
-            for mention in message.mentions: 
-                content = content.replace(mention.mention, "").strip()
+            for mention in message.mentions: content = content.replace(mention.mention, "").strip()
             
+            # Logic đọc file (txt, py, cpp,...) m gửi lên ☠️
+            if message.attachments:
+                for att in message.attachments:
+                    if any(att.filename.lower().endswith(ext) for ext in ['.txt', '.py', '.js', '.cpp', '.c', '.json']):
+                        try:
+                            file_data = await att.read()
+                            text = file_data.decode('utf-8')
+                            content += f"\n\n[Nội dung file {att.filename}]:\n{text}"
+                        except: pass
+
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
             
-            # Logic soi ảnh xịn xò (•_•) 🔥
+            # Logic soi ảnh 🥀
             if message.attachments and MODELS_CONFIG[CURRENT_MODEL].get("vision"):
                 for att in message.attachments:
                     if any(att.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
