@@ -295,12 +295,13 @@ async def clear(interaction: discord.Interaction):
 # ========================================================
 @bot.event
 async def on_message(message):
-    global last_msg_time # Gọi nó ra để dùng ☠️
+    global last_msg_time
+    # Cập nhật thời gian tin nhắn cuối từ người dùng
     if not message.author.bot:
         last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
-    
+
     if message.author.bot: return
-    # ... (code phía dưới giữ nguyên)
+    
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
@@ -318,18 +319,20 @@ async def on_message(message):
     if lock.locked(): return
     
     async with lock:
-        # Lấy giờ VN xịn xò 🥀
+        # Lấy giờ VN mới nhất để AI ko bị "ngáo" quá khứ 🥀
         tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
         now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
         
-        # Nhét thông tin m vào sys_instruc
         current_sys = system_instruction.format(
             user_id=f"{message.author.mention} (Tên: {message.author.display_name})",
             current_time=now
         )
         
+        # Cập nhật hoặc khởi tạo não bộ với giờ mới nhất ☠️
         if uid not in chat_history: 
             chat_history[uid] = [{"role": "system", "content": current_sys}]
+        else:
+            chat_history[uid][0] = {"role": "system", "content": current_sys}
         
         await message.channel.typing()
         
@@ -338,7 +341,6 @@ async def on_message(message):
             for mention in message.mentions: 
                 content = content.replace(mention.mention, "").strip()
             
-            # Đọc file văn bản, giới hạn 2000 chữ cho đỡ nghẹn 413 ☠️
             if message.attachments:
                 for att in message.attachments:
                     if any(att.filename.lower().endswith(ext) for ext in ['.txt', '.py', '.js', '.cpp', '.c', '.json']):
@@ -350,7 +352,6 @@ async def on_message(message):
 
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
             
-            # Nhìn ảnh nếu model có hỗ trợ vision 🥀
             if message.attachments and MODELS_CONFIG[CURRENT_MODEL].get("vision"):
                 for att in message.attachments:
                     if any(att.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
@@ -359,22 +360,23 @@ async def on_message(message):
                             "type": "image_url",
                             "image_url": {"url": f"data:{att.content_type};base64,{img_data}"}
                         })
-                        # Gửi cho AI thì gửi full (có ảnh/file) để nó hiểu
+
             chat_history[uid].append(user_msg)
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
-            # NẾU LÀ TIN NHẮN CÓ ẢNH/FILE: Xóa cục data nặng nề đi, chỉ giữ lại text để lưu lịch sử (⌐■_■)
+            # Tráo bài: Xóa data ảnh/file nặng nề, chỉ giữ text để tiết kiệm token 🥀
             if isinstance(user_msg["content"], list):
-                # Thay thế bằng bản chỉ có text để đỡ tốn token lần sau 🥀
                 chat_history[uid][-1] = {"role": "user", "content": content or "nx"}
 
             chat_history[uid].append({"role": "assistant", "content": reply})
+            chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+            
             await message.reply(f"{reply[:1900]}", mention_author=False)
         
         except Exception as e:
             await message.reply(f"Lỗi r thg đệ: {str(e)[:100]} 💀", mention_author=False)
 
-# --- PHẦN CUỐI FILE PHẢI THỤT LỀ CHUẨN ĐỂ KO LỖI KOYEB ---
+# --- PHẦN CUỐI FILE KHÔNG ĐƯỢC THIẾU ---
 if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.daemon = True
