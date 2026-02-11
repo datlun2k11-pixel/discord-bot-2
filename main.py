@@ -6,6 +6,8 @@ from groq import Groq
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
+import datetime
+import pytz
 
 load_dotenv()
 
@@ -35,6 +37,7 @@ MONEY_GIFS = [
 
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhây vl, thằng bạn thân lầy lội nhất hệ mặt trời. 
 - Mày đang nhắn trên Discord
+- Bây giờ là: {current_time}
 - Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân), vibe GenZ teencode (nx, th, cx, vs, k, thx, j,...)
 - Nhây lầy, cà khịa nhẹ, thỉnh thoảng chửi thề nhẹ cho vui.
 - Luôn kèm Emoticon (biểu cảm bằng ký tự) và Emoji (vd: 💔, 🥀, 💀,...) trong mọi câu rep.
@@ -259,7 +262,6 @@ async def clear(interaction: discord.Interaction):
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã xoá não, t lại nhây như mới tinh m ơi! {random_vibe()} 🔥")
 # ========================================================
-
 @bot.event
 async def on_message(message):
     if message.author.bot: return
@@ -281,26 +283,34 @@ async def on_message(message):
     if lock.locked(): return
     
     async with lock:
-        # Nhận diện m từ đầu tới chân nè (¬‿¬)
-        current_sys = system_instruction.format(user_id=f"{message.author.mention} (Tên: {message.author.display_name}, ID: {message.author.id})")
-        if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
+        # Lấy giờ VN cho nó chuẩn chỉnh (¬‿¬)
+        tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+        now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+        
+        # Format lại sysprompt có cả thời gian 🥀
+        current_sys = system_instruction.format(
+            user_id=f"{message.author.mention} (Tên: {message.author.display_name})",
+            current_time=now
+        )
+        
+        if uid not in chat_history: 
+            chat_history[uid] = [{"role": "system", "content": current_sys}]
         
         await message.channel.typing()
         
         try:
             content = message.content
-            for mention in message.mentions: content = content.replace(mention.mention, "").strip()
+            for mention in message.mentions: 
+                content = content.replace(mention.mention, "").strip()
             
-            # Logic đọc file (txt, py, cpp,...) m gửi lên ☠️
+            # Logic đọc file có giới hạn 2000 chữ cho đỡ lỗi 413 ☠️
             if message.attachments:
                 for att in message.attachments:
                     if any(att.filename.lower().endswith(ext) for ext in ['.txt', '.py', '.js', '.cpp', '.c', '.json']):
                         try:
                             file_data = await att.read()
-                            # Chỉ đọc 2000 ký tự đầu tiên cho đỡ nghẹn (•_•)
                             text = file_data.decode('utf-8')[:2000] 
-                            content += f"\n\n[Nội dung file {att.filename} (Trích đoạn)]: \n{text}..."
-
+                            content += f"\n\n[Nội dung file {att.filename}]:\n{text}..."
                         except: pass
 
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
@@ -325,7 +335,6 @@ async def on_message(message):
         
         except Exception as e:
             await message.reply(f"Sập nguồn: {str(e)[:100]} 💀", mention_author=False)
-
-if __name__ == "__main__":
-    Thread(target=run_flask, daemon=True).start()
-    bot.run(os.getenv("DISCORD_TOKEN"))
+            if __name__ == "__main__":
+                Thread(target=run_flask, daemon=True).start()
+                bot.run(os.getenv("DISCORD_TOKEN"))
