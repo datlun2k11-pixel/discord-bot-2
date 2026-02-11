@@ -160,21 +160,21 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
 # ========================================================
 @bot.tree.command(name="money", description="Nhận lì xì ngẫu nhiên (chỉ số chẵn)")
 async def money(interaction: discord.Interaction):
-    amount = random.randrange(2000, 500000, 2)
+    amount = random.randrange(2000, 1000000, 2)
     formatted_money = "{:,}".format(amount)
     
-    status = "Gì ghê vậy m? Hack à? Đưa t một nửa ko t báo CA 🚔🔥" if amount > 400000 else \
-             "Cũng ra gì đấy, đủ bao t bát phở r bro 🍜✨" if amount > 200000 else \
-             "Tầm này chỉ đủ mua trà sữa thôi, bớt tinh tướng 🥤🥀" if amount > 50000 else \
+    status = "j ghê z m? Hack à? Đưa t một nửa ko t báo CA =))🙏🥀" if amount > 400000 else \
+             "Cũng ra gì đấy, đủ bao t bát phở r bro 🤑" if amount > 200000 else \
+             "Tầm này chỉ đủ mua trà sữa thôi, bớt tinh tướng 🥀" if amount > 50000 else \
              "GAH DAYUM! Có mấy đồng lẻ này thì cất đi kẻo gió thổi bay mất 💀☠️"
 
     embed = discord.Embed(
-        title="💸 NGÂN HÀNG GENA-BOT 💸",
+        title="💸 Lì xì ngẫu nhiên 🧧",
         description=f"Hệ thống vừa vứt vào mặt {interaction.user.mention}:\n**{formatted_money} VNĐ**\n\n_{status}_",
-        color=0xffd700
+        color=0xff0000
     )
     embed.set_image(url=random.choice(MONEY_GIFS)) # Set thẳng vào image cho to
-    embed.set_footer(text=f"Tiền ảo thôi đừng có mơ | {random_vibe()}")
+    embed.set_footer(text=f"Tiền ảo thôi đừng tưởng real nha | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="spring", description="Bốc thăm lì xì đầu năm lấy hên")
@@ -191,12 +191,12 @@ async def spring(interaction: discord.Interaction):
     ]
     gift = random.choice(rewards)
     embed = discord.Embed(
-        title="🧧 LÌ XÌ NHÂN PHẨM 2026 🧧",
+        title="🧧 Bốc thăm may rủi 2026 🧧",
         description=f"Chúc mừng {interaction.user.mention} đã hốt được:\n\n**{gift}**",
         color=0xff0000
     )
     embed.set_image(url=random.choice(MONEY_GIFS)) # Dùng chung kho GIF tiền bay cho máu
-    embed.set_footer(text=f"Tết nhất vui vẻ ko quạo! | {random_vibe()}")
+    embed.set_footer(text=f"Tết nhất vui vẻ đừng tứk=)) | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 # Defualt cmds
