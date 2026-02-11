@@ -89,7 +89,7 @@ async def auto_chat():
                 "role": "system", 
                 "content": system_instruction.format(user_id="mọi người", current_time=now_str)
             },
-            {"role": "user", "content": "Server vắng quá, khịa bọn nó một câu cho tụi nó ngoi lên đi m"}
+            {"role": "user", "content": "*mọi người đã offline*"}
         ]
         
         try:
