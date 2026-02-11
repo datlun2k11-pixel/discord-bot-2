@@ -261,17 +261,22 @@ async def on_message(message):
     uid = str(message.author.id)
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
+    
     if lock.locked(): return
     
     async with lock:
-        current_sys = system_instruction.format(user_id=f"{interaction.user.mention} (Tên: {interaction.user.display_name}, ID: {interaction.user.id})")
-        if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
+        # Check phát bít luôn cả tên lẫn ID, nắm thóp 100% (¬‿¬)
+        current_sys = system_instruction.format(user_id=f"{message.author.mention} (Tên: {message.author.display_name}, ID: {message.author.id})")
+        
+        if uid not in chat_history: 
+            chat_history[uid] = [{"role": "system", "content": current_sys}]
         
         await message.channel.typing()
         
         try:
             content = message.content
-            for mention in message.mentions: content = content.replace(mention.mention, "").strip()
+            for mention in message.mentions: 
+                content = content.replace(mention.mention, "").strip()
             
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
             
