@@ -334,12 +334,8 @@ async def on_message(message):
             await message.reply(f"{reply[:1900]}", mention_author=False)
         
         except Exception as e:
-            await message.reply(f"Sập nguồn: {str(e)[:100]} 💀", mention_author=False)
             if __name__ == "__main__":
-    # Chạy cái Flask để "lừa" Koyeb là app vẫn đang sống
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
-    
-    # Quan trọng nhất là dòng này phải ở cuối cùng
-    bot.run(os.getenv("DISCORD_TOKEN"))
+    t = Thread(target=run_flask) # Thụt vô 4 dấu cách nè m
+    t.daemon = True             # Thụt vô tiếp
+    t.start()                   # Thụt vô tiếp
+    bot.run(os.getenv("DISCORD_TOKEN")) # Chốt hạ cũng phải thụt vô luôn
