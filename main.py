@@ -1,4 +1,5 @@
 import discord, random, os, asyncio, aiohttp, base64
+from discord.ext import tasks
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -54,6 +55,7 @@ def random_vibe():
     emojis = ["💔", "🥀", "💀", "☠️", "🔥"]
     return f"{random.choice(vibes)} {random.choice(emojis)}"
 
+# --- 1. Hàm lấy response (Giữ nguyên) ---
 async def get_model_response(messages, model_config):
     try:
         response = groq_client.chat.completions.create(messages=messages, model=model_config["id"])
@@ -61,10 +63,25 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)} (ಠ_ಠ)💔"
 
+@tasks.loop(minutes=30)
+async def auto_chat():
+    channel_id = 1464203423191797841
+    channel = bot.get_channel(channel_id)
+    if channel:
+        messages = [
+            {"role": "system", "content": system_instruction.format(user_id="mọi người")},
+            {"role": "user", "content": "Ngẫu hứng nói 1 câu nhây vl cà khịa cả hội đi m"}
+        ]
+        reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
+        await channel.send(f"{reply[:1900]}")
+
+# --- 3. Khởi tạo Bot và on_ready ---
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
+    if not auto_chat.is_running():
+        auto_chat.start()
     await bot.tree.sync()
     print(f"GenA-bot Ready! 🔥")
 
@@ -89,7 +106,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v15.9.9 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v16.0.0 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -98,7 +115,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.9.9 (lastest) - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.\n• Sửa logic, fix thêm sys_prompt", inline=False)
+    embed.add_field(name="v16.0.0 (lastest) - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.\n• Sửa logic, fix thêm sys_prompt\n• Thêm tính năng `thỉnh thoảng chat 1 câu`.", inline=False)
     embed.add_field(name="v15.9.5 - Img", value="• Thêm được phân tích ảnh cho model `Llama-4-Macerick`\n• Thêm 4 GIFS mới", inline=False)
     embed.add_field(name="v15.9.1 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds\n• Nhiều GIFS hơn", inline=False)
     embed.set_footer(text=f"Updated Ngày 11/2/2026 | {random_vibe()}")
