@@ -264,8 +264,8 @@ async def on_message(message):
     if lock.locked(): return
     
     async with lock:
-    current_sys = system_instruction.format(user_id=f"{interaction.user.mention} (Tên: {interaction.user.display_name}, ID: {interaction.user.id})")
-    if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
+        current_sys = system_instruction.format(user_id=f"{interaction.user.mention} (Tên: {interaction.user.display_name}, ID: {interaction.user.id})")
+        if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
         
         await message.channel.typing()
         
