@@ -297,8 +297,10 @@ async def on_message(message):
                     if any(att.filename.lower().endswith(ext) for ext in ['.txt', '.py', '.js', '.cpp', '.c', '.json']):
                         try:
                             file_data = await att.read()
-                            text = file_data.decode('utf-8')
-                            content += f"\n\n[Nội dung file {att.filename}]:\n{text}"
+                            # Chỉ đọc 2000 ký tự đầu tiên cho đỡ nghẹn (•_•)
+                             text = file_data.decode('utf-8')[:2000] 
+                             content += f"\n\n[Nội dung file {att.filename} (Trích đoạn)]: \n{text}..."
+
                         except: pass
 
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
