@@ -283,11 +283,11 @@ async def on_message(message):
     if lock.locked(): return
     
     async with lock:
-        # Lấy giờ VN cho nó chuẩn chỉnh (¬‿¬)
+        # Lấy giờ VN xịn xò 🥀
         tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
         now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
         
-        # Format lại sysprompt có cả thời gian 🥀
+        # Nhét thông tin m vào sys_instruc
         current_sys = system_instruction.format(
             user_id=f"{message.author.mention} (Tên: {message.author.display_name})",
             current_time=now
@@ -303,7 +303,7 @@ async def on_message(message):
             for mention in message.mentions: 
                 content = content.replace(mention.mention, "").strip()
             
-            # Logic đọc file có giới hạn 2000 chữ cho đỡ lỗi 413 ☠️
+            # Đọc file văn bản, giới hạn 2000 chữ cho đỡ nghẹn 413 ☠️
             if message.attachments:
                 for att in message.attachments:
                     if any(att.filename.lower().endswith(ext) for ext in ['.txt', '.py', '.js', '.cpp', '.c', '.json']):
@@ -315,7 +315,7 @@ async def on_message(message):
 
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
             
-            # Logic soi ảnh 🥀
+            # Nhìn ảnh nếu model có hỗ trợ vision 🥀
             if message.attachments and MODELS_CONFIG[CURRENT_MODEL].get("vision"):
                 for att in message.attachments:
                     if any(att.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
@@ -334,8 +334,11 @@ async def on_message(message):
             await message.reply(f"{reply[:1900]}", mention_author=False)
         
         except Exception as e:
-            if __name__ == "__main__":
-    t = Thread(target=run_flask) # Thụt vô 4 dấu cách nè m
-    t.daemon = True             # Thụt vô tiếp
-    t.start()                   # Thụt vô tiếp
-    bot.run(os.getenv("DISCORD_TOKEN")) # Chốt hạ cũng phải thụt vô luôn
+            await message.reply(f"Lỗi r thg đệ: {str(e)[:100]} 💀", mention_author=False)
+
+# --- PHẦN CUỐI FILE PHẢI THỤT LỀ CHUẨN ĐỂ KO LỖI KOYEB ---
+if __name__ == "__main__":
+    t = Thread(target=run_flask)
+    t.daemon = True
+    t.start()
+    bot.run(os.getenv("DISCORD_TOKEN"))
