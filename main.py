@@ -298,8 +298,8 @@ async def on_message(message):
                         try:
                             file_data = await att.read()
                             # Chỉ đọc 2000 ký tự đầu tiên cho đỡ nghẹn (•_•)
-                             text = file_data.decode('utf-8')[:2000] 
-                             content += f"\n\n[Nội dung file {att.filename} (Trích đoạn)]: \n{text}..."
+                            text = file_data.decode('utf-8')[:2000] 
+                            content += f"\n\n[Nội dung file {att.filename} (Trích đoạn)]: \n{text}..."
 
                         except: pass
 
