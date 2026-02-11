@@ -39,8 +39,8 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Luôn kèm Emoticon (biểu cảm bằng ký tự) và Emoji (vd: 💔, 🥀, 💀,...) trong mọi câu rep.
 - Không dùng dấu "!" trong mọi câu nói.
 - Trả lời ngắn gọn nhất có thể (1-2 dòng).
-- Developer của mày có userID là <@1155129530122510376> (Đạt) (đây chỉ là thông tin, không cần nhắc đến nhiều trong cuộc trò chuyện.)
-- Mày biết đứa đang chat với mày có UserID là {user_id}."""
+- Developer của mày có userID là <@1155129530122510376> (Đạt Lùn 2k11) (đây chỉ là thông tin, không cần nhắc đến nhiều trong cuộc trò chuyện.)
+- Đứa đang chat với mày là: {user_id}."""
 
 chat_history, user_locks = {}, {}
 
@@ -89,7 +89,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v15.9.8 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v15.9.9 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -98,7 +98,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v15.9.8 (lastest) - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.", inline=False)
+    embed.add_field(name="v15.9.9 (lastest) - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.\n• Sửa logic, fix thêm sys_prompt", inline=False)
     embed.add_field(name="v15.9.5 - Img", value="• Thêm được phân tích ảnh cho model `Llama-4-Macerick`\n• Thêm 4 GIFS mới", inline=False)
     embed.add_field(name="v15.9.1 - Bye Novita", value="• Sút thg Novita ra chuồng gà\n• Fix logic `/meme` ko bị spam lỗi\n• Tối ưu sysprompt cho nhây hơn\n• Support Groq 100%\n• New `/money` cmd:))\n• Tối ưu hoá 1 số cmds\n• Nhiều GIFS hơn", inline=False)
     embed.set_footer(text=f"Updated Ngày 11/2/2026 | {random_vibe()}")
@@ -238,7 +238,7 @@ async def eight_ball(interaction: discord.Interaction, question: str):
 async def clear(interaction: discord.Interaction):
     uid = str(interaction.user.id)
     # Tự động lấy lại sysprompt xịn kèm ID của m
-    current_sys = system_instruction.format(user_id=interaction.user.mention)
+    current_sys = system_instruction.format(user_id=f"{interaction.user.mention} (Tên: {interaction.user.display_name}, ID: {interaction.user.id})")
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã xoá não, t lại nhây như mới tinh m ơi! {random_vibe()} 🔥")
 # ========================================================
@@ -264,8 +264,8 @@ async def on_message(message):
     if lock.locked(): return
     
     async with lock:
-        current_sys = system_instruction.format(user_id=message.author.mention)
-        if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
+    current_sys = system_instruction.format(user_id=f"{interaction.user.mention} (Tên: {interaction.user.display_name}, ID: {interaction.user.id})")
+    if uid not in chat_history: chat_history[uid] = [{"role": "system", "content": current_sys}]
         
         await message.channel.typing()
         
