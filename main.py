@@ -67,37 +67,28 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)} (ಠ_ಠ)💔"
 
-@tasks.loop(minutes=5) # Check mỗi 5 phút để biết khi nào server vắng là sủa ngay
+@tasks.loop(minutes=30) 
 async def auto_chat():
     global last_msg_time
     channel_id = 1464203423191797841
     channel = bot.get_channel(channel_id)
     
-    # Lấy giờ VN hiện tại
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now_vn = datetime.datetime.now(tz_VN)
     
-    # Tính xem đã im lặng đủ 45 phút (2700 giây) chưa 🥀
-    if (now_vn - last_msg_time).total_seconds() < 45 * 60:
-        return # Chưa đủ im lặng thì cook, ko làm phiền m chat ☠️
+    # Nếu trong 30p vừa qua có đứa chat rồi thì thôi k sủa nx ☠️
+    if (now_vn - last_msg_time).total_seconds() < 30 * 60:
+        return 
 
     if channel:
         now_str = now_vn.strftime("%H:%M:%S %d/%m/%Y")
-        
         messages = [
-            {
-                "role": "system", 
-                "content": system_instruction.format(user_id="mọi người", current_time=now_str)
-            },
-            {"role": "user", "content": "*mọi người đã offline*"}
+            {"role": "system", "content": system_instruction.format(user_id="everyone", current_time=now_str)},
+            {"role": "user", "content": "*mọi người đang off* (m đang chán ở trong server đang off, cà khịa cả đám đi)"}
         ]
-        
-        try:
-            reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
-            await channel.send(f"{reply[:1900]}")
-            
-            # Sủa xong thì cập nhật lại last_msg_time để 45p sau mới sủa tiếp (¬‿¬)
-            last_msg_time = now_vn 
+        reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
+        await channel.send(reply)
+        last_msg_time = now_vn # Sủa xong cũng phải update time k là nó spam liên tục đấy (ง •_•)ง 💔
         except Exception as e:
             print(f"Lỗi auto_chat: {e}")
 
