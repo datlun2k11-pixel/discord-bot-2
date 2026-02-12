@@ -73,24 +73,23 @@ async def auto_chat():
     channel_id = 1464203423191797841
     channel = bot.get_channel(channel_id)
     
-    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
-    now_vn = datetime.datetime.now(tz_VN)
-    
-    # Nếu trong 30p vừa qua có đứa chat rồi thì thôi k sủa nx ☠️
-    if (now_vn - last_msg_time).total_seconds() < 30 * 60:
-        return 
-
     if channel:
-        now_str = now_vn.strftime("%H:%M:%S %d/%m/%Y")
-        messages = [
-            {"role": "system", "content": system_instruction.format(user_id="everyone", current_time=now_str)},
-            {"role": "user", "content": "*mọi người đang off* (m đang chán ở trong server đang off, cà khịa cả đám đi)"}
-        ]
-        reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
-        await channel.send(reply)
-        last_msg_time = now_vn # Sủa xong cũng phải update time k là nó spam liên tục đấy (ง •_•)ง 💔
-        except Exception as e:
-            print(f"Lỗi auto_chat: {e}")
+        tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+        now_vn = datetime.datetime.now(tz_VN)
+        
+        # Chỉ sủa khi server im lặng đúng 30p trở lên 🥀
+        if (now_vn - last_msg_time).total_seconds() >= 30 * 60:
+            now_str = now_vn.strftime("%H:%M:%S %d/%m/%Y")
+            messages = [
+                {"role": "system", "content": system_instruction.format(user_id="everyone", current_time=now_str)},
+                {"role": "user", "content": "*server im phăng phắc, m chán quá nên nhảy ra khịa tụi nó đi*"}
+            ]
+            try:
+                reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
+                await channel.send(reply)
+                last_msg_time = now_vn # Sủa xong cập nhật lại ko là nó sủa liên tọi 💀
+            except Exception as e:
+                print(f"Lỗi auto_chat: {e}")
 
 # --- 3. Khởi tạo Bot và on_ready ---
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
@@ -123,7 +122,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v16.0.5 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v16.1.0 - Groq", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -132,10 +131,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v16.0.5 (lastest) - File", value="• Sửa lỗi logic\n• Bot có thể đọc đc file đính kèm (nhưng vẫn còn hạn chế về thể loại).", inline=False)
+    embed.add_field(name="v16.1.0 - Fixing (lastest)", value="• Sửa lỗi sau 30p thì bot mới sủa\n• Hết r ", inline=False)
+    embed.add_field(name="v16.0.5 - File", value="• Sửa lỗi logic\n• Bot có thể đọc đc file đính kèm (nhưng vẫn còn hạn chế về thể loại).", inline=False)
     embed.add_field(name="v16.0.0 - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.\n• Sửa logic, fix thêm sys_prompt\n• Thêm tính năng `thỉnh thoảng chat 1 câu`.", inline=False)
-    embed.add_field(name="v15.9.5 - Img", value="• Thêm được phân tích ảnh cho model `Llama-4-Macerick`\n• Thêm 4 GIFS mới", inline=False)
-    embed.set_footer(text=f"Updated Ngày 11/2/2026 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 12/2/2026 | 20:45 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
