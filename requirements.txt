@@ -1,6 +1,7 @@
 discord.py
 groq
+ollama
 aiohttp
-flask
 python-dotenv
+flask
 pytz
