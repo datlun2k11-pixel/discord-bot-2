@@ -17,15 +17,25 @@ groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 ollama_client = AsyncClient(host="https://api.ollama.com", headers={"Authorization": f"Bearer {os.getenv('OLLAMA_API_KEY')}"}) # Nhớ config key này nha m
 
 # Config Model: Thêm mấy con hàng Cloud m mún vào đây 💀
+# --- 2. Config Model (Tách riêng cho m dễ phù phép) 🥀 ---
 MODELS_CONFIG = {
     "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "provider": "groq", "vision": True},
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "provider": "groq", "vision": False},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq", "vision": False},
-    "Ollama-Kimi-Cloud": {"id": "kimi-k2.5:cloud", "provider": "ollama", "vision": True}, # Hàng nóng đây 🥀
-    "Ollama-Qwen3-480b": {"id": "qwen3-coder:480b", "provider": "ollama", "vision": False} # Con quái vật mù ☠️
+    "Ollama-Kimi-Cloud": {"id": "kimi-k2.5:cloud", "provider": "ollama", "vision": True},
+    "Ollama-Qwen3-480b": {"id": "qwen3-coder:480b", "provider": "ollama", "vision": False}
+    "Deepseek-v3.1": {"id": "deepseek-v3.1", "provider": "ollama", "vision": False}
 }
 
-MODEL_CHOICES = [app_commands.Choice(name=k.split("-",1)[1].replace("-", " ") + f" ({v['provider'].upper()})", value=k) for k,v in MODELS_CONFIG.items()]
+# Trả về bth cho m đây, ko thèm dùng list comprehension nữa ☠️
+MODEL_CHOICES = [
+    app_commands.Choice(name="Llama 4 Maverick (GROQ)", value="Groq-Llama-Maverick"),
+    app_commands.Choice(name="Kimi K2 Instruct (GROQ)", value="Groq-Kimi"),
+    app_commands.Choice(name="Qwen 3 32B (GROQ)", value="Groq-Qwen3"),
+    app_commands.Choice(name="Kimi K2.5 (OLLAMA)", value="Ollama-Kimi-Cloud"),
+    app_commands.Choice(name="Deepseek V3.1 (OLLAMA)", value="Deepseek-v3.1"),
+    app_commands.Choice(name="Qwen3 Coder (OLLAMA)", value="Ollama-Qwen3-480b")
+]
 CURRENT_MODEL = "Groq-Llama-Maverick"
 
 MONEY_GIFS = [
@@ -86,7 +96,7 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-@tasks.loop(minutes=45) 
+@tasks.loop(hours=2) 
 async def auto_chat():
     global last_msg_time
     channel_id = 1464203423191797841
