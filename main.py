@@ -3,6 +3,7 @@ from discord.ext import tasks
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
+from ollama import AsyncClient # Thêm hàng Ollama vào đây ☠️
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
@@ -11,14 +12,17 @@ import pytz
 
 load_dotenv()
 
-# Clients - Groq xịn đét 
+# Clients - Groq và Ollama Cloud xịn đét 🥀
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+ollama_client = AsyncClient(host="https://api.ollama.com", headers={"Authorization": f"Bearer {os.getenv('OLLAMA_API_KEY')}"}) # Nhớ config key này nha m
 
-# Maverick 4 Vision Enabled (⌐■_■) ☠️
+# Config Model: Thêm mấy con hàng Cloud m mún vào đây 💀
 MODELS_CONFIG = {
     "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "provider": "groq", "vision": True},
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "provider": "groq", "vision": False},
-    "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq", "vision": False}
+    "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq", "vision": False},
+    "Ollama-Kimi-Cloud": {"id": "kimi-k2.5:cloud", "provider": "ollama", "vision": True}, # Hàng nóng đây 🥀
+    "Ollama-Qwen3-480b": {"id": "qwen3-coder:480b", "provider": "ollama", "vision": False} # Con quái vật mù ☠️
 }
 
 MODEL_CHOICES = [app_commands.Choice(name=k.split("-",1)[1].replace("-", " ") + f" ({v['provider'].upper()})", value=k) for k,v in MODELS_CONFIG.items()]
@@ -40,7 +44,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Bây giờ là: {current_time}
 - Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân), vibe GenZ teencode (nx, th, cx, vs, k, thx, j,...)
 - Nhây lầy, cà khịa nhẹ, thỉnh thoảng chửi thề nhẹ cho vui.
-- Luôn kèm Emoticon (biểu cảm bằng ký tự) và Emoji (vd: 💔, 🥀, 💀,...) trong mọi câu rep.
+- Luôn kèm Emoticon (biểu biểu cảm bằng ký tự) và Emoji (vd: 💔, 🥀, 💀,...) trong mọi câu rep.
 - Không dùng dấu "!" trong mọi câu nói.
 - Trả lời ngắn gọn nhất có thể (1-2 dòng).
 - Developer của mày có userID là <@1155129530122510376> (Đạt Lùn 2k11) (đây chỉ là thông tin, không cần nhắc đến nhiều trong cuộc trò chuyện.)
@@ -51,7 +55,7 @@ last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenA-bot Live! 🔥"
+def home(): return "GenA-bot Live with Ollama Cloud! 🔥"
 def run_flask(): app.run(host="0.0.0.0", port=8000)
     
 def random_vibe():
@@ -59,25 +63,37 @@ def random_vibe():
     emojis = ["💔", "🥀", "💀", "☠️", "🔥"]
     return f"{random.choice(vibes)} {random.choice(emojis)}"
 
-# --- 1. Hàm lấy response (Giữ nguyên) ---
+# --- 1. Hàm lấy response (Đã update cho Ollama) 🥀 ---
 async def get_model_response(messages, model_config):
     try:
-        response = groq_client.chat.completions.create(messages=messages, model=model_config["id"])
-        return response.choices[0].message.content
+        if model_config["provider"] == "groq":
+            response = groq_client.chat.completions.create(messages=messages, model=model_config["id"])
+            return response.choices[0].message.content
+        elif model_config["provider"] == "ollama":
+            # Chuyển đổi format tin nhắn cho phù hợp Ollama ☠️
+            ollama_messages = []
+            for m in messages:
+                if isinstance(m["content"], list):
+                    # Xử lý vision token cho Ollama
+                    text_content = next((item["text"] for item in m["content"] if item["type"] == "text"), "nx")
+                    images = [item["image_url"]["url"].split(",")[1] for item in m["content"] if item["type"] == "image_url"]
+                    ollama_messages.append({"role": m["role"], "content": text_content, "images": images if images else None})
+                else:
+                    ollama_messages.append(m)
+            
+            response = await ollama_client.chat(model=model_config["id"], messages=ollama_messages)
+            return response['message']['content']
     except Exception as e:
-        return f"Lỗi r m ơi: {str(e)} (ಠ_ಠ)💔"
+        return f"Lỗi r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-@tasks.loop(hours=2) 
+@tasks.loop(minutes=45) 
 async def auto_chat():
     global last_msg_time
     channel_id = 1464203423191797841
     channel = bot.get_channel(channel_id)
-    
     if channel:
         tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
         now_vn = datetime.datetime.now(tz_VN)
-        
-        # Chỉ sủa khi server im lặng đúng 30p trở lên 🥀
         if (now_vn - last_msg_time).total_seconds() >= 30 * 60:
             now_str = now_vn.strftime("%H:%M:%S %d/%m/%Y")
             messages = [
@@ -87,11 +103,10 @@ async def auto_chat():
             try:
                 reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
                 await channel.send(reply)
-                last_msg_time = now_vn # Sủa xong cập nhật lại ko là nó sủa liên tọi 💀
+                last_msg_time = now_vn
             except Exception as e:
                 print(f"Lỗi auto_chat: {e}")
 
-# --- 3. Khởi tạo Bot và on_ready ---
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
@@ -99,9 +114,8 @@ async def on_ready():
     if not auto_chat.is_running():
         auto_chat.start()
     await bot.tree.sync()
-    print(f"GenA-bot Ready! 🔥")
+    print(f"GenA-bot Ready with Ollama Cloud! 🔥")
 
-#CMDs
 # ========================================================
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
 @app_commands.choices(chon_model=MODEL_CHOICES)
@@ -283,10 +297,11 @@ async def clear(interaction: discord.Interaction):
     # THÊM DÒNG NÀY VÀO LÀ HẾT CÂM NÈ ☠️
     await interaction.response.send_message(f"Đã xoá não, t lại nhây như mới tinh m ơi! {random_vibe()} 🔥")
 # ========================================================
+
+# --- Xử lý tin nhắn (Giữ nguyên logic cũ) ☠️ ---
 @bot.event
 async def on_message(message):
     global last_msg_time
-    # Cập nhật thời gian tin nhắn cuối từ người dùng
     if not message.author.bot:
         last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
@@ -309,16 +324,10 @@ async def on_message(message):
     if lock.locked(): return
     
     async with lock:
-        # Lấy giờ VN mới nhất để AI ko bị "ngáo" quá khứ 🥀
         tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
         now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+        current_sys = system_instruction.format(user_id=f"{message.author.mention}", current_time=now)
         
-        current_sys = system_instruction.format(
-            user_id=f"{message.author.mention} (Tên: {message.author.display_name})",
-            current_time=now
-        )
-        
-        # Cập nhật hoặc khởi tạo não bộ với giờ mới nhất ☠️
         if uid not in chat_history: 
             chat_history[uid] = [{"role": "system", "content": current_sys}]
         else:
@@ -331,17 +340,19 @@ async def on_message(message):
             for mention in message.mentions: 
                 content = content.replace(mention.mention, "").strip()
             
+            # Đọc file .py, .txt... tày vl
             if message.attachments:
                 for att in message.attachments:
-                    if any(att.filename.lower().endswith(ext) for ext in ['.txt', '.py', '.js', '.cpp', '.c', '.json']):
+                    if any(att.filename.lower().endswith(ext) for ext in ['.txt', '.py', '.js', '.json']):
                         try:
                             file_data = await att.read()
                             text = file_data.decode('utf-8')[:2000] 
-                            content += f"\n\n[Nội dung file {att.filename}]:\n{text}..."
+                            content += f"\n\n[File {att.filename}]:\n{text}"
                         except: pass
 
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
             
+            # Xử lý ảnh cho Vision (Kimi-k2.5 hỗ trợ tày vl) 🥀
             if message.attachments and MODELS_CONFIG[CURRENT_MODEL].get("vision"):
                 for att in message.attachments:
                     if any(att.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
@@ -354,7 +365,6 @@ async def on_message(message):
             chat_history[uid].append(user_msg)
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
-            # Tráo bài: Xóa data ảnh/file nặng nề, chỉ giữ text để tiết kiệm token 🥀
             if isinstance(user_msg["content"], list):
                 chat_history[uid][-1] = {"role": "user", "content": content or "nx"}
 
@@ -362,11 +372,9 @@ async def on_message(message):
             chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
             
             await message.reply(f"{reply[:1900]}", mention_author=False)
-        
         except Exception as e:
             await message.reply(f"Lỗi r thg đệ: {str(e)[:100]} 💀", mention_author=False)
 
-# --- PHẦN CUỐI FILE KHÔNG ĐƯỢC THIẾU ---
 if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.daemon = True
