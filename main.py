@@ -136,19 +136,19 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v16.1.0 - Groq", inline=True)
+    embed.add_field(name="📜 Version", value="v17.0.0", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
-    embed.add_field(name="🛠️ Provider", value=f"GROQ (Xịn đét)", inline=True)
+    embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v17.0.0 (latest) - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
     embed.add_field(name="v16.1.0 - Fixing (lastest)", value="• Sửa lỗi sau 30p thì bot mới sủa\n• Hết r ", inline=False)
     embed.add_field(name="v16.0.5 - File", value="• Sửa lỗi logic\n• Bot có thể đọc đc file đính kèm (nhưng vẫn còn hạn chế về thể loại).", inline=False)
-    embed.add_field(name="v16.0.0 - prompt", value="• Sửa đổi system prompt\n• Thêm 1 số easter eggs cho lệnh `/spring`.\n• Sửa logic, fix thêm sys_prompt\n• Thêm tính năng `thỉnh thoảng chat 1 câu`.", inline=False)
-    embed.set_footer(text=f"Updated Ngày 12/2/2026 | 20:45 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 15/2/2026 | 11:23 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
