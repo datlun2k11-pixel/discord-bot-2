@@ -23,7 +23,7 @@ MODELS_CONFIG = {
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "provider": "groq", "vision": False},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq", "vision": False},
     "Ollama-Kimi-Cloud": {"id": "kimi-k2.5:cloud", "provider": "ollama", "vision": True},
-    "Ollama-Qwen3-480b": {"id": "qwen3-coder:480b", "provider": "ollama", "vision": False}
+    "Ollama-Qwen3-480b": {"id": "qwen3-coder:480b", "provider": "ollama", "vision": False},
     "Deepseek-v3.1": {"id": "deepseek-v3.1", "provider": "ollama", "vision": False}
 }
 
