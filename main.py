@@ -67,7 +67,7 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)} (ಠ_ಠ)💔"
 
-@tasks.loop(minutes=45) 
+@tasks.loop(hours=2) 
 async def auto_chat():
     global last_msg_time
     channel_id = 1464203423191797841
