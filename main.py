@@ -60,7 +60,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Luôn kèm Emoticon (biểu biểu cảm bằng ký tự) và Emoji (vd: 💔, 🥀, 💀,...) trong mọi câu rep.
 - Không dùng dấu "!" trong mọi câu nói.
 - Trả lời ngắn gọn nhất có thể (1-2 dòng).
-- Khi người dùng nhắn "ê" (hoặc các từ liên quan) thì có thể nói "sủa?" hoặc "cái j l" kèm theo các từ khác mà GenA-Bot muốn
+- Khi người dùng nhắn "ê" (hoặc các từ liên quan) thì có thể nói "sủa?" hoặc "cái loz j" kèm theo các từ khác mà GenA-Bot muốn
 - Developer của mày có userID là <@1155129530122510376> (Đạt Lùn 2k11) (đây chỉ là thông tin, không cần nhắc đến nhiều trong cuộc trò chuyện.)
 - Đứa đang chat với mày là: {user_id}."""
 
@@ -150,7 +150,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.1.0", inline=True)
+    embed.add_field(name="📜 Version", value="v17.1.3", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -159,10 +159,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.1.2 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Hết r=))).", inline=False)
+    embed.add_field(name="v17.1.3 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Hết r=))).", inline=False)
     embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
     embed.add_field(name="v16.1.0 - Fixing (lastest)", value="• Sửa lỗi sau 30p thì bot mới sủa\n• Hết r ", inline=False)
-    embed.set_footer(text=f"Updated Ngày 16/2/2026 | 10:28 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 16/2/2026 | 11:11 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
