@@ -162,7 +162,7 @@ async def update_log(interaction: discord.Interaction):
     embed.add_field(name="v17.1.3 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Hết r=))).", inline=False)
     embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
     embed.add_field(name="v16.1.0 - Fixing (lastest)", value="• Sửa lỗi sau 30p thì bot mới sủa\n• Hết r ", inline=False)
-    embed.set_footer(text=f"Updated Ngày 16/2/2026 | 11:11 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 16/2/2026 | 14:50 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
@@ -170,8 +170,7 @@ async def imagine(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(thinking=True)
     # Filter prompt tí cho đỡ lỗi URL
     clean_prompt = prompt.replace(' ', '%20').replace('?', '').replace('&', '')
-    url = f"https://image.pollinations.ai/prompt/{clean_prompt}?nologo=true&model=flux&width=1024&height=1024"
-    
+    url = f"https://image.pollinations.ai/prompt/{clean_prompt}?nologo=true&model=flux&width=1024&height=1024"    
     embed = discord.Embed(title="🎨 Họa sĩ AI múa cọ đây!", color=0x00ffff)
     embed.add_field(name="Yêu cầu của m:", value=f"_{prompt}_", inline=False)
     embed.set_image(url=url)
