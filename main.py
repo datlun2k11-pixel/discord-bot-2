@@ -150,7 +150,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.1.3", inline=True)
+    embed.add_field(name="📜 Version", value="v17.1.6", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -159,11 +159,42 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.1.3 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Hết r=))).", inline=False)
+    embed.add_field(name="v17.1.6 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Thêm search tool qua `/search`\n• Hết r=))).", inline=False)
     embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
     embed.add_field(name="v16.1.0 - Fixing (lastest)", value="• Sửa lỗi sau 30p thì bot mới sủa\n• Hết r ", inline=False)
-    embed.set_footer(text=f"Updated Ngày 16/2/2026 | 14:50 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 16/2/2026 | 15:00 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
+# ========================================================
+@bot.tree.command(name="search", description="T search web cho m nè bro")
+@app_commands.describe(query="Cái m muốn tìm?")
+async def web_search(interaction: discord.Interaction, query: str):
+    await interaction.response.defer(thinking=True)
+    api_key = os.getenv("SERPER_API_KEY")
+    if not api_key:
+        await interaction.followup.send("Key Serper đâu r m? Thêm vào .env đi! (ಠ_ಠ)💔")
+        return
+    
+    url = "https://google.serper.dev/search"
+    payload = {"q": query}
+    headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
+    
+    async with aiohttp.ClientSession() as s:
+        async with s.post(url, json=payload, headers=headers) as r:
+            if r.status != 200:
+                await interaction.followup.send(f"Lỗi API: {r.status} đcm (ಠ益ಠ)🥀")
+                return
+            data = await r.json()
+    
+    if "organic" not in data or not data["organic"]:
+        await interaction.followup.send("Ko tìm thấy j hết bro... thử lại đi (•_•)💀")
+        return
+    
+    top = data["organic"][0]
+    embed = discord.Embed(title=top.get("title", "Kq search"), url=top.get("link"), color=0x00ff9d)
+    embed.add_field(name="Mô tả", value=top.get("snippet", "Ko có desc")[:500], inline=False)
+    embed.set_footer(text=f"Search: {query} | {random_vibe()}")
+    
+    await interaction.followup.send(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
 async def imagine(interaction: discord.Interaction, prompt: str):
