@@ -100,7 +100,7 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-@tasks.loop(hours=2) 
+@tasks.loop(hours=3) 
 async def auto_chat():
     global last_msg_time
     channel_id = 1464203423191797841
@@ -150,7 +150,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.1.6", inline=True)
+    embed.add_field(name="📜 Version", value="v17.1.8", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -159,10 +159,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.1.6 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Thêm search tool qua `/search`\n• Hết r=))).", inline=False)
+    embed.add_field(name="v17.1.8 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Thêm search tool qua `/search`\n• Fix\n• Hết r=))).", inline=False)
     embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
     embed.add_field(name="v16.1.0 - Fixing (lastest)", value="• Sửa lỗi sau 30p thì bot mới sủa\n• Hết r ", inline=False)
-    embed.set_footer(text=f"Updated Ngày 16/2/2026 | 15:00 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 18/2/2026 | 08:51 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="search", description="T search web cho m nè bro")
