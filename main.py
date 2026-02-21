@@ -100,7 +100,7 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-@tasks.loop(hours=3) 
+@tasks.loop(hours=10) 
 async def auto_chat():
     global last_msg_time
     channel_id = 1464203423191797841
@@ -150,7 +150,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.1.8", inline=True)
+    embed.add_field(name="📜 Version", value="v17.5.0", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -159,42 +159,11 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.1.8 (latest) - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Thêm search tool qua `/search`\n• Fix\n• Hết r=))).", inline=False)
+    embed.add_field(name="v17.5.0 - Goodbye event (lastest)", value="• Xoá bỏ các lệnh event `/spring`, `/money`.\n• Xoá bỏ lệnh `/search`.\n• Hết tết r.. tạm biệt tết... ", inline=False)
+    embed.add_field(name="v17.1.8 - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Thêm search tool qua `/search`\n• Fix\n• Hết r=))).", inline=False)
     embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
-    embed.add_field(name="v16.1.0 - Fixing (lastest)", value="• Sửa lỗi sau 30p thì bot mới sủa\n• Hết r ", inline=False)
-    embed.set_footer(text=f"Updated Ngày 18/2/2026 | 08:51 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 21/2/2026 | 23:57 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
-# ========================================================
-@bot.tree.command(name="search", description="T search web cho m nè bro")
-@app_commands.describe(query="Cái m muốn tìm?")
-async def web_search(interaction: discord.Interaction, query: str):
-    await interaction.response.defer(thinking=True)
-    api_key = os.getenv("SERPER_API_KEY")
-    if not api_key:
-        await interaction.followup.send("Key Serper đâu r m? Thêm vào .env đi! (ಠ_ಠ)💔")
-        return
-    
-    url = "https://google.serper.dev/search"
-    payload = {"q": query}
-    headers = {"X-API-KEY": api_key, "Content-Type": "application/json"}
-    
-    async with aiohttp.ClientSession() as s:
-        async with s.post(url, json=payload, headers=headers) as r:
-            if r.status != 200:
-                await interaction.followup.send(f"Lỗi API: {r.status} đcm (ಠ益ಠ)🥀")
-                return
-            data = await r.json()
-    
-    if "organic" not in data or not data["organic"]:
-        await interaction.followup.send("Ko tìm thấy j hết bro... thử lại đi (•_•)💀")
-        return
-    
-    top = data["organic"][0]
-    embed = discord.Embed(title=top.get("title", "Kq search"), url=top.get("link"), color=0x00ff9d)
-    embed.add_field(name="Mô tả", value=top.get("snippet", "Ko có desc")[:500], inline=False)
-    embed.set_footer(text=f"Search: {query} | {random_vibe()}")
-    
-    await interaction.followup.send(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
 async def imagine(interaction: discord.Interaction, prompt: str):
@@ -232,46 +201,7 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
 # ========================================================
 # Event cmds
 # ========================================================
-@bot.tree.command(name="money", description="Nhận lì xì ngẫu nhiên (chỉ số chẵn)")
-async def money(interaction: discord.Interaction):
-    amount = random.randrange(2000, 1000000, 2)
-    formatted_money = "{:,}".format(amount)
-    
-    status = "j ghê z m? Hack à? Đưa t một nửa ko t báo CA =))🙏🥀" if amount > 400000 else \
-             "Cũng ra gì đấy, đủ bao t bát phở r bro 🤑" if amount > 200000 else \
-             "Tầm này chỉ đủ mua trà sữa thôi, bớt tinh tướng 🥀" if amount > 50000 else \
-             "GAH DAYUM! Có mấy đồng lẻ này thì cất đi kẻo gió thổi bay mất 💀☠️"
-
-    embed = discord.Embed(
-        title="💸 Lì xì ngẫu nhiên 🧧",
-        description=f"Hệ thống vừa vứt vào mặt {interaction.user.mention}:\n**{formatted_money} VNĐ**\n\n_{status}_",
-        color=0xff0000
-    )
-    embed.set_image(url=random.choice(MONEY_GIFS)) # Set thẳng vào image cho to
-    embed.set_footer(text=f"Tiền ảo thôi đừng tưởng real nha | {random_vibe()}")
-    await interaction.response.send_message(embed=embed)
-
-@bot.tree.command(name="spring", description="Bốc thăm lì xì đầu năm lấy hên")
-async def spring(interaction: discord.Interaction):
-    rewards = [
-        "🧧 Lì xì 500k (tưởng tượng đi m) 💸", "💀 1 vé quét sân, rửa bát xuyên Tết",
-        "💍 Năm nay có bồ (bồ tát phù hộ)", "🥀 Crush xem story nhưng ko rep",
-        "🧨 1 tràng pháo tay cho sự nghèo của m", "🥟 Một miếng bánh chưng toàn mỡ",
-        "🔥 Nhân phẩm bùng nổ: Được lì xì gấp đôi", "🐧 Được chúc 'Hay ăn chóng lớn' (dù m già r)",
-        "☠️ Bị hỏi 'Bao giờ lấy vợ?' 100 lần", "🌟 Vận may: Chơi bài toàn thắng (trừ lúc thua)",
-        "💸 Tiền vào như nước, ra như thác", "🤡 Làm `con nhà người ta` trong 1 ngày",
-        "🍑 Một cành đào nở toàn lá xanh", "🐍 Năm Rắn qua rồi, lươn ít thôi ko nghiệp quật",
-        "🏳️‍🌈 Bị 1 đứa LGBT dí (trong mơ)", "🐎 Năm Mã, đi đường cẩn thận ko bị ngựa đá đít"
-    ]
-    gift = random.choice(rewards)
-    embed = discord.Embed(
-        title="🧧 Bốc thăm may rủi 2026 🧧",
-        description=f"Chúc mừng {interaction.user.mention} đã hốt được:\n\n**{gift}**",
-        color=0xff0000
-    )
-    embed.set_image(url=random.choice(MONEY_GIFS)) # Dùng chung kho GIF tiền bay cho máu
-    embed.set_footer(text=f"Tết nhất vui vẻ đừng tứk=)) | {random_vibe()}")
-    await interaction.response.send_message(embed=embed)
+# -- coming soon --
 # ========================================================
 # Defualt cmds
 # ========================================================
