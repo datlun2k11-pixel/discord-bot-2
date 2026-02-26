@@ -100,6 +100,37 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
+def get_cortisol_level():
+    """Random mức cortisol + trả về level, mô tả, emoji"""
+    level = random.randint(0, 100)
+
+    if level <= 15:
+        tier = "📉 Cực thấp – Kiểu đang ngủ quên giữa đời"
+        vibe = "M đang ở trạng thái không quan tâm gì hết, relax vl luôn 💤"
+        color = discord.Color.blue()
+    elif level <= 35:
+        tier = "😌 Thấp – Bình yên như con thạch sùng"
+        vibe = "Cortisol thấp, m đang sống chậm kiểu zen master vậy 🧘"
+        color = discord.Color.green()
+    elif level <= 55:
+        tier = "😐 Bình thường – Sống được, ko chết đâu"
+        vibe = "Mức ổn áp, m đang hoạt động bình thường như người bt 👍"
+        color = discord.Color.yellow()
+    elif level <= 75:
+        tier = "😤 Cao – Hơi căng thẳng rồi đó bro"
+        vibe = "Stress đang lên, cẩn thận kẻo bùng nổ nha m ơi 😰"
+        color = discord.Color.orange()
+    elif level <= 90:
+        tier = "🤯 Rất cao – Đang overdose deadline"
+        vibe = "Ủa bình tĩnh đi m ơi, cortisol m đang spike vcl luôn 💀"
+        color = discord.Color.red()
+    else:
+        tier = "☠️ NGUY HIỂM – Stress max level, r.i.p não"
+        vibe = "BRO M CÓ SỐNG SÓT KO VẬY??? Cortisol m đang ở lvl cuối game luôn đcm 💔🥀"
+        color = discord.Color.dark_red()
+
+    return level, tier, vibe, color
+
 @tasks.loop(hours=10) 
 async def auto_chat():
     global last_msg_time
@@ -150,7 +181,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.5.0", inline=True)
+    embed.add_field(name="📜 Version", value="v17.6.0", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -159,10 +190,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.5.0 - Goodbye event (lastest)", value="• Xoá bỏ các lệnh event `/spring`, `/money`.\n• Xoá bỏ lệnh `/search`.\n• Hết tết r.. tạm biệt tết... ", inline=False)
-    embed.add_field(name="v17.1.8 - Model", value="• Thêm 1 model mới\n• Chi tiết sys prompt hơn\n• Thêm search tool qua `/search`\n• Fix\n• Hết r=))).", inline=False)
+    embed.add_field(name="v17.6.0 - cmds (lastest)", value="• Thêm lệnh mới `/cortisol`.", inline=False)
+    embed.add_field(name="v17.5.0 - Goodbye event", value="• Xoá bỏ các lệnh event `/spring`, `/money`.\n• Xoá bỏ lệnh `/search`.\n• Hết tết r.. tạm biệt tết... ", inline=False)
     embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
-    embed.set_footer(text=f"Updated Ngày 21/2/2026 | 23:57 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 26/2/2026 | 17:50 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
@@ -201,7 +232,42 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
 # ========================================================
 # Event cmds
 # ========================================================
-# -- coming soon --
+@tree.command(name="cortisol", description="Xem mức cortisol hiện tại trong cơ thể m đang ở level nào 🧪")
+async def cortisol(interaction: discord.Interaction):
+    level, tier, vibe, color = get_cortisol_level()
+
+    # tạo progress bar
+    filled = round(level / 5)
+    empty = 20 - filled
+    bar = "█" * filled + "░" * empty
+
+    embed = discord.Embed(
+        title="🧬 Máy Đo Cortisol™ (ngẫu nhiên)",
+        color=color
+    )
+    embed.add_field(
+        name="👤 Người đo",
+        value=interaction.user.mention,
+        inline=False
+    )
+    embed.add_field(
+        name="📊 Chỉ số Cortisol",
+        value=f"`[{bar}]` **{level}/100**",
+        inline=False
+    )
+    embed.add_field(
+        name="🏷️ Mức độ",
+        value=tier,
+        inline=False
+    )
+    embed.add_field(
+        name="💬 Nhận xét",
+        value=vibe,
+        inline=False
+    )
+    embed.set_footer(text="⚠️ Đây là kết quả ngẫu nhiên 100%, đừng tin vào đây mà bỏ đi khám bác sĩ nha 💀")
+
+    await interaction.response.send_message(embed=embed)
 # ========================================================
 # Defualt cmds
 # ========================================================
