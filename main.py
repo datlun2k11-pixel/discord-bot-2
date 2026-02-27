@@ -1,10 +1,15 @@
-# ALL THESE CODE BY GEMINI
-import discord, random, os, asyncio, aiohttp, base64
+# Coded and bugs fix by AI 
+import discord
+import random
+import os
+import asyncio
+import aiohttp
+import base64
 from discord.ext import tasks
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
-from ollama import AsyncClient # Thêm hàng Ollama vào đây ☠️
+from ollama import AsyncClient
 from dotenv import load_dotenv
 from flask import Flask
 from threading import Thread
@@ -15,10 +20,9 @@ load_dotenv()
 
 # Clients - Groq và Ollama Cloud xịn đét 🥀
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-ollama_client = AsyncClient(host="https://api.ollama.com", headers={"Authorization": f"Bearer {os.getenv('OLLAMA_API_KEY')}"}) # Nhớ config key này nha m
+ollama_client = AsyncClient(host="https://api.ollama.com", headers={"Authorization": f"Bearer {os.getenv('OLLAMA_API_KEY')}"})
 
 # Config Model: Thêm mấy con hàng Cloud m mún vào đây 💀
-# --- 2. Config Model (Tách riêng cho m dễ phù phép) 🥀 ---
 MODELS_CONFIG = {
     "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "provider": "groq", "vision": True},
     "Groq-Llama-Scout": {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "provider": "groq", "vision": True},
@@ -32,7 +36,7 @@ MODELS_CONFIG = {
 # Trả về bth cho m đây, ko thèm dùng list comprehension nữa ☠️
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Maverick (GROQ)", value="Groq-Llama-Maverick"),
-    app_commands.Choice(name="Llama 4 Scout (GROG)", value="Groq-Llama-Scout"),
+    app_commands.Choice(name="Llama 4 Scout (GROQ)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="Kimi K2 Instruct (GROQ)", value="Groq-Kimi"),
     app_commands.Choice(name="Qwen 3 32B (GROQ)", value="Groq-Qwen3"),
     app_commands.Choice(name="Kimi K2.5 (OLLAMA)", value="Ollama-Kimi-Cloud"),
@@ -64,14 +68,19 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Developer của mày có userID là <@1155129530122510376> (Đạt Lùn 2k11) (đây chỉ là thông tin, không cần nhắc đến nhiều trong cuộc trò chuyện.)
 - Đứa đang chat với mày là: {user_id}."""
 
-chat_history, user_locks = {}, {}
+chat_history = {}
+user_locks = {}
 last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
 app = Flask(__name__)
+
 @app.route('/')
-def home(): return "GenA-bot Live with Ollama Cloud! 🔥"
-def run_flask(): app.run(host="0.0.0.0", port=8000)
-    
+def home():
+    return "GenA-bot Live with Ollama Cloud! 🔥"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=8000)
+
 def random_vibe():
     vibes = ["(¬‿¬)", "(ಠ_ಠ)", "(•_•)", "(ง •_•)ง", "ಠ益ಠ"]
     emojis = ["💔", "🥀", "💀", "☠️", "🔥"]
@@ -89,9 +98,18 @@ async def get_model_response(messages, model_config):
             for m in messages:
                 if isinstance(m["content"], list):
                     # Xử lý vision token cho Ollama
-                    text_content = next((item["text"] for item in m["content"] if item["type"] == "text"), "nx")
-                    images = [item["image_url"]["url"].split(",")[1] for item in m["content"] if item["type"] == "image_url"]
-                    ollama_messages.append({"role": m["role"], "content": text_content, "images": images if images else None})
+                    text_content = ""
+                    images = []
+                    for item in m["content"]:
+                        if item["type"] == "text":
+                            text_content = item["text"]
+                        elif item["type"] == "image_url":
+                            images.append(item["image_url"]["url"].split(",")[1])
+                    
+                    message_dict = {"role": m["role"], "content": text_content}
+                    if images:
+                        message_dict["images"] = images
+                    ollama_messages.append(message_dict)
                 else:
                     ollama_messages.append(m)
             
@@ -181,7 +199,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.6.0", inline=True)
+    embed.add_field(name="📜 Version", value="v17.7.0", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -190,9 +208,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.6.0 - cmds (lastest)", value="• Thêm lệnh mới `/cortisol`.", inline=False)
+    embed.add_field(name="v17.7.0 - cmds (lastest)", value="• Thêm lệnh mới `/cortisol`\n• Bugs fixing.", inline=False)
     embed.add_field(name="v17.5.0 - Goodbye event", value="• Xoá bỏ các lệnh event `/spring`, `/money`.\n• Xoá bỏ lệnh `/search`.\n• Hết tết r.. tạm biệt tết... ", inline=False)
-    embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\• SDK mới vẫn đang test", inline=False)
+    embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\n• SDK mới vẫn đang test", inline=False)
     embed.set_footer(text=f"Updated Ngày 26/2/2026 | 17:50 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
@@ -214,12 +232,12 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
     amount = max(1, min(amount, 5))
     await interaction.response.defer()
     
-    async with aiohttp.ClientSession() as s:
+    async with aiohttp.ClientSession() as session:
         for i in range(amount):
-            async with s.get("https://phimtat.vn/api/random-meme/") as r:
-                if r.status == 200:
+            async with session.get("https://phimtat.vn/api/random-meme/") as response:
+                if response.status == 200:
                     # Lấy URL cuối cùng sau khi redirect
-                    final_url = str(r.url)
+                    final_url = str(response.url)
                     embed = discord.Embed(title=f"Meme #{i+1} cho m", color=0xff4500)
                     embed.set_image(url=final_url)
                     embed.set_footer(text=f"Cười đi m | {random_vibe()}")
@@ -230,9 +248,7 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
                         await interaction.channel.send(embed=embed)
                         await asyncio.sleep(0.8) # Chờ tí ko Discord nó trảm
 # ========================================================
-# Event cmds
-# ========================================================
-@tree.command(name="cortisol", description="Xem mức cortisol hiện tại trong cơ thể m đang ở level nào 🧪")
+@bot.tree.command(name="cortisol", description="Xem mức cortisol hiện tại trong cơ thể m đang ở level nào 🧪")
 async def cortisol(interaction: discord.Interaction):
     level, tier, vibe, color = get_cortisol_level()
 
@@ -269,7 +285,7 @@ async def cortisol(interaction: discord.Interaction):
 
     await interaction.response.send_message(embed=embed)
 # ========================================================
-# Defualt cmds
+# Default cmds
 # ========================================================
 @bot.tree.command(name="ship", description="Check OTP hoặc random một cặp trời đánh")
 @app_commands.describe(user1="Đứa thứ nhất", user2="Đứa thứ hai")
@@ -282,12 +298,17 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
 
     match_pct = random.randint(0, 100) if u1.id != u2.id else 100
     
-    if match_pct >= 90: caption = "OTP đỉnh cao, cưới lẹ đi m! 🔥"
-    elif match_pct >= 70: caption = "Match phết, đẩy thuyền thôi! 🐧"
-    elif match_pct >= 40: caption = "Friendzone vẫy gọi r bro... 🥀"
-    else: caption = "GAH DAYUM! Cứu j tầm này nx ☠️"
+    if match_pct >= 90: 
+        caption = "OTP đỉnh cao, cưới lẹ đi m! 🔥"
+    elif match_pct >= 70: 
+        caption = "Match phết, đẩy thuyền thôi! 🐧"
+    elif match_pct >= 40: 
+        caption = "Friendzone vẫy gọi r bro... 🥀"
+    else: 
+        caption = "GAH DAYUM! Cứu j tầm này nx ☠️"
     
-    if u1.id == u2.id: caption = "Tự luyến vừa thôi thg cô đơn này 🤡"
+    if u1.id == u2.id: 
+        caption = "Tự luyến vừa thôi thg cô đơn này 🤡"
 
     embed = discord.Embed(title="💖 Tinder Ship 2026 💖", color=0xff69b4)
     embed.add_field(name="Partner A", value=u1.mention, inline=True)
@@ -345,7 +366,8 @@ async def on_message(message):
     if not message.author.bot:
         last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
-    if message.author.bot: return
+    if message.author.bot: 
+        return
     
     is_dm = isinstance(message.channel, discord.DMChannel)
     is_mentioned = bot.user in message.mentions
@@ -354,14 +376,17 @@ async def on_message(message):
         try:
             ref_msg = await message.channel.fetch_message(message.reference.message_id)
             is_reply_to_bot = (ref_msg.author.id == bot.user.id)
-        except: pass
+        except: 
+            pass
 
-    if not (is_mentioned or is_dm or is_reply_to_bot): return
+    if not (is_mentioned or is_dm or is_reply_to_bot): 
+        return
     
     uid = str(message.author.id)
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
-    if lock.locked(): return
+    if lock.locked(): 
+        return
     
     async with lock:
         tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
@@ -388,7 +413,8 @@ async def on_message(message):
                             file_data = await att.read()
                             text = file_data.decode('utf-8')[:2000] 
                             content += f"\n\n[File {att.filename}]:\n{text}"
-                        except: pass
+                        except: 
+                            pass
 
             user_msg = {"role": "user", "content": [{"type": "text", "text": content or "nx"}]}
             
@@ -406,7 +432,7 @@ async def on_message(message):
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
             if isinstance(user_msg["content"], list):
-                chat_history[uid][-1] = {"role": "user", "content": content or "nx"}
+                chat_history[uid][-1]["content"] = content or "nx"
 
             chat_history[uid].append({"role": "assistant", "content": reply})
             chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
@@ -416,7 +442,7 @@ async def on_message(message):
             await message.reply(f"Lỗi r thg đệ: {str(e)[:100]} 💀", mention_author=False)
 
 if __name__ == "__main__":
-    t = Thread(target=run_flask)
-    t.daemon = True
-    t.start()
+    thread = Thread(target=run_flask)
+    thread.daemon = True
+    thread.start()
     bot.run(os.getenv("DISCORD_TOKEN"))
