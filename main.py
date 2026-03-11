@@ -24,28 +24,26 @@ ollama_client = AsyncClient(host="https://api.ollama.com", headers={"Authorizati
 
 # Config Model: Thêm mấy con hàng Cloud m mún vào đây 💀
 MODELS_CONFIG = {
-    "Groq-Llama-Maverick": {"id": "meta-llama/llama-4-maverick-17b-128e-instruct", "provider": "groq", "vision": True},
     "Groq-Llama-Scout": {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "provider": "groq", "vision": True},
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "provider": "groq", "vision": False},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq", "vision": False},
     "Ollama-Kimi-Cloud": {"id": "kimi-k2.5:cloud", "provider": "ollama", "vision": True},
-    "Ollama-Qwen3-480b": {"id": "qwen3-coder:480b", "provider": "ollama", "vision": False},
-    "Deepseek-v3.1": {"id": "deepseek-v3.1:671b-cloud", "provider": "ollama", "vision": False}
+    "Deepseek-v3.1": {"id": "deepseek-v3.1:671b-cloud", "provider": "ollama", "vision": False},
+    "Qwen3.5-397b": {"id": "qwen3.5:397b-cloud", "provider": "ollama", "vision": True}
 }
 
 # Trả về bth cho m đây, ko thèm dùng list comprehension nữa ☠️
 MODEL_CHOICES = [
-    app_commands.Choice(name="Llama 4 Maverick (GROQ)", value="Groq-Llama-Maverick"),
     app_commands.Choice(name="Llama 4 Scout (GROQ)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="Kimi K2 Instruct (GROQ)", value="Groq-Kimi"),
     app_commands.Choice(name="Qwen 3 32B (GROQ)", value="Groq-Qwen3"),
     app_commands.Choice(name="Kimi K2.5 (OLLAMA)", value="Ollama-Kimi-Cloud"),
     app_commands.Choice(name="Deepseek V3.1 (OLLAMA)", value="Deepseek-v3.1"),
-    app_commands.Choice(name="Qwen3 Coder (OLLAMA)", value="Ollama-Qwen3-480b")
+    app_commands.Choice(name="Qwen3.5-397B-A17B (OLLAMA)", value="Qwen3.5-397b")
 ]
 CURRENT_MODEL = "Groq-Llama-Maverick"
 
-MONEY_GIFS = [
+GIFS = [
     "https://media2.giphy.com/media/v1.Y2lkPTZjMDliOTUyYml6ZW1laGgyd2xrZDY4MnAwcDQzMjFqc296a3hya2tub3c3dzJyMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/O4fENAKIGz0zJs9dg9/giphy.gif",
     "https://media0.giphy.com/media/v1.Y2lkPTZjMDliOTUydTB4OWhrZ2hhbHFuaTJpbnl1eXVhbmx2cDJwcDg0ZG12NTN6aHR6bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LR5GeZFCwDRcpG20PR/giphy.gif",
     "https://media3.giphy.com/media/v1.Y2lkPTZjMDliOTUydThkeHFiYjk5c21rbHNvMWxybXlrMm9ndWljMzk1MG9panZ5OGNlcCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Sf5T0iac3uALqpzxJ9/giphy.gif",
@@ -118,37 +116,6 @@ async def get_model_response(messages, model_config):
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-def get_cortisol_level():
-    """Random mức cortisol + trả về level, mô tả, emoji"""
-    level = random.randint(0, 100)
-
-    if level <= 15:
-        tier = "📉 Cực thấp – Kiểu đang ngủ quên giữa đời"
-        vibe = "M đang ở trạng thái không quan tâm gì hết, relax vl luôn 💤"
-        color = discord.Color.blue()
-    elif level <= 35:
-        tier = "😌 Thấp – Bình yên như con thạch sùng"
-        vibe = "Cortisol thấp, m đang sống chậm kiểu zen master vậy 🧘"
-        color = discord.Color.green()
-    elif level <= 55:
-        tier = "😐 Bình thường – Sống được, ko chết đâu"
-        vibe = "Mức ổn áp, m đang hoạt động bình thường như người bt 👍"
-        color = discord.Color.yellow()
-    elif level <= 75:
-        tier = "😤 Cao – Hơi căng thẳng rồi đó bro"
-        vibe = "Stress đang lên, cẩn thận kẻo bùng nổ nha m ơi 😰"
-        color = discord.Color.orange()
-    elif level <= 90:
-        tier = "🤯 Rất cao – Đang overdose deadline"
-        vibe = "Ủa bình tĩnh đi m ơi, cortisol m đang spike vcl luôn 💀"
-        color = discord.Color.red()
-    else:
-        tier = "☠️ NGUY HIỂM – Stress max level, r.i.p não"
-        vibe = "BRO M CÓ SỐNG SÓT KO VẬY??? Cortisol m đang ở lvl cuối game luôn đcm 💔🥀"
-        color = discord.Color.dark_red()
-
-    return level, tier, vibe, color
-
 @tasks.loop(hours=10) 
 async def auto_chat():
     global last_msg_time
@@ -208,10 +175,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.7.0 - cmds (lastest)", value="• Thêm lệnh mới `/cortisol`\n• Bugs fixing.", inline=False)
+    embed.add_field(name="v17.7.0 - cmds (lastest)", value="• Xóa lệnh `/cortisol`\n• Xoá model Llama 4 maverick (decrapted)\n• Thêm model `qwen3.5:397b-cloud`\n• Bugs fixing.", inline=False)
     embed.add_field(name="v17.5.0 - Goodbye event", value="• Xoá bỏ các lệnh event `/spring`, `/money`.\n• Xoá bỏ lệnh `/search`.\n• Hết tết r.. tạm biệt tết... ", inline=False)
     embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\n• SDK mới vẫn đang test", inline=False)
-    embed.set_footer(text=f"Updated Ngày 26/2/2026 | 17:50 | {random_vibe()}")
+    embed.set_footer(text=f"Updated Ngày 11/3/2026 | {random_vibe()}")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
@@ -247,43 +214,6 @@ async def meme(interaction: discord.Interaction, amount: int = 1):
                     else:
                         await interaction.channel.send(embed=embed)
                         await asyncio.sleep(0.8) # Chờ tí ko Discord nó trảm
-# ========================================================
-@bot.tree.command(name="cortisol", description="Xem mức cortisol hiện tại trong cơ thể m đang ở level nào 🧪")
-async def cortisol(interaction: discord.Interaction):
-    level, tier, vibe, color = get_cortisol_level()
-
-    # tạo progress bar
-    filled = round(level / 5)
-    empty = 20 - filled
-    bar = "█" * filled + "░" * empty
-
-    embed = discord.Embed(
-        title="🧬 Máy Đo Cortisol™ (ngẫu nhiên)",
-        color=color
-    )
-    embed.add_field(
-        name="👤 Người đo",
-        value=interaction.user.mention,
-        inline=False
-    )
-    embed.add_field(
-        name="📊 Chỉ số Cortisol",
-        value=f"`[{bar}]` **{level}/100**",
-        inline=False
-    )
-    embed.add_field(
-        name="🏷️ Mức độ",
-        value=tier,
-        inline=False
-    )
-    embed.add_field(
-        name="💬 Nhận xét",
-        value=vibe,
-        inline=False
-    )
-    embed.set_footer(text="⚠️ Đây là kết quả ngẫu nhiên 100%, đừng tin vào đây mà bỏ đi khám bác sĩ nha 💀")
-
-    await interaction.response.send_message(embed=embed)
 # ========================================================
 # Default cmds
 # ========================================================
