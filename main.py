@@ -25,6 +25,7 @@ ollama_client = AsyncClient(host="https://api.ollama.com", headers={"Authorizati
 # Config Model: Thêm mấy con hàng Cloud m mún vào đây 💀
 MODELS_CONFIG = {
     "Groq-Llama-Scout": {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "provider": "groq", "vision": True},
+    "GPT-OSS-120B": {"id": "openai/gpt-oss-120b", "provider": "groq", "vision": False},
     "Groq-Kimi": {"id": "moonshotai/kimi-k2-instruct-0905", "provider": "groq", "vision": False},
     "Groq-Qwen3": {"id": "qwen/qwen3-32b", "provider": "groq", "vision": False},
     "Ollama-Kimi-Cloud": {"id": "kimi-k2.5:cloud", "provider": "ollama", "vision": True},
@@ -35,6 +36,7 @@ MODELS_CONFIG = {
 # Trả về bth cho m đây, ko thèm dùng list comprehension nữa ☠️
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ)", value="Groq-Llama-Scout"),
+    app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
     app_commands.Choice(name="Kimi K2 Instruct (GROQ)", value="Groq-Kimi"),
     app_commands.Choice(name="Qwen 3 32B (GROQ)", value="Groq-Qwen3"),
     app_commands.Choice(name="Kimi K2.5 (OLLAMA)", value="Ollama-Kimi-Cloud"),
@@ -166,7 +168,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.7.0", inline=True)
+    embed.add_field(name="📜 Version", value="v17.9.0", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -175,10 +177,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.7.0 - cmds (lastest)", value="• Xóa lệnh `/cortisol`\n• Xoá model Llama 4 maverick (decrapted)\n• Thêm model `qwen3.5:397b-cloud`\n• Bugs fixing.", inline=False)
+    embed.add_field(name="v17.9.0 - model (lastedt)", value="• model `GPT-OSS-120B` quay trở lại.", inline=False)
+    embed.add_field(name="v17.7.0 - cmds", value="• Xóa lệnh `/cortisol`\n• Xoá model Llama 4 maverick (decrapted)\n• Thêm model `qwen3.5:397b-cloud`\n• Bugs fixing.", inline=False)
     embed.add_field(name="v17.5.0 - Goodbye event", value="• Xoá bỏ các lệnh event `/spring`, `/money`.\n• Xoá bỏ lệnh `/search`.\n• Hết tết r.. tạm biệt tết... ", inline=False)
-    embed.add_field(name="v17.0.0 - SDK", value="• Thêm 1 SDK mới\n• Sửa bugs linh tinh\n• SDK mới vẫn đang test", inline=False)
-    embed.set_footer(text=f"Updated Ngày 11/3/2026 | {random_vibe()}")
+    embed.set_footer(text="Updated Ngày 14/3/2026 | 12:43")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
