@@ -5,7 +5,6 @@ import os
 import asyncio
 import aiohttp
 import base64
-from discord.ext import tasks
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -19,8 +18,9 @@ import pytz
 load_dotenv()
 
 # Clients - Groq và Ollama Cloud xịn đét 🥀
+# BUG FIX #1: host sai, phải là https://ollama.com (ko phải api.ollama.com)
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-ollama_client = AsyncClient(host="https://api.ollama.com", headers={"Authorization": f"Bearer {os.getenv('OLLAMA_API_KEY')}"})
+ollama_client = AsyncClient(host="https://ollama.com", headers={"Authorization": f"Bearer {os.getenv('OLLAMA_API_KEY')}"})
 
 # Config Model: Thêm mấy con hàng Cloud m mún vào đây 💀
 MODELS_CONFIG = {
@@ -43,10 +43,12 @@ MODEL_CHOICES = [
     app_commands.Choice(name="Deepseek V3.1 (OLLAMA)", value="Deepseek-v3.1"),
     app_commands.Choice(name="Qwen3.5-397B-A17B (OLLAMA)", value="Qwen3.5-397b")
 ]
-CURRENT_MODEL = "Groq-Llama-Maverick"
+
+# BUG FIX #2: default là "Groq-Llama-Maverick" ko tồn tại trong dict -> fix thành "Groq-Llama-Scout"
+CURRENT_MODEL = "Groq-Llama-Scout"
 
 GIFS = [
-    "https://media2.giphy.com/media/v1.Y2lkPTZjMDliOTUyYml6ZW1laGgyd2xrZDY4MnAwcDQzMjFqc296a3hya2tub3c3dzJyMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/O4fENAKIGz0zJs9dg9/giphy.gif",
+    "https://media2.giphy.com/media/v1.Y2lkPTZjMDliOTUyYml6ZW1laGgyd2xrZDY4MnAwcDQzMjFqc292a3hya2tub3c3dzJyMiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/O4fENAKIGz0zJs9dg9/giphy.gif",
     "https://media0.giphy.com/media/v1.Y2lkPTZjMDliOTUydTB4OWhrZ2hhbHFuaTJpbnl1eXVhbmx2cDJwcDg0ZG12NTN6aHR6bSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/LR5GeZFCwDRcpG20PR/giphy.gif",
     "https://media3.giphy.com/media/v1.Y2lkPTZjMDliOTUydThkeHFiYjk5c21rbHNvMWxybXlrMm9ndWljMzk1MG9panZ5OGNlcCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Sf5T0iac3uALqpzxJ9/giphy.gif",
     "https://media4.giphy.com/media/v1.Y2lkPTZjMDliOTUyYmRtZWh5a3U1d2MyZDQwY2MzaXN4czA3YTB0OXc3bWpubnFhNWtseSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/bpTL6wXRuMQpMIVduB/giphy.gif",
@@ -114,37 +116,15 @@ async def get_model_response(messages, model_config):
                     ollama_messages.append(m)
             
             response = await ollama_client.chat(model=model_config["id"], messages=ollama_messages)
-            return response['message']['content']
+            # BUG FIX #3: ollama python lib trả về object, ko phải dict -> dùng dot notation
+            return response.message.content
     except Exception as e:
         return f"Lỗi r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
-
-@tasks.loop(hours=10) 
-async def auto_chat():
-    global last_msg_time
-    channel_id = 1464203423191797841
-    channel = bot.get_channel(channel_id)
-    if channel:
-        tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
-        now_vn = datetime.datetime.now(tz_VN)
-        if (now_vn - last_msg_time).total_seconds() >= 30 * 60:
-            now_str = now_vn.strftime("%H:%M:%S %d/%m/%Y")
-            messages = [
-                {"role": "system", "content": system_instruction.format(user_id="everyone", current_time=now_str)},
-                {"role": "user", "content": "*server im phăng phắc, m chán quá nên nhảy ra khịa tụi nó đi*"}
-            ]
-            try:
-                reply = await get_model_response(messages, MODELS_CONFIG[CURRENT_MODEL])
-                await channel.send(reply)
-                last_msg_time = now_vn
-            except Exception as e:
-                print(f"Lỗi auto_chat: {e}")
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
-    if not auto_chat.is_running():
-        auto_chat.start()
     await bot.tree.sync()
     print(f"GenA-bot Ready with Ollama Cloud! 🔥")
 
@@ -168,7 +148,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms {'(lag vl)' if latency > 200 else '(mượt vl)'}", inline=True)
-    embed.add_field(name="📜 Version", value="v17.9.0", inline=True)
+    embed.add_field(name="📜 Version", value="v17.9.3", inline=True)
     embed.add_field(name="🧠 Model hiện tại", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=f"GROQ & OLLAMA", inline=True)
     embed.set_footer(text="Powered by Groq | By Datlun2k11 | " + random_vibe())
@@ -177,10 +157,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v17.9.0 - model (lastedt)", value="• model `GPT-OSS-120B` quay trở lại.", inline=False)
+    embed.add_field(name="v17.9.3 - fix (lastest)", value="• Bugs fixing \n• xoá ping chat mỗi 10 tiếng.", inline=False)
+    embed.add_field(name="v17.9.0 - model", value="• model `GPT-OSS-120B` quay trở lại.", inline=False)
     embed.add_field(name="v17.7.0 - cmds", value="• Xóa lệnh `/cortisol`\n• Xoá model Llama 4 maverick (decrapted)\n• Thêm model `qwen3.5:397b-cloud`\n• Bugs fixing.", inline=False)
-    embed.add_field(name="v17.5.0 - Goodbye event", value="• Xoá bỏ các lệnh event `/spring`, `/money`.\n• Xoá bỏ lệnh `/search`.\n• Hết tết r.. tạm biệt tết... ", inline=False)
-    embed.set_footer(text="Updated Ngày 14/3/2026 | 12:43")
+    embed.set_footer(text="Updated Ngày 25/3/2026 | 15:35")
     await interaction.response.send_message(embed=embed)
 # ========================================================
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng AI (Pollinations)")
