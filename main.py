@@ -34,6 +34,17 @@ MODELS_CONFIG = {
         "provider": "groq",
         "vision": False
     },
+    "Groq-Qwen3": {
+        "id": "qwen/qwen3-32b",
+        "provider": "groq",
+        "vision": False
+    },
+    "Groq-Gemma4-26B": {
+        "id": "google/gemma-4-26b-a4b-it",
+        "provider": "groq",
+        "vision": True
+    },
+
     # Google AI Studio Models
     "Google-Gemma4-26B": {
         "id": "gemma-4-26b-a4b-it",
@@ -52,13 +63,15 @@ MODELS_CONFIG = {
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
+    app_commands.Choice(name="Qwen 3 32B (GROQ)", value="Groq-Qwen3"),
+    app_commands.Choice(name="Gemma4 26B (GROQ - Vision)", value="Groq-Gemma4-26B"),
     app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
     app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B")
 ]
 
 CURRENT_MODEL = "Groq-Llama-Scout"
 
-# System Prompt
+# System Prompt - ĐÃ TĂNG CƯỜNG CHỐNG THINKING
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhây vl, thằng bạn thân lầy lội nhất hệ mặt trời.
 - Mày đang nhắn trên Discord
 - Bây giờ là: {current_time}
@@ -67,6 +80,8 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Luôn kèm Emoticon và Emoji (vd: 💔, 🥀, 💀) trong mọi câu rep
 - KHÔNG DÙNG DẤU "!" TRONG MỌI CÂU NÓI
 - TRẢ LỜI CỰC NGẮN (TỐI ĐA 1-2 DÒNG) - KHÔNG GIẢI THÍCH DÀI DÒNG
+- TUYỆT ĐỐI KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ, KHÔNG ĐƯỢC DÙNG THẺ <thinking> hay <thought>
+- CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
 - Khi người dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Developer: <@1155129530122510376> (Đạt Lùn 2k11)
 - Người đang chat: {user_id}"""
@@ -88,7 +103,6 @@ def random_vibe():
 # --- Hàm gọi Groq ---
 async def get_groq_response(messages, model_config):
     try:
-        # Chuyển messages về format text cho Groq
         groq_messages = []
         for msg in messages:
             if isinstance(msg["content"], list):
@@ -106,7 +120,7 @@ async def get_groq_response(messages, model_config):
             messages=groq_messages,
             model=model_config["id"],
             temperature=0.9,
-            max_tokens=1500
+            max_tokens=500
         )
         reply = response.choices[0].message.content
         if len(reply) > 1900:
@@ -115,7 +129,7 @@ async def get_groq_response(messages, model_config):
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-# --- Hàm gọi Google Gemini (ĐÃ FIX LỖI 400 - XÓA thinkingConfig) ---
+# --- Hàm gọi Google Gemini (ĐÃ LỌC THOUGHTS TRIỆT ĐỂ) ---
 async def get_google_response(messages, model_config):
     try:
         contents = []
@@ -148,12 +162,12 @@ async def get_google_response(messages, model_config):
             elif msg["role"] == "assistant":
                 contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
 
-        # Payload cho Gemini API - ĐÃ XÓA thinkingConfig để tránh lỗi 400
+        # Payload cho Gemini API
         payload = {
             "contents": contents,
             "generationConfig": {
                 "temperature": 0.9,
-                "maxOutputTokens": 1500,
+                "maxOutputTokens": 500,
                 "topP": 0.95,
                 "topK": 40
             }
@@ -175,17 +189,25 @@ async def get_google_response(messages, model_config):
                 if "candidates" in data and len(data["candidates"]) > 0:
                     candidate = data["candidates"][0]
                     if "content" in candidate and "parts" in candidate["content"]:
-                        # Lấy tất cả text từ parts
+                        # LỌC THOUGHTS: chỉ lấy phần KHÔNG có flag thought=True [citation:9]
                         answer_parts = []
                         for part in candidate["content"]["parts"]:
-                            if "text" in part:
+                            # Nếu không có flag thought, hoặc thought=False thì mới lấy
+                            if "text" in part and not part.get("thought", False):
                                 answer_parts.append(part["text"])
                         
                         if answer_parts:
                             full_answer = "".join(answer_parts)
-                            if len(full_answer) > 1900:
-                                full_answer = full_answer[:1897] + "..."
-                            return full_answer
+                            # Nếu vẫn còn thẻ <thought> hoặc <thinking>, xóa chúng đi
+                            import re
+                            full_answer = re.sub(r'<thought>.*?</thought>', '', full_answer, flags=re.DOTALL)
+                            full_answer = re.sub(r'<thinking>.*?</thinking>', '', full_answer, flags=re.DOTALL)
+                            full_answer = full_answer.strip()
+                            
+                            if full_answer and len(full_answer) > 0:
+                                if len(full_answer) > 1900:
+                                    full_answer = full_answer[:1897] + "..."
+                                return full_answer
                 
                 return "Tao đơ rồi, k hiểu Gemini trả về gì 🥀"
 
@@ -234,7 +256,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v18.4.0 (Fix 400)", inline=True)
+    embed.add_field(name="📜 Version", value="v20.2.0 (Filter Thoughts)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -244,10 +266,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v18.4.0 - Fix 400 Error", value="• Xóa thinkingConfig gây lỗi 400\n• Sửa systemInstruction -> systemInstruction (camelCase)\n• Giữ nguyên Groq + Google", inline=False)
-    embed.add_field(name="v18.2.1 - Dual Provider", value="• Giữ cả Groq + Google AI Studio\n• 6 models cho m chọn", inline=False)
-    embed.add_field(name="v18.1.0 - Chuyển nhà", value="• Chuyển sang Google AI Studio", inline=False)
-    embed.set_footer(text="Updated 15/04/2026 | Fixed 400")
+    embed.add_field(name="v20.2.0 - Filter Thoughts", value="• Lọc triệt để phần thoughts của Gemini\n• Regex xóa thẻ <thought> và <thinking>\n• Prompt cấm thinking mạnh hơn [citation:1][citation:6]", inline=False)
+    embed.add_field(name="v20.1.0 - Fix 400 Error", value="• Xóa thinkingConfig gây lỗi 400\n• Sửa systemInstruction", inline=False)
+    embed.add_field(name="v20.0.0 - Dual Provider", value="• Giữ cả Groq + Google AI Studio", inline=False)
+    embed.set_footer(text="Updated 15/04/2026 | No more thinking")
     await interaction.response.send_message(embed=embed)
 
 # ========================================================
