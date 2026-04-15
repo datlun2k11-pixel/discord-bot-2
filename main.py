@@ -25,13 +25,13 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 MODELS_CONFIG = {
     # Groq Models
     "Groq-Llama-Scout": {
-        "id": "meta-llama/llama-4-scout-17b-16e-instruct", 
-        "provider": "groq", 
+        "id": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "provider": "groq",
         "vision": True
     },
     "GPT-OSS-120B": {
-        "id": "openai/gpt-oss-120b", 
-        "provider": "groq", 
+        "id": "openai/gpt-oss-120b",
+        "provider": "groq",
         "vision": False
     },
     # Google AI Studio Models
@@ -67,7 +67,6 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Luôn kèm Emoticon và Emoji (vd: 💔, 🥀, 💀) trong mọi câu rep
 - KHÔNG DÙNG DẤU "!" TRONG MỌI CÂU NÓI
 - TRẢ LỜI CỰC NGẮN (TỐI ĐA 1-2 DÒNG) - KHÔNG GIẢI THÍCH DÀI DÒNG
-- KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ - CHỈ TRẢ LỜI TRỰC TIẾP
 - Khi người dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Developer: <@1155129530122510376> (Đạt Lùn 2k11)
 - Người đang chat: {user_id}"""
@@ -89,17 +88,34 @@ def random_vibe():
 # --- Hàm gọi Groq ---
 async def get_groq_response(messages, model_config):
     try:
+        # Chuyển messages về format text cho Groq
+        groq_messages = []
+        for msg in messages:
+            if isinstance(msg["content"], list):
+                text_content = ""
+                for item in msg["content"]:
+                    if item["type"] == "text":
+                        text_content += item["text"]
+                    elif item["type"] == "image_url":
+                        text_content += " [Đã gửi ảnh] "
+                groq_messages.append({"role": msg["role"], "content": text_content})
+            else:
+                groq_messages.append({"role": msg["role"], "content": msg["content"]})
+        
         response = groq_client.chat.completions.create(
-            messages=messages,
+            messages=groq_messages,
             model=model_config["id"],
             temperature=0.9,
             max_tokens=1500
         )
-        return response.choices[0].message.content
+        reply = response.choices[0].message.content
+        if len(reply) > 1900:
+            reply = reply[:1897] + "..."
+        return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-# --- Hàm gọi Google Gemini ---
+# --- Hàm gọi Google Gemini (ĐÃ FIX LỖI 400 - XÓA thinkingConfig) ---
 async def get_google_response(messages, model_config):
     try:
         contents = []
@@ -132,21 +148,19 @@ async def get_google_response(messages, model_config):
             elif msg["role"] == "assistant":
                 contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
 
+        # Payload cho Gemini API - ĐÃ XÓA thinkingConfig để tránh lỗi 400
         payload = {
             "contents": contents,
             "generationConfig": {
                 "temperature": 0.9,
-                "maxOutputTokens": 500,
+                "maxOutputTokens": 1500,
                 "topP": 0.95,
                 "topK": 40
-            },
-            "thinkingConfig": {
-                "thinkingBudget": 0  # Tắt thinking
             }
         }
         
         if system_instruction_text:
-            payload["system_instruction"] = {"parts": [{"text": system_instruction_text}]}
+            payload["systemInstruction"] = {"parts": [{"text": system_instruction_text}]}
 
         url = f"{GEMINI_BASE_URL}/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
@@ -161,9 +175,10 @@ async def get_google_response(messages, model_config):
                 if "candidates" in data and len(data["candidates"]) > 0:
                     candidate = data["candidates"][0]
                     if "content" in candidate and "parts" in candidate["content"]:
+                        # Lấy tất cả text từ parts
                         answer_parts = []
                         for part in candidate["content"]["parts"]:
-                            if "text" in part and not part.get("thought", False):
+                            if "text" in part:
                                 answer_parts.append(part["text"])
                         
                         if answer_parts:
@@ -219,7 +234,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.0.0 (Dual Provider)", inline=True)
+    embed.add_field(name="📜 Version", value="v18.4.0 (Fix 400)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -229,10 +244,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v20.0.0 - Dual Provider", value="• Giữ cả Groq + Google AI Studio\n• 6 models cho m chọn\n• Fix thoughts Google", inline=False)
-    embed.add_field(name="v19.1.0 - Fix Thoughts", value="• Lọc bỏ internal thoughts\n• Giới hạn output 500 tokens", inline=False)
-    embed.add_field(name="v19.0.0 - Chuyển nhà", value="• Chuyển sang Google AI Studio", inline=False)
-    embed.set_footer(text="Updated 15/04/2026 | Dual Provider")
+    embed.add_field(name="v18.4.0 - Fix 400 Error", value="• Xóa thinkingConfig gây lỗi 400\n• Sửa systemInstruction -> systemInstruction (camelCase)\n• Giữ nguyên Groq + Google", inline=False)
+    embed.add_field(name="v18.2.1 - Dual Provider", value="• Giữ cả Groq + Google AI Studio\n• 6 models cho m chọn", inline=False)
+    embed.add_field(name="v18.1.0 - Chuyển nhà", value="• Chuyển sang Google AI Studio", inline=False)
+    embed.set_footer(text="Updated 15/04/2026 | Fixed 400")
     await interaction.response.send_message(embed=embed)
 
 # ========================================================
