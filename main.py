@@ -70,7 +70,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - TUYỆT ĐỐI KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ, KHÔNG ĐƯỢC DÙNG THẺ <thinking> hay <thought>
 - CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
 - Khi người dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
-- Developer: <@1155129530122510376> (Đạt Lùn 2k11)
+- Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thọ Phú, Triệu Sơn, Thanh Hoá.
 - Người đang chat: {user_id}"""
 
 chat_history = {}
@@ -106,8 +106,8 @@ async def get_groq_response(messages, model_config):
         response = groq_client.chat.completions.create(
             messages=groq_messages,
             model=model_config["id"],
-            temperature=0.9,
-            max_tokens=1500
+            temperature=0.7,
+            max_tokens=2000
         )
         reply = response.choices[0].message.content
         if len(reply) > 1900:
@@ -153,8 +153,8 @@ async def get_google_response(messages, model_config):
         payload = {
             "contents": contents,
             "generationConfig": {
-                "temperature": 0.9,
-                "maxOutputTokens": 1500,
+                "temperature": 0.7,
+                "maxOutputTokens": 2000,
                 "topP": 0.95,
                 "topK": 40
             }
