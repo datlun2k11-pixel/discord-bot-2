@@ -34,18 +34,16 @@ MODELS_CONFIG = {
         "provider": "groq",
         "vision": False
     },
-    # Google AI Studio Models
+        # Google AI Studio Models
     "Google-Gemma4-26B": {
         "id": "gemma-4-26b-a4b-it",
         "provider": "google",
-        "vision": True,
-        "context_window": 256000
+        "vision": True
     },
     "Google-Gemma4-31B": {
         "id": "gemma-4-31b-it",
         "provider": "google",
-        "vision": True,
-        "context_window": 256000
+        "vision": True
     },
     "Google-Gemma3-27B": {
         "id": "gemma-3-27b-it",
@@ -127,8 +125,7 @@ async def get_groq_response(messages, model_config):
         return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
-
-# --- Hàm gọi Google Gemini (ĐÃ LỌC THOUGHTS TRIỆT ĐỂ) ---
+# --- Hàm gọi Google Gemini (ĐÃ FIX LỖI 400 & LỌC THOUGHTS) ---
 async def get_google_response(messages, model_config):
     try:
         contents = []
@@ -138,15 +135,17 @@ async def get_google_response(messages, model_config):
             if msg["role"] == "system":
                 system_instruction_text = msg["content"]
                 continue
-            elif msg["role"] == "user":
-                parts = []
-                content = msg["content"]
-                
-                if isinstance(content, list):
-                    for item in content:
-                        if item["type"] == "text":
-                            parts.append({"text": item["text"]})
-                        elif item["type"] == "image_url":
+            
+            parts = []
+            role = "model" if msg["role"] == "assistant" else "user"
+            
+            if isinstance(msg["content"], list):
+                for item in msg["content"]:
+                    if item["type"] == "text":
+                        parts.append({"text": item["text"]})
+                    elif item["type"] == "image_url":
+                        try:
+                            # Tách lấy phần data base64 thực sự
                             base64_data = item["image_url"]["url"].split(",")[1]
                             parts.append({
                                 "inline_data": {
@@ -154,64 +153,53 @@ async def get_google_response(messages, model_config):
                                     "data": base64_data
                                 }
                             })
-                else:
-                    parts.append({"text": content})
-                    
-                contents.append({"role": "user", "parts": parts})
-            elif msg["role"] == "assistant":
-                contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
+                        except: continue
+            else:
+                parts.append({"text": str(msg["content"])})
+                
+            contents.append({"role": role, "parts": parts})
 
-        # Payload cho Gemini API
+        # Payload chuẩn chỉnh cho v1beta
         payload = {
             "contents": contents,
             "generationConfig": {
                 "temperature": 0.8,
-                "maxOutputTokens": 2250,
+                "maxOutputTokens": 1000,
                 "topP": 0.95,
                 "topK": 40
             }
         }
         
         if system_instruction_text:
-            payload["systemInstruction"] = {"parts": [{"text": system_instruction_text}]}
+            payload["system_instruction"] = {"parts": [{"text": system_instruction_text}]}
 
-        url = f"{GEMINI_BASE_URL}/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
+        # Fix cứng URL để tránh lỗi cộng chuỗi sai
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload) as response:
                 if response.status != 200:
-                    error_text = await response.text()
+                    err_detail = await response.text()
+                    print(f"DEBUG GOOGLE ERROR: {err_detail}") # Check log ở terminal nhé
                     return f"Lỗi Google API ({response.status}) 💀"
                 
                 data = await response.json()
                 
-                if "candidates" in data and len(data["candidates"]) > 0:
+                if "candidates" in data and data["candidates"]:
                     candidate = data["candidates"][0]
                     if "content" in candidate and "parts" in candidate["content"]:
-                        # LỌC THOUGHTS: chỉ lấy phần KHÔNG có flag thought=True [citation:9]
-                        answer_parts = []
-                        for part in candidate["content"]["parts"]:
-                            # Nếu không có flag thought, hoặc thought=False thì mới lấy
-                            if "text" in part and not part.get("thought", False):
-                                answer_parts.append(part["text"])
-                        
+                        # Lọc bỏ phần suy nghĩ (thinking) nếu có
+                        answer_parts = [p["text"] for p in candidate["content"]["parts"] if "text" in p and not p.get("thought")]
                         if answer_parts:
                             full_answer = "".join(answer_parts)
-                            # Nếu vẫn còn thẻ <thought> hoặc <thinking>, xóa chúng đi
                             import re
-                            full_answer = re.sub(r'<thought>.*?</thought>', '', full_answer, flags=re.DOTALL)
-                            full_answer = re.sub(r'<thinking>.*?</thinking>', '', full_answer, flags=re.DOTALL)
-                            full_answer = full_answer.strip()
-                            
-                            if full_answer and len(full_answer) > 0:
-                                if len(full_answer) > 1900:
-                                    full_answer = full_answer[:1897] + "..."
-                                return full_answer
+                            full_answer = re.sub(r'<(thought|thinking)>.*?</\1>', '', full_answer, flags=re.DOTALL).strip()
+                            return full_answer[:1900] if full_answer else "Nín thinh r 🥀"
                 
-                return "Tao đơ rồi, k hiểu Gemini trả về gì 🥀"
+                return "Gemini méo trả về text j cả 🥀"
 
     except Exception as e:
-        return f"Lỗi Google r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
+        return f"Lỗi Google r m ơi: {str(e)[:50]} (ಠ_ಠ)💔"
 
 # --- Router chọn provider ---
 async def get_model_response(messages, model_config):
@@ -219,15 +207,20 @@ async def get_model_response(messages, model_config):
         return await get_groq_response(messages, model_config)
     elif model_config["provider"] == "google":
         return await get_google_response(messages, model_config)
-    else:
-        return "Provider lạ quá m ơi 💀"
+    return "Provider lạ quá m ơi 💀"
 
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
-    await bot.tree.sync()
+    # Sync slash commands khi bot lên sóng
+    try:
+        synced = await bot.tree.sync()
+        print(f"Đã sync {len(synced)} lệnh slash!")
+    except Exception as e:
+        print(f"Lỗi sync: {e}")
     print(f"GenA-bot Ready with Groq + Google! 🔥")
+
 
 # ========================================================
 # 3 CMDS CHÍNH
@@ -255,7 +248,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v18.8.0 (Filter Thoughts)", inline=True)
+    embed.add_field(name="📜 Version", value="v18.9.0 (Filter Thoughts)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -265,7 +258,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v18.8.0 - Gemma 3", value="• Thêm 2 model Gemma3", inline=False)
+    embed.add_field(name="v18.9.0 - Gemma 3", value="• Thêm 2 model Gemma3\n• Fix 1 số bug nhỏ", inline=False)
     embed.add_field(name="v18.5.0 - Filter Thoughts", value="• Lọc triệt để phần thoughts của Gemini\n• Regex xóa thẻ <thought> và <thinking>\n• Prompt cấm thinking mạnh hơn [citation:1][citation:6]", inline=False)
     embed.add_field(name="v18.4.2 - Fix 400 Error", value="• Xóa thinkingConfig gây lỗi 400\n• Sửa systemInstruction", inline=False)
     embed.set_footer(text="Updated 15/04/2026 | No more thinking")
