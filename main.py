@@ -120,8 +120,8 @@ async def get_groq_response(messages, model_config):
         response = groq_client.chat.completions.create(
             messages=groq_messages,
             model=model_config["id"],
-            temperature=0.7,
-            max_tokens=2000
+            temperature=0.8,
+            max_tokens=2250
         )
         reply = response.choices[0].message.content
         if len(reply) > 1900:
@@ -167,8 +167,8 @@ async def get_google_response(messages, model_config):
         payload = {
             "contents": contents,
             "generationConfig": {
-                "temperature": 0.7,
-                "maxOutputTokens": 2000,
+                "temperature": 0.8,
+                "maxOutputTokens": 2250,
                 "topP": 0.95,
                 "topK": 40
             }
