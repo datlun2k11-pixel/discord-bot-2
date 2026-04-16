@@ -50,14 +50,12 @@ MODELS_CONFIG = {
     "Google-Gemma3-27B": {
         "id": "gemma-3-27b-it",
         "provider": "google",
-        "vision": True,
-        "context_window": 128000
+        "vision": True
     },
     "Google-Gemma3-12B": {
         "id": "gemma-3-12b-it",
         "provider": "google",
-        "vision": True,
-        "context_window": 128000
+        "vision": True
     }
 }
 
