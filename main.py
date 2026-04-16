@@ -80,6 +80,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - TUYỆT ĐỐI KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ, KHÔNG ĐƯỢC DÙNG THẺ <thinking> hay <thought>
 - CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
 - Khi người dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
+- Avt của mày là một con mèo
 - Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thọ Phú, Triệu Sơn, Thanh Hoá.
 - Người đang chat: {user_id}"""
 
@@ -117,7 +118,7 @@ async def get_groq_response(messages, model_config):
             messages=groq_messages,
             model=model_config["id"],
             temperature=0.8,
-            max_tokens=2250
+            max_tokens=2048
         )
         reply = response.choices[0].message.content
         if len(reply) > 1900:
@@ -171,7 +172,7 @@ async def get_google_response(messages, model_config):
         # 3. Payload TUYỆT ĐỐI KHÔNG CÓ KEY "system_instruction"
         payload = {
             "contents": final_contents,
-            "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1000},
+            "generationConfig": {"temperature": 0.8, "maxOutputTokens": 2048},
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -237,7 +238,7 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
         
         embed = discord.Embed(
             title="Model switched",
-            description=f"Đã lên đời **{chon_model.name}** r nhé bro\n(¬_¬)",
+            description=f"đã đổi thành **{chon_model.name}** r nhé bro\nok✌🏿🥀",
             color=0x00ff9d
         )
         embed.set_footer(text=f"Provider: {provider} | {random_vibe()}")
@@ -285,7 +286,7 @@ async def clear(interaction: discord.Interaction):
         current_time=now
     )
     chat_history[uid] = [{"role": "system", "content": current_sys}]
-    await interaction.response.send_message(f"Đã xoá não! {random_vibe()} 🔥")
+    await interaction.response.send_message(f"Đã reset ký ức")
 
 @bot.event
 async def on_message(message):
