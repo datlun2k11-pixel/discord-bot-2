@@ -132,16 +132,15 @@ async def get_google_response(messages, model_config):
         final_contents = []
         sys_prompt = ""
 
-        # 1. Lọc lấy system prompt
         for m in messages:
             if m["role"] == "system":
                 sys_prompt = m["content"]
                 break
 
-        # 2. Build contents cho Google API
         first_user = True
         for m in messages:
-            if m["role"] == "system": continue
+            if m["role"] == "system": 
+                continue
             
             parts = []
             role = "model" if m["role"] == "assistant" else "user"
@@ -151,27 +150,32 @@ async def get_google_response(messages, model_config):
                     if item["type"] == "text":
                         t = item["text"]
                         if role == "user" and first_user and sys_prompt:
-                            t = f"INSTRUCTION: {sys_prompt}\n\nUSER: {t}"
+                            t = f"{sys_prompt}\n\n{t}"
                             first_user = False
                         parts.append({"text": t})
                     elif item["type"] == "image_url":
                         try:
                             b64 = item["image_url"]["url"].split(",")[1]
                             parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-                        except: continue
+                        except: 
+                            continue
             else:
                 t = str(m["content"])
                 if role == "user" and first_user and sys_prompt:
-                    t = f"INSTRUCTION: {sys_prompt}\n\nUSER: {t}"
+                    t = f"{sys_prompt}\n\n{t}"
                     first_user = False
                 parts.append({"text": t})
             
             final_contents.append({"role": role, "parts": parts})
 
-        # 3. Payload có kèm Tool Google Search
         payload = {
             "contents": final_contents,
-            "generationConfig": {"temperature": 0.8, "maxOutputTokens": 2048},
+            "generationConfig": {
+                "temperature": 0.9,
+                "maxOutputTokens": 4096,   # tăng mạnh
+                "topP": 0.95,
+                "topK": 64
+            },
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -185,24 +189,24 @@ async def get_google_response(messages, model_config):
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload) as response:
                 data = await response.json()
+                
                 if response.status != 200:
-                    print(f"FULL ERROR: {data}")
-                    return f"Lỗi Google API ({response.status}) 💀"
+                    print(f"Google error {response.status}: {data}")
+                    return f"Lỗi API {response.status} 💀"
                 
-                # 4. Xử lý kết quả trả về (hỗ trợ cả text thường và grounding text)
                 candidate = data.get('candidates', [{}])[0]
-                content = candidate.get('content', {})
-                parts = content.get('parts', [{}])
-                
-                res_text = parts[0].get('text', "")
-                
-                # Filter thinking/thought cho sạch
+                parts = candidate.get('content', {}).get('parts', [{}])
+                res_text = parts[0].get('text', "") if parts else ""
+
+                # lọc thinking triệt để hơn
                 import re
-                res_text = re.sub(r'<(thought|thinking)>.*?</\1>', '', res_text, flags=re.DOTALL).strip()
-                return res_text[:1900] if res_text else "Nín thinh r 🥀"
+                res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                res_text = re.sub(r'^(thinking|reasoning):?.*$', '', res_text, flags=re.MULTILINE | re.IGNORECASE).strip()
+
+                return res_text[:1900] if res_text else "Im thin quá bro, thử lại đi 🥀💔"
 
     except Exception as e:
-        return f"Lỗi code r bradar: {str(e)[:50]} 💔"
+        return f"Lỗi code: {str(e)[:80]} 💀"
 # --- Router chọn provider ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
