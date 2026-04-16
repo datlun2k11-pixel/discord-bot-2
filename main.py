@@ -159,7 +159,7 @@ async def get_google_response(messages, model_config):
                 
             contents.append({"role": role, "parts": parts})
 
-        # Payload chuẩn chỉnh cho v1beta
+                # Payload nguy hiểm
         payload = {
             "contents": contents,
             "generationConfig": {
@@ -167,8 +167,15 @@ async def get_google_response(messages, model_config):
                 "maxOutputTokens": 1000,
                 "topP": 0.95,
                 "topK": 40
-            }
+            },
+            "safetySettings": [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+            ]
         }
+
         
         if system_instruction_text:
             payload["system_instruction"] = {"parts": [{"text": system_instruction_text}]}
