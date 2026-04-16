@@ -323,7 +323,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v18.9.6 - New Models", value="• Model mới `Gemini 3.1 flash lite`", inline=False)
+    embed.add_field(name="v19.1.0 - New Models", value="• Model mới `Gemini 3.1 flash lite`", inline=False)
     embed.add_field(name="v19.0.0 - Full Fix", value="• Xóa enable_thinking (lỗi 400)\n• Fix systemInstruction cho Gemma 3/4\n• Code clean lại từ đầu", inline=False)
     embed.set_footer(text="Updated 16/04/2026")
     await interaction.response.send_message(embed=embed)
