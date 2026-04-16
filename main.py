@@ -171,7 +171,6 @@ async def get_google_response(messages, model_config):
         # 3. Payload có kèm Tool Google Search
         payload = {
             "contents": final_contents,
-            "tools": [{"google_search": {}}],   # thay vì google_search_retrieval
             "generationConfig": {"temperature": 0.8, "maxOutputTokens": 2048},
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
