@@ -127,38 +127,36 @@ async def get_groq_response(messages, model_config):
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-# --- Hàm gọi Google (ĐÃ SỬA LẠI HOÀN TOÀN) ---
+# --- Hàm gọi Google (FIXED CHO GEMMA 4) ---
 async def get_google_response(messages, model_config):
     try:
-        # Gom system prompt vào message đầu tiên của user
-        sys_prompt = ""
+        # Tách system prompt
+        system_text = ""
+        user_messages = []
+        
         for m in messages:
             if m["role"] == "system":
-                sys_prompt = m["content"]
-                break
+                # Gemma 4 hỗ trợ system_instruction riêng, ko cần gắn vào user nữa
+                if isinstance(m["content"], str):
+                    system_text = m["content"]
+            else:
+                user_messages.append(m)
 
+        # Build contents array cho Gemma 4
         contents = []
-        for m in messages:
-            if m["role"] == "system":
-                continue  # Bỏ qua system, sẽ gắn vào message user đầu tiên
-            
-            parts = []
+        
+        for m in user_messages:
             role = "model" if m["role"] == "assistant" else "user"
+            parts = []
             
             if isinstance(m["content"], list):
-                # Message có cả text và image
+                # Multimodal: text + image
                 for item in m["content"]:
                     if item["type"] == "text":
-                        text = item["text"]
-                        # Nếu là user đầu tiên và có system prompt
-                        if role == "user" and len(contents) == 0 and sys_prompt:
-                            text = f"{sys_prompt}\n\n{text}"
-                        parts.append({"text": text})
+                        parts.append({"text": item["text"]})
                     elif item["type"] == "image_url":
-                        # Xử lý ảnh base64
                         img_url = item["image_url"]["url"]
                         if img_url.startswith("data:image"):
-                            # Tách base64 data
                             header, b64_data = img_url.split(",", 1)
                             mime_type = header.split(":")[1].split(";")[0]
                             parts.append({
@@ -168,31 +166,28 @@ async def get_google_response(messages, model_config):
                                 }
                             })
             else:
-                # Message chỉ có text
-                text = str(m["content"])
-                if role == "user" and len(contents) == 0 and sys_prompt:
-                    text = f"{sys_prompt}\n\n{text}"
-                parts.append({"text": text})
+                # Text only
+                if m["content"] and str(m["content"]).strip():
+                    parts.append({"text": str(m["content"])})
             
-            if parts:  # Chỉ thêm nếu có parts
+            # Chỉ thêm nếu có parts (tránh lỗi "contents.parts must not be empty")
+            if parts:
                 contents.append({
                     "role": role,
                     "parts": parts
                 })
 
-        # Nếu không có content nào (trường hợp lỗi)
         if not contents:
             return "K có nội dung để xử lý bro 🥀"
 
-        # Payload đúng chuẩn Gemini API
+        # Build payload chuẩn Gemma 4
         payload = {
             "contents": contents,
             "generationConfig": {
                 "temperature": 0.9,
                 "maxOutputTokens": 2048,
                 "topP": 0.95,
-                "topK": 40,
-                "enable_thinking": False
+                "topK": 40
             },
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -201,40 +196,49 @@ async def get_google_response(messages, model_config):
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
             ]
         }
+        
+        # Thêm system_instruction nếu có (Gemma 4 hỗ trợ native)
+        if system_text:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_text}]
+            }
 
+        # API endpoint - dùng v1beta cho Gemma 4
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as response:
+            async with session.post(url, json=payload, headers={"Content-Type": "application/json"}) as response:
                 data = await response.json()
                 
                 if response.status != 200:
-                    print(f"Google error {response.status}: {data}")
-                    return f"Lỗi API {response.status} 💀"
+                    print(f"Google error {response.status}: {json.dumps(data, indent=2)}")
+                    return f"Lỗi API {response.status}: {data.get('error', {}).get('message', 'Unknown')} 💀"
                 
-                # Parse response
+                # Parse response chuẩn
                 if "candidates" in data and len(data["candidates"]) > 0:
                     candidate = data["candidates"][0]
+                    
+                    # Check finish reason
+                    if candidate.get("finishReason") == "SAFETY":
+                        return "Bị chặn vì safety settings bro 🥀"
+                    
                     if "content" in candidate and "parts" in candidate["content"]:
                         parts = candidate["content"]["parts"]
                         if parts and "text" in parts[0]:
                             res_text = parts[0]["text"]
                             
-                            # Lọc thinking tags
+                            # Lọc thinking tags nếu có
                             res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
-                            res_text = re.sub(r'^(thinking|reasoning):?.*$', '', res_text, flags=re.MULTILINE | re.IGNORECASE).strip()
                             
                             if res_text:
                                 return res_text[:1900]
                 
-                # Fallback nếu không parse được text
-                print(f"Unexpected response structure: {json.dumps(data, indent=2)[:500]}")
+                print(f"Unexpected response: {json.dumps(data, indent=2)[:500]}")
                 return "Im thin thít, thử lại đi bro 🥀"
 
     except Exception as e:
         print(f"Google exception: {str(e)}")
-        return f"Lỗi code: {str(e)[:80]} 💀"
-
+        return f"Lỗi code: {str(e)[:100]} 💀"
 # --- Router chọn provider ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
