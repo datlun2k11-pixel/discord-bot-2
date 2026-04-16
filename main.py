@@ -60,7 +60,7 @@ MODELS_CONFIG = {
         "vision": True
     }
 }
-
+# Sửa lại đoạn MODEL_CHOICES này cho chuẩn đét nè:
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
@@ -70,6 +70,7 @@ MODEL_CHOICES = [
     app_commands.Choice(name="Gemma 3 12B (Google - Vision)", value="Google-Gemma3-12B"),
     app_commands.Choice(name="Gemini 3.1 flash lite (Google - Vision)", value="Google-Gemini3.1-Flast-Lite")
 ]
+
 
 CURRENT_MODEL = "Groq-Llama-Scout"
 
