@@ -46,6 +46,18 @@ MODELS_CONFIG = {
         "provider": "google",
         "vision": True,
         "context_window": 256000
+    },
+    "Google-Gemma3-27B": {
+        "id": "gemma-3-27b-it",
+        "provider": "google",
+        "vision": True,
+        "context_window": 128000
+    },
+    "Google-Gemma3-12B": {
+        "id": "gemma-3-12b-it",
+        "provider": "google",
+        "vision": True,
+        "context_window": 128000
     }
 }
 
@@ -53,7 +65,9 @@ MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
     app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
-    app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B")
+    app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
+    app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
+    app_commands.Choice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
 ]
 
 CURRENT_MODEL = "Groq-Llama-Scout"
@@ -243,7 +257,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v18.5.0 (Filter Thoughts)", inline=True)
+    embed.add_field(name="📜 Version", value="v18.8.0 (Filter Thoughts)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -253,9 +267,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v18.8.0 - Gemma 3", value="• Thêm 2 model Gemma3", inline=False)
     embed.add_field(name="v18.5.0 - Filter Thoughts", value="• Lọc triệt để phần thoughts của Gemini\n• Regex xóa thẻ <thought> và <thinking>\n• Prompt cấm thinking mạnh hơn [citation:1][citation:6]", inline=False)
     embed.add_field(name="v18.4.2 - Fix 400 Error", value="• Xóa thinkingConfig gây lỗi 400\n• Sửa systemInstruction", inline=False)
-    embed.add_field(name="v18.2.0 - Dual Provider", value="• Giữ cả Groq + Google AI Studio", inline=False)
     embed.set_footer(text="Updated 15/04/2026 | No more thinking")
     await interaction.response.send_message(embed=embed)
 
