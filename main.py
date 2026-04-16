@@ -191,8 +191,8 @@ async def get_google_response(messages, model_config):
                 "temperature": 0.9,
                 "maxOutputTokens": 2048,
                 "topP": 0.95,
-                "topK": 40
-                enable_thinking=False
+                "topK": 40,
+                "enable_thinking": False
             },
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
