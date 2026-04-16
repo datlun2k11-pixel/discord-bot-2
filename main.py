@@ -124,8 +124,7 @@ async def get_groq_response(messages, model_config):
         return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
-
-# --- GOOGLE (FIXED) ---
+# --- GOOGLE (FIXED CHO GEMMA 4 THINKING) ---
 async def get_google_response(messages, model_config):
     try:
         # Tách system và user messages
@@ -139,6 +138,7 @@ async def get_google_response(messages, model_config):
                 user_messages.append(m)
 
         # Build contents - gắn system vào user đầu tiên
+        # TẮT THINKING bằng cách KHÔNG thêm <|think|>
         contents = []
         first_user = True
         
@@ -147,7 +147,6 @@ async def get_google_response(messages, model_config):
             parts = []
             
             if isinstance(m["content"], list):
-                # Multimodal (text + image)
                 text_parts = []
                 image_parts = []
                 
@@ -166,7 +165,7 @@ async def get_google_response(messages, model_config):
                                 }
                             })
                 
-                # Gắn system vào text đầu tiên
+                # Gắn system vào text đầu tiên, KHÔNG thêm <|think|>
                 if text_parts and role == "user" and first_user and system_text:
                     text_parts[0] = f"{system_text}\n\n{text_parts[0]}"
                     first_user = False
@@ -176,7 +175,6 @@ async def get_google_response(messages, model_config):
                 parts.extend(image_parts)
                 
             else:
-                # Text only
                 text = str(m["content"]) if m["content"] else ""
                 if role == "user" and first_user and system_text:
                     text = f"{system_text}\n\n{text}"
@@ -195,10 +193,10 @@ async def get_google_response(messages, model_config):
         payload = {
             "contents": contents,
             "generationConfig": {
-                "temperature": 0.9,
+                "temperature": 1.0,  # Gemma 4 khuyến nghị 1.0
                 "maxOutputTokens": 2048,
                 "topP": 0.95,
-                "topK": 40
+                "topK": 64  # Gemma 4 khuyến nghị 64
             },
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -218,27 +216,45 @@ async def get_google_response(messages, model_config):
                     print(f"Google error {response.status}: {json.dumps(data, indent=2)}")
                     return f"Lỗi API {response.status}: {data.get('error', {}).get('message', 'Unknown')} 💀"
                 
+                # Parse response - xử lý cả trường hợp có thinking
                 if "candidates" in data and len(data["candidates"]) > 0:
                     candidate = data["candidates"][0]
                     
                     if candidate.get("finishReason") == "SAFETY":
                         return "Bị chặn vì safety settings bro 🥀"
                     
+                    # Check nếu có content
                     if "content" in candidate and "parts" in candidate["content"]:
                         parts = candidate["content"]["parts"]
-                        if parts and "text" in parts[0]:
-                            res_text = parts[0]["text"]
-                            res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
-                            if res_text:
-                                return res_text[:1900]
+                        
+                        # Tìm text part (có thể có nhiều parts)
+                        for part in parts:
+                            if "text" in part:
+                                res_text = part["text"]
+                                
+                                # Lọc thinking tags nếu có
+                                res_text = re.sub(r'<\|?think\|?>.*?</?\|?think\|?>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                                res_text = re.sub(r'<\|channel>thought.*?\|channel\|>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                                res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                                
+                                if res_text:
+                                    return res_text[:1900]
+                        
+                        # Nếu ko có text nào có nội dung
+                        print(f"Empty text in parts: {json.dumps(parts, indent=2)}")
+                        return "Gemma 4 trả về rỗng, thử lại đi bro 🥀"
+                    
+                    # Trường hợp có reasoning field (hiếm khi xảy ra với Gemini API nhưng check cho chắc)
+                    elif "reasoning" in candidate:
+                        return candidate["reasoning"][:1900]
                 
-                print(f"Unexpected response: {json.dumps(data, indent=2)[:500]}")
+                # Log để debug
+                print(f"Unexpected response structure: {json.dumps(data, indent=2)[:800]}")
                 return "Im thin thít, thử lại đi bro 🥀"
 
     except Exception as e:
         print(f"Google exception: {str(e)}")
         return f"Lỗi code: {str(e)[:100]} 💀"
-
 # --- Router ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
