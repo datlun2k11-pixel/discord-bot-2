@@ -125,18 +125,19 @@ async def get_groq_response(messages, model_config):
         return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
+ # --- Hàm gọi Google ---
 async def get_google_response(messages, model_config):
     try:
         contents = []
         system_text = ""
         
-        # Tách system prompt ra
+        # 1. Lấy system prompt ra trước
         for msg in messages:
             if msg["role"] == "system":
                 system_text = msg["content"]
                 break
 
-        # Nếu là Gemma (3 hoặc 4), nhét system prompt vào câu đầu tiên của user
+        # 2. Build lại contents KHÔNG có role system
         first_user_processed = False
         for msg in messages:
             if msg["role"] == "system": continue
@@ -144,14 +145,13 @@ async def get_google_response(messages, model_config):
             parts = []
             role = "model" if msg["role"] == "assistant" else "user"
             
-            # Xử lý nội dung (text/ảnh)
             if isinstance(msg["content"], list):
                 for item in msg["content"]:
                     if item["type"] == "text":
                         text_val = item["text"]
-                        # Nhồi system instruction vào đây nếu là user msg đầu tiên
+                        # Trộn system prompt vào câu chat đầu tiên của user
                         if role == "user" and not first_user_processed and system_text:
-                            text_val = f"{system_text}\n\nUSER MESSAGE: {text_val}"
+                            text_val = f"SYSTEM_INSTRUCTION: {system_text}\n\nUSER_PROMPT: {text_val}"
                             first_user_processed = True
                         parts.append({"text": text_val})
                     elif item["type"] == "image_url":
@@ -162,15 +162,20 @@ async def get_google_response(messages, model_config):
             else:
                 text_val = str(msg["content"])
                 if role == "user" and not first_user_processed and system_text:
-                    text_val = f"{system_text}\n\nUSER MESSAGE: {text_val}"
+                    text_val = f"SYSTEM_INSTRUCTION: {system_text}\n\nUSER_PROMPT: {text_val}"
                     first_user_processed = True
                 parts.append({"text": text_val})
                 
             contents.append({"role": role, "parts": parts})
 
+        # 3. Payload SIÊU SẠCH (Tuyệt đối k có key system_instruction)
         payload = {
             "contents": contents,
-            "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1000, "topP": 0.95},
+            "generationConfig": {
+                "temperature": 0.8,
+                "maxOutputTokens": 1000,
+                "topP": 0.95
+            },
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -178,8 +183,6 @@ async def get_google_response(messages, model_config):
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
             ]
         }
-        
-        # BỎ HOÀN TOÀN dòng payload["system_instruction"] = ... ở đây
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
@@ -187,13 +190,19 @@ async def get_google_response(messages, model_config):
             async with session.post(url, json=payload) as response:
                 data = await response.json()
                 if response.status != 200:
-                    print(f"DEBUG: {data}")
-                    return f"Lỗi r bradar ({response.status}) 💀"
+                    print(f"DEBUG ERROR: {json.dumps(data, indent=2)}")
+                    return f"Lỗi Google API ({response.status}) 💀"
                 
-                return data['candidates'][0]['content']['parts'][0]['text'][:1900]
+                # Trả về text và lọc thoughts (nếu có)
+                if "candidates" in data and data["candidates"]:
+                    res_text = data['candidates'][0]['content']['parts'][0]['text']
+                    import re
+                    res_text = re.sub(r'<(thought|thinking)>.*?</\1>', '', res_text, flags=re.DOTALL).strip()
+                    return res_text[:1900]
+                return "AI nín thinh r 🥀"
 
     except Exception as e:
-        return f"Lỗi Google r m ơi: {str(e)[:50]} (ಠ_ಠ)💔"
+        return f"Lỗi code r bradar: {str(e)[:50]} (ಠ_ಠ)💔"
 # --- Router chọn provider ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
