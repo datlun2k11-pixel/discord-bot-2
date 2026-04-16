@@ -56,7 +56,7 @@ MODELS_CONFIG = {
     },
      "Google-Gemini3.1-Flast-Lite": {
         "id": "gemini-3.1-flash-lite-preview",
-        "provider": "google",
+        "provider": "google"
         "vision": True
     }
     
