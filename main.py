@@ -36,12 +36,12 @@ MODELS_CONFIG = {
     },
     # Google AI Studio Models
     "Google-Gemma4-26B": {
-        "id": "gemma-3-27b-it",  # TẠM THAY BẰNG MODEL CÓ SẴN
+        "id": "gemma-4-26b-a4b-it",
         "provider": "google",
         "vision": True
     },
     "Google-Gemma4-31B": {
-        "id": "gemma-3-27b-it",  # TẠM THAY BẰNG MODEL CÓ SẴN
+        "id": "gemma-4-31b-it",
         "provider": "google",
         "vision": True
     },
@@ -60,6 +60,8 @@ MODELS_CONFIG = {
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
+    app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
+    app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
     app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
     app_commands.Choice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
 ]
