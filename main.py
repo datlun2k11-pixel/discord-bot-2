@@ -125,49 +125,52 @@ async def get_groq_response(messages, model_config):
         return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
-# --- Hàm gọi Google Gemini (ĐÃ FIX LỖI 400 & LỌC THOUGHTS) ---
 async def get_google_response(messages, model_config):
     try:
         contents = []
-        system_instruction_text = None
+        system_text = ""
         
+        # Tách system prompt ra
         for msg in messages:
             if msg["role"] == "system":
-                system_instruction_text = msg["content"]
-                continue
+                system_text = msg["content"]
+                break
+
+        # Nếu là Gemma (3 hoặc 4), nhét system prompt vào câu đầu tiên của user
+        first_user_processed = False
+        for msg in messages:
+            if msg["role"] == "system": continue
             
             parts = []
             role = "model" if msg["role"] == "assistant" else "user"
             
+            # Xử lý nội dung (text/ảnh)
             if isinstance(msg["content"], list):
                 for item in msg["content"]:
                     if item["type"] == "text":
-                        parts.append({"text": item["text"]})
+                        text_val = item["text"]
+                        # Nhồi system instruction vào đây nếu là user msg đầu tiên
+                        if role == "user" and not first_user_processed and system_text:
+                            text_val = f"{system_text}\n\nUSER MESSAGE: {text_val}"
+                            first_user_processed = True
+                        parts.append({"text": text_val})
                     elif item["type"] == "image_url":
                         try:
-                            # Tách lấy phần data base64 thực sự
                             base64_data = item["image_url"]["url"].split(",")[1]
-                            parts.append({
-                                "inline_data": {
-                                    "mime_type": "image/jpeg",
-                                    "data": base64_data
-                                }
-                            })
+                            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64_data}})
                         except: continue
             else:
-                parts.append({"text": str(msg["content"])})
+                text_val = str(msg["content"])
+                if role == "user" and not first_user_processed and system_text:
+                    text_val = f"{system_text}\n\nUSER MESSAGE: {text_val}"
+                    first_user_processed = True
+                parts.append({"text": text_val})
                 
             contents.append({"role": role, "parts": parts})
 
-                # Payload nguy hiểm
         payload = {
             "contents": contents,
-            "generationConfig": {
-                "temperature": 0.8,
-                "maxOutputTokens": 1000,
-                "topP": 0.95,
-                "topK": 40
-            },
+            "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1000, "topP": 0.95},
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -175,39 +178,22 @@ async def get_google_response(messages, model_config):
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
             ]
         }
-
         
-        if system_instruction_text:
-            payload["system_instruction"] = {"parts": [{"text": system_instruction_text}]}
+        # BỎ HOÀN TOÀN dòng payload["system_instruction"] = ... ở đây
 
-        # Fix cứng URL để tránh lỗi cộng chuỗi sai
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload) as response:
-                if response.status != 200:
-                    err_detail = await response.text()
-                    print(f"DEBUG GOOGLE ERROR: {err_detail}") # Check log ở terminal nhé
-                    return f"Lỗi Google API ({response.status}) 💀"
-                
                 data = await response.json()
+                if response.status != 200:
+                    print(f"DEBUG: {data}")
+                    return f"Lỗi r bradar ({response.status}) 💀"
                 
-                if "candidates" in data and data["candidates"]:
-                    candidate = data["candidates"][0]
-                    if "content" in candidate and "parts" in candidate["content"]:
-                        # Lọc bỏ phần suy nghĩ (thinking) nếu có
-                        answer_parts = [p["text"] for p in candidate["content"]["parts"] if "text" in p and not p.get("thought")]
-                        if answer_parts:
-                            full_answer = "".join(answer_parts)
-                            import re
-                            full_answer = re.sub(r'<(thought|thinking)>.*?</\1>', '', full_answer, flags=re.DOTALL).strip()
-                            return full_answer[:1900] if full_answer else "Nín thinh r 🥀"
-                
-                return "Gemini méo trả về text j cả 🥀"
+                return data['candidates'][0]['content']['parts'][0]['text'][:1900]
 
     except Exception as e:
         return f"Lỗi Google r m ơi: {str(e)[:50]} (ಠ_ಠ)💔"
-
 # --- Router chọn provider ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
@@ -236,15 +222,24 @@ async def on_ready():
 @app_commands.choices(chon_model=MODEL_CHOICES)
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
-    CURRENT_MODEL = chon_model.value
-    provider = MODELS_CONFIG[CURRENT_MODEL]["provider"].upper()
-    embed = discord.Embed(
-        title="Model switched",
-        description=f"Đã lên đời **{chon_model.name}** r nhé bro\n(¬_¬)",
-        color=0x00ff9d
-    )
-    embed.set_footer(text=f"Provider: {provider} | {random_vibe()}")
-    await interaction.response.send_message(embed=embed)
+    # Báo cho Discord là "đợi t tí" để tránh lỗi 404 (Unknown Interaction)
+    await interaction.response.defer(ephemeral=True) 
+    
+    try:
+        CURRENT_MODEL = chon_model.value
+        provider = MODELS_CONFIG[CURRENT_MODEL]["provider"].upper()
+        
+        embed = discord.Embed(
+            title="Model switched",
+            description=f"Đã lên đời **{chon_model.name}** r nhé bro\n(¬_¬)",
+            color=0x00ff9d
+        )
+        embed.set_footer(text=f"Provider: {provider} | {random_vibe()}")
+        
+        # Dùng followup vì đã defer ở trên r
+        await interaction.followup.send(embed=embed)
+    except Exception as e:
+        await interaction.followup.send(f"Lỗi đổi model r bradar: {str(e)[:50]} 💀")
 
 @bot.tree.command(name="bot_info", description="Status bot xịn hơn tí")
 async def bot_info(interaction: discord.Interaction):
