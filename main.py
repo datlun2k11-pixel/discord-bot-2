@@ -53,16 +53,23 @@ MODELS_CONFIG = {
         "id": "gemma-3-12b-it",
         "provider": "google",
         "vision": True
+    },
+     "Google-Gemini3.1-Flast-Lite": {
+        "id": "gemini-3.1-flash-lite-preview",
+        "provider": "google",
+        "vision": True
     }
+    
 }
 
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
-    app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
-    app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
-    app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
-    app_commands.Choice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
+    app_commands.Choice(name="Gemma 4 26B (Google - Vision)", value="Google-Gemma4-26B"),
+    app_commands.Choice(name="Gemma 4 31B (Google - Vision)", value="Google-Gemma4-31B"),
+    app_commands.Choice(name="Gemma 3 27B (Google - Vision)", value="Google-Gemma3-27B"),
+    app_commands.Choice(name="Gemma 3 12B (Google - Vision)", value="Google-Gemma3-12B"),
+    app_commands.Choice(name="Gemini 3.1 flash lite" (Google - Vision)", value="Google-Gemini3.1-Flast-Lite")
 ]
 
 CURRENT_MODEL = "Groq-Llama-Scout"
@@ -306,7 +313,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v19.0.0 (Fixed)", inline=True)
+    embed.add_field(name="📜 Version", value="v19.1.0", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -316,8 +323,8 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v18.9.6 - New Models", value="• Model mới `Gemini 3.1 flash lite`", inline=False)
     embed.add_field(name="v19.0.0 - Full Fix", value="• Xóa enable_thinking (lỗi 400)\n• Fix systemInstruction cho Gemma 3/4\n• Code clean lại từ đầu", inline=False)
-    embed.add_field(name="v18.9.6 - Fixed Google", value="• Sửa cấu trúc request Gemini API", inline=False)
     embed.set_footer(text="Updated 16/04/2026")
     await interaction.response.send_message(embed=embed)
 
