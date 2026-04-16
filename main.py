@@ -132,13 +132,13 @@ async def get_google_response(messages, model_config):
         final_contents = []
         sys_prompt = ""
 
-        # 1. Lọc lấy system prompt ra trước
+        # 1. Lọc lấy system prompt
         for m in messages:
             if m["role"] == "system":
                 sys_prompt = m["content"]
                 break
 
-        # 2. Build contents chỉ gồm user và model (assistant)
+        # 2. Build contents cho Google API
         first_user = True
         for m in messages:
             if m["role"] == "system": continue
@@ -150,7 +150,6 @@ async def get_google_response(messages, model_config):
                 for item in m["content"]:
                     if item["type"] == "text":
                         t = item["text"]
-                        # Nhồi system prompt vào câu đầu của user
                         if role == "user" and first_user and sys_prompt:
                             t = f"INSTRUCTION: {sys_prompt}\n\nUSER: {t}"
                             first_user = False
@@ -169,9 +168,10 @@ async def get_google_response(messages, model_config):
             
             final_contents.append({"role": role, "parts": parts})
 
-        # 3. Payload TUYỆT ĐỐI KHÔNG CÓ KEY "system_instruction"
+        # 3. Payload có kèm Tool Google Search
         payload = {
             "contents": final_contents,
+            "tools": [{"google_search_retrieval": {}}], # Bật "mắt thần" Google Search ở đây
             "generationConfig": {"temperature": 0.8, "maxOutputTokens": 2048},
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -180,10 +180,6 @@ async def get_google_response(messages, model_config):
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
             ]
         }
-
-        # Dòng này để m check ở console xem có cái 'system_instruction' nào k
-        print(f"--- PAYLOAD SENDING TO {model_config['id']} ---")
-        # print(json.dumps(payload, indent=2)) # Mở comment dòng này nếu muốn soi kỹ
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
@@ -194,7 +190,14 @@ async def get_google_response(messages, model_config):
                     print(f"FULL ERROR: {data}")
                     return f"Lỗi Google API ({response.status}) 💀"
                 
-                res_text = data['candidates'][0]['content']['parts'][0]['text']
+                # 4. Xử lý kết quả trả về (hỗ trợ cả text thường và grounding text)
+                candidate = data.get('candidates', [{}])[0]
+                content = candidate.get('content', {})
+                parts = content.get('parts', [{}])
+                
+                res_text = parts[0].get('text', "")
+                
+                # Filter thinking/thought cho sạch
                 import re
                 res_text = re.sub(r'<(thought|thinking)>.*?</\1>', '', res_text, flags=re.DOTALL).strip()
                 return res_text[:1900] if res_text else "Nín thinh r 🥀"
@@ -257,7 +260,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v18.9.0 (Filter Thoughts)", inline=True)
+    embed.add_field(name="📜 Version", value="v18.9.5 (Filter Thoughts)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -267,10 +270,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v18.9.5 - Tool", value="• Thêm Tool search tự động.", inline=False)
     embed.add_field(name="v18.9.0 - Gemma 3", value="• Thêm 2 model Gemma3\n• Fix 1 số bug nhỏ", inline=False)
     embed.add_field(name="v18.5.0 - Filter Thoughts", value="• Lọc triệt để phần thoughts của Gemini\n• Regex xóa thẻ <thought> và <thinking>\n• Prompt cấm thinking mạnh hơn [citation:1][citation:6]", inline=False)
-    embed.add_field(name="v18.4.2 - Fix 400 Error", value="• Xóa thinkingConfig gây lỗi 400\n• Sửa systemInstruction", inline=False)
-    embed.set_footer(text="Updated 15/04/2026 | No more thinking")
+    embed.set_footer(text="Updated 15/04/2026 | 16:57")
     await interaction.response.send_message(embed=embed)
 
 # ========================================================
