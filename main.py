@@ -1,4 +1,3 @@
-# Used AI
 import discord
 import os
 import asyncio
@@ -22,9 +21,8 @@ load_dotenv()
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# --- Model Config (CẢ GROQ + GOOGLE) ---
+# --- Model Config ---
 MODELS_CONFIG = {
-    # Groq Models
     "Groq-Llama-Scout": {
         "id": "meta-llama/llama-4-scout-17b-16e-instruct",
         "provider": "groq",
@@ -35,7 +33,6 @@ MODELS_CONFIG = {
         "provider": "groq",
         "vision": False
     },
-    # Google AI Studio Models
     "Google-Gemma4-26B": {
         "id": "gemma-4-26b-a4b-it",
         "provider": "google",
@@ -69,7 +66,7 @@ MODEL_CHOICES = [
 
 CURRENT_MODEL = "Groq-Llama-Scout"
 
-# System Prompt - ĐÃ TĂNG CƯỜNG CHỐNG THINKING
+# System Prompt
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhây vl, thằng bạn thân lầy lội nhất hệ mặt trời.
 - Mày đang nhắn trên Discord
 - Bây giờ là: {current_time}
@@ -83,7 +80,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Khi người dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Avt của mày là một con mèo
 - Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thọ Phú, Triệu Sơn, Thanh Hoá.
-- Người đang chat: {user_id}"""
+- Ngườí đang chat: {user_id}"""
 
 chat_history = {}
 user_locks = {}
@@ -91,7 +88,7 @@ last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
 app = Flask(__name__)
 @app.route('/')
-def home(): return "GenA-bot Live with Groq + Google! 🔥"
+def home(): return "GenA-bot Live! 🔥"
 def run_flask(): app.run(host="0.0.0.0", port=8000)
 
 def random_vibe():
@@ -99,7 +96,7 @@ def random_vibe():
     emojis = ["💔", "🥀", "💀", "☠️", "🔥"]
     return f"{random.choice(vibes)} {random.choice(emojis)}"
 
-# --- Hàm gọi Groq ---
+# --- GROQ ---
 async def get_groq_response(messages, model_config):
     try:
         groq_messages = []
@@ -127,48 +124,57 @@ async def get_groq_response(messages, model_config):
         return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
-# Google
+
+# --- GOOGLE (FIXED) ---
 async def get_google_response(messages, model_config):
     try:
-        # Tách system prompt
+        # Tách system và user messages
         system_text = ""
         user_messages = []
         
         for m in messages:
             if m["role"] == "system":
-                system_text = m["content"] if isinstance(m["content"], str) else ""
+                system_text = str(m["content"]) if m["content"] else ""
             else:
                 user_messages.append(m)
 
-        # Build contents
+        # Build contents - gắn system vào user đầu tiên
         contents = []
-        first_user = True  # đánh dấu user đầu tiên
+        first_user = True
         
         for m in user_messages:
             role = "model" if m["role"] == "assistant" else "user"
             parts = []
             
             if isinstance(m["content"], list):
-                # Multimodal
+                # Multimodal (text + image)
+                text_parts = []
+                image_parts = []
+                
                 for item in m["content"]:
                     if item["type"] == "text":
-                        text = item["text"]
-                        # Gắn system vào user đầu tiên
-                        if role == "user" and first_user and system_text:
-                            text = f"{system_text}\n\n{text}"
-                            first_user = False
-                        parts.append({"text": text})
+                        text_parts.append(item["text"])
                     elif item["type"] == "image_url":
                         img_url = item["image_url"]["url"]
                         if img_url.startswith("data:image"):
                             header, b64_data = img_url.split(",", 1)
                             mime_type = header.split(":")[1].split(";")[0]
-                            parts.append({
+                            image_parts.append({
                                 "inline_data": {
                                     "mime_type": mime_type,
                                     "data": b64_data
                                 }
                             })
+                
+                # Gắn system vào text đầu tiên
+                if text_parts and role == "user" and first_user and system_text:
+                    text_parts[0] = f"{system_text}\n\n{text_parts[0]}"
+                    first_user = False
+                
+                for txt in text_parts:
+                    parts.append({"text": txt})
+                parts.extend(image_parts)
+                
             else:
                 # Text only
                 text = str(m["content"]) if m["content"] else ""
@@ -181,7 +187,7 @@ async def get_google_response(messages, model_config):
             if parts:
                 contents.append({"role": role, "parts": parts})
                 if role == "user":
-                    first_user = False  # đã qua user đầu rồi
+                    first_user = False
 
         if not contents:
             return "K có nội dung để xử lý bro 🥀"
@@ -201,7 +207,6 @@ async def get_google_response(messages, model_config):
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
             ]
         }
-        # KO CÓ systemInstruction nữa nha
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
@@ -215,6 +220,7 @@ async def get_google_response(messages, model_config):
                 
                 if "candidates" in data and len(data["candidates"]) > 0:
                     candidate = data["candidates"][0]
+                    
                     if candidate.get("finishReason") == "SAFETY":
                         return "Bị chặn vì safety settings bro 🥀"
                     
@@ -226,13 +232,14 @@ async def get_google_response(messages, model_config):
                             if res_text:
                                 return res_text[:1900]
                 
+                print(f"Unexpected response: {json.dumps(data, indent=2)[:500]}")
                 return "Im thin thít, thử lại đi bro 🥀"
 
     except Exception as e:
         print(f"Google exception: {str(e)}")
         return f"Lỗi code: {str(e)[:100]} 💀"
- 💀"
-# --- Router chọn provider ---
+
+# --- Router ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
         return await get_groq_response(messages, model_config)
@@ -249,11 +256,9 @@ async def on_ready():
         print(f"Đã sync {len(synced)} lệnh slash!")
     except Exception as e:
         print(f"Lỗi sync: {e}")
-    print(f"GenA-bot Ready with Groq + Google! 🔥")
+    print(f"GenA-bot Ready! 🔥")
 
-# ========================================================
-# 3 CMDS CHÍNH
-# ========================================================
+# --- Commands ---
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
 @app_commands.choices(chon_model=MODEL_CHOICES)
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
@@ -284,25 +289,21 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v18.9.6 (Fixed Google API)", inline=True)
+    embed.add_field(name="📜 Version", value="v19.0.0 (Fixed)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
-    embed.set_footer(text="Powered by Groq + Google Gemini | " + random_vibe())
+    embed.set_footer(text="Powered by Groq + Google | " + random_vibe())
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v18.9.6 - Fixed Google", value="• Sửa cấu trúc request Gemini API\n• Parse response đúng chuẩn\n• Không còn 'im thin thít' nữa", inline=False)
-    embed.add_field(name="v18.9.5 - Tool", value="• Thêm Tool search tự động.", inline=False)
-    embed.add_field(name="v18.9.0 - Gemma 3", value="• Thêm 2 model Gemma3\n• Fix 1 số bug nhỏ", inline=False)
-    embed.set_footer(text="Updated 15/04/2026 | 17:30")
+    embed.add_field(name="v19.0.0 - Full Fix", value="• Xóa enable_thinking (lỗi 400)\n• Fix systemInstruction cho Gemma 3/4\n• Code clean lại từ đầu", inline=False)
+    embed.add_field(name="v18.9.6 - Fixed Google", value="• Sửa cấu trúc request Gemini API", inline=False)
+    embed.set_footer(text="Updated 16/04/2026")
     await interaction.response.send_message(embed=embed)
 
-# ========================================================
-# CLEAR + CHAT
-# ========================================================
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
     uid = str(interaction.user.id)
@@ -315,6 +316,7 @@ async def clear(interaction: discord.Interaction):
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã reset ký ức")
 
+# --- Chat Handler ---
 @bot.event
 async def on_message(message):
     global last_msg_time
@@ -387,13 +389,13 @@ async def on_message(message):
             chat_history[uid].append(user_msg)
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
-            # Lưu history dạng text đơn giản để tránh lỗi format
+            # Lưu history dạng text đơn giản
             text_content = content if content else "[Đã gửi ảnh]"
             chat_history[uid][-1] = {"role": "user", "content": text_content}
             chat_history[uid].append({"role": "assistant", "content": reply})
             
-            # Giữ tối đa 20 messages (10 cặp hội thoại)
-            if len(chat_history[uid]) > 21:  # 1 system + 20 messages
+            # Giữ tối đa 20 messages
+            if len(chat_history[uid]) > 21:
                 chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-20:]
 
             await message.reply(f"{reply[:1900]}", mention_author=False)
