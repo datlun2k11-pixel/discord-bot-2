@@ -128,54 +128,50 @@ async def get_groq_response(messages, model_config):
  # --- Hàm gọi Google ---
 async def get_google_response(messages, model_config):
     try:
-        contents = []
-        system_text = ""
-        
-        # 1. Lấy system prompt ra trước
-        for msg in messages:
-            if msg["role"] == "system":
-                system_text = msg["content"]
+        final_contents = []
+        sys_prompt = ""
+
+        # 1. Lọc lấy system prompt ra trước
+        for m in messages:
+            if m["role"] == "system":
+                sys_prompt = m["content"]
                 break
 
-        # 2. Build lại contents KHÔNG có role system
-        first_user_processed = False
-        for msg in messages:
-            if msg["role"] == "system": continue
+        # 2. Build contents chỉ gồm user và model (assistant)
+        first_user = True
+        for m in messages:
+            if m["role"] == "system": continue
             
             parts = []
-            role = "model" if msg["role"] == "assistant" else "user"
+            role = "model" if m["role"] == "assistant" else "user"
             
-            if isinstance(msg["content"], list):
-                for item in msg["content"]:
+            if isinstance(m["content"], list):
+                for item in m["content"]:
                     if item["type"] == "text":
-                        text_val = item["text"]
-                        # Trộn system prompt vào câu chat đầu tiên của user
-                        if role == "user" and not first_user_processed and system_text:
-                            text_val = f"SYSTEM_INSTRUCTION: {system_text}\n\nUSER_PROMPT: {text_val}"
-                            first_user_processed = True
-                        parts.append({"text": text_val})
+                        t = item["text"]
+                        # Nhồi system prompt vào câu đầu của user
+                        if role == "user" and first_user and sys_prompt:
+                            t = f"INSTRUCTION: {sys_prompt}\n\nUSER: {t}"
+                            first_user = False
+                        parts.append({"text": t})
                     elif item["type"] == "image_url":
                         try:
-                            base64_data = item["image_url"]["url"].split(",")[1]
-                            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": base64_data}})
+                            b64 = item["image_url"]["url"].split(",")[1]
+                            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
                         except: continue
             else:
-                text_val = str(msg["content"])
-                if role == "user" and not first_user_processed and system_text:
-                    text_val = f"SYSTEM_INSTRUCTION: {system_text}\n\nUSER_PROMPT: {text_val}"
-                    first_user_processed = True
-                parts.append({"text": text_val})
-                
-            contents.append({"role": role, "parts": parts})
+                t = str(m["content"])
+                if role == "user" and first_user and sys_prompt:
+                    t = f"INSTRUCTION: {sys_prompt}\n\nUSER: {t}"
+                    first_user = False
+                parts.append({"text": t})
+            
+            final_contents.append({"role": role, "parts": parts})
 
-        # 3. Payload SIÊU SẠCH (Tuyệt đối k có key system_instruction)
+        # 3. Payload TUYỆT ĐỐI KHÔNG CÓ KEY "system_instruction"
         payload = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 0.8,
-                "maxOutputTokens": 1000,
-                "topP": 0.95
-            },
+            "contents": final_contents,
+            "generationConfig": {"temperature": 0.8, "maxOutputTokens": 1000},
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -184,25 +180,26 @@ async def get_google_response(messages, model_config):
             ]
         }
 
+        # Dòng này để m check ở console xem có cái 'system_instruction' nào k
+        print(f"--- PAYLOAD SENDING TO {model_config['id']} ---")
+        # print(json.dumps(payload, indent=2)) # Mở comment dòng này nếu muốn soi kỹ
+
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
         async with aiohttp.ClientSession() as session:
             async with session.post(url, json=payload) as response:
                 data = await response.json()
                 if response.status != 200:
-                    print(f"DEBUG ERROR: {json.dumps(data, indent=2)}")
+                    print(f"FULL ERROR: {data}")
                     return f"Lỗi Google API ({response.status}) 💀"
                 
-                # Trả về text và lọc thoughts (nếu có)
-                if "candidates" in data and data["candidates"]:
-                    res_text = data['candidates'][0]['content']['parts'][0]['text']
-                    import re
-                    res_text = re.sub(r'<(thought|thinking)>.*?</\1>', '', res_text, flags=re.DOTALL).strip()
-                    return res_text[:1900]
-                return "AI nín thinh r 🥀"
+                res_text = data['candidates'][0]['content']['parts'][0]['text']
+                import re
+                res_text = re.sub(r'<(thought|thinking)>.*?</\1>', '', res_text, flags=re.DOTALL).strip()
+                return res_text[:1900] if res_text else "Nín thinh r 🥀"
 
     except Exception as e:
-        return f"Lỗi code r bradar: {str(e)[:50]} (ಠ_ಠ)💔"
+        return f"Lỗi code r bradar: {str(e)[:50]} 💔"
 # --- Router chọn provider ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
