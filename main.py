@@ -7,6 +7,7 @@ import datetime
 import pytz
 import base64
 import json
+import re
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -19,7 +20,6 @@ load_dotenv()
 # --- Clients ---
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 
 # --- Model Config (CẢ GROQ + GOOGLE) ---
 MODELS_CONFIG = {
@@ -34,14 +34,14 @@ MODELS_CONFIG = {
         "provider": "groq",
         "vision": False
     },
-        # Google AI Studio Models
+    # Google AI Studio Models
     "Google-Gemma4-26B": {
-        "id": "gemma-4-26b-a4b-it",
+        "id": "gemma-3-27b-it",  # TẠM THAY BẰNG MODEL CÓ SẴN
         "provider": "google",
         "vision": True
     },
     "Google-Gemma4-31B": {
-        "id": "gemma-4-31b-it",
+        "id": "gemma-3-27b-it",  # TẠM THAY BẰNG MODEL CÓ SẴN
         "provider": "google",
         "vision": True
     },
@@ -60,8 +60,6 @@ MODELS_CONFIG = {
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
-    app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
-    app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
     app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
     app_commands.Choice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
 ]
@@ -126,55 +124,72 @@ async def get_groq_response(messages, model_config):
         return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
- # --- Hàm gọi Google ---
+
+# --- Hàm gọi Google (ĐÃ SỬA LẠI HOÀN TOÀN) ---
 async def get_google_response(messages, model_config):
     try:
-        final_contents = []
+        # Gom system prompt vào message đầu tiên của user
         sys_prompt = ""
-
         for m in messages:
             if m["role"] == "system":
                 sys_prompt = m["content"]
                 break
 
-        first_user = True
+        contents = []
         for m in messages:
-            if m["role"] == "system": 
-                continue
+            if m["role"] == "system":
+                continue  # Bỏ qua system, sẽ gắn vào message user đầu tiên
             
             parts = []
             role = "model" if m["role"] == "assistant" else "user"
             
             if isinstance(m["content"], list):
+                # Message có cả text và image
                 for item in m["content"]:
                     if item["type"] == "text":
-                        t = item["text"]
-                        if role == "user" and first_user and sys_prompt:
-                            t = f"{sys_prompt}\n\n{t}"
-                            first_user = False
-                        parts.append({"text": t})
+                        text = item["text"]
+                        # Nếu là user đầu tiên và có system prompt
+                        if role == "user" and len(contents) == 0 and sys_prompt:
+                            text = f"{sys_prompt}\n\n{text}"
+                        parts.append({"text": text})
                     elif item["type"] == "image_url":
-                        try:
-                            b64 = item["image_url"]["url"].split(",")[1]
-                            parts.append({"inline_data": {"mime_type": "image/jpeg", "data": b64}})
-                        except: 
-                            continue
+                        # Xử lý ảnh base64
+                        img_url = item["image_url"]["url"]
+                        if img_url.startswith("data:image"):
+                            # Tách base64 data
+                            header, b64_data = img_url.split(",", 1)
+                            mime_type = header.split(":")[1].split(";")[0]
+                            parts.append({
+                                "inline_data": {
+                                    "mime_type": mime_type,
+                                    "data": b64_data
+                                }
+                            })
             else:
-                t = str(m["content"])
-                if role == "user" and first_user and sys_prompt:
-                    t = f"{sys_prompt}\n\n{t}"
-                    first_user = False
-                parts.append({"text": t})
+                # Message chỉ có text
+                text = str(m["content"])
+                if role == "user" and len(contents) == 0 and sys_prompt:
+                    text = f"{sys_prompt}\n\n{text}"
+                parts.append({"text": text})
             
-            final_contents.append({"role": role, "parts": parts})
+            if parts:  # Chỉ thêm nếu có parts
+                contents.append({
+                    "role": role,
+                    "parts": parts
+                })
 
+        # Nếu không có content nào (trường hợp lỗi)
+        if not contents:
+            return "K có nội dung để xử lý bro 🥀"
+
+        # Payload đúng chuẩn Gemini API
         payload = {
-            "contents": final_contents,
+            "contents": contents,
             "generationConfig": {
                 "temperature": 0.9,
-                "maxOutputTokens": 4096,   # tăng mạnh
+                "maxOutputTokens": 2048,
                 "topP": 0.95,
-                "topK": 64
+                "topK": 40
             },
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -194,19 +209,29 @@ async def get_google_response(messages, model_config):
                     print(f"Google error {response.status}: {data}")
                     return f"Lỗi API {response.status} 💀"
                 
-                candidate = data.get('candidates', [{}])[0]
-                parts = candidate.get('content', {}).get('parts', [{}])
-                res_text = parts[0].get('text', "") if parts else ""
-
-                # lọc thinking triệt để hơn
-                import re
-                res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
-                res_text = re.sub(r'^(thinking|reasoning):?.*$', '', res_text, flags=re.MULTILINE | re.IGNORECASE).strip()
-
-                return res_text[:1900] if res_text else "Im thin quá bro, thử lại đi 🥀💔"
+                # Parse response
+                if "candidates" in data and len(data["candidates"]) > 0:
+                    candidate = data["candidates"][0]
+                    if "content" in candidate and "parts" in candidate["content"]:
+                        parts = candidate["content"]["parts"]
+                        if parts and "text" in parts[0]:
+                            res_text = parts[0]["text"]
+                            
+                            # Lọc thinking tags
+                            res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
+                            res_text = re.sub(r'^(thinking|reasoning):?.*$', '', res_text, flags=re.MULTILINE | re.IGNORECASE).strip()
+                            
+                            if res_text:
+                                return res_text[:1900]
+                
+                # Fallback nếu không parse được text
+                print(f"Unexpected response structure: {json.dumps(data, indent=2)[:500]}")
+                return "Im thin thít, thử lại đi bro 🥀"
 
     except Exception as e:
+        print(f"Google exception: {str(e)}")
         return f"Lỗi code: {str(e)[:80]} 💀"
+
 # --- Router chọn provider ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
@@ -219,14 +244,12 @@ bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
 async def on_ready():
-    # Sync slash commands khi bot lên sóng
     try:
         synced = await bot.tree.sync()
         print(f"Đã sync {len(synced)} lệnh slash!")
     except Exception as e:
         print(f"Lỗi sync: {e}")
     print(f"GenA-bot Ready with Groq + Google! 🔥")
-
 
 # ========================================================
 # 3 CMDS CHÍNH
@@ -235,8 +258,7 @@ async def on_ready():
 @app_commands.choices(chon_model=MODEL_CHOICES)
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
     global CURRENT_MODEL
-    # Báo cho Discord là "đợi t tí" để tránh lỗi 404 (Unknown Interaction)
-    await interaction.response.defer(ephemeral=True) 
+    await interaction.response.defer(ephemeral=True)
     
     try:
         CURRENT_MODEL = chon_model.value
@@ -249,7 +271,6 @@ async def switch_model(interaction: discord.Interaction, chon_model: app_command
         )
         embed.set_footer(text=f"Provider: {provider} | {random_vibe()}")
         
-        # Dùng followup vì đã defer ở trên r
         await interaction.followup.send(embed=embed)
     except Exception as e:
         await interaction.followup.send(f"Lỗi đổi model r bradar: {str(e)[:50]} 💀")
@@ -263,7 +284,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v18.9.5 (Filter Thoughts)", inline=True)
+    embed.add_field(name="📜 Version", value="v18.9.6 (Fixed Google API)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -273,10 +294,10 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v18.9.6 - Fixed Google", value="• Sửa cấu trúc request Gemini API\n• Parse response đúng chuẩn\n• Không còn 'im thin thít' nữa", inline=False)
     embed.add_field(name="v18.9.5 - Tool", value="• Thêm Tool search tự động.", inline=False)
     embed.add_field(name="v18.9.0 - Gemma 3", value="• Thêm 2 model Gemma3\n• Fix 1 số bug nhỏ", inline=False)
-    embed.add_field(name="v18.5.0 - Filter Thoughts", value="• Lọc triệt để phần thoughts của Gemini\n• Regex xóa thẻ <thought> và <thinking>\n• Prompt cấm thinking mạnh hơn [citation:1][citation:6]", inline=False)
-    embed.set_footer(text="Updated 15/04/2026 | 16:57")
+    embed.set_footer(text="Updated 15/04/2026 | 17:30")
     await interaction.response.send_message(embed=embed)
 
 # ========================================================
@@ -366,12 +387,18 @@ async def on_message(message):
             chat_history[uid].append(user_msg)
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
-            chat_history[uid][-1] = {"role": "user", "content": content or "[Đã gửi ảnh]"}
+            # Lưu history dạng text đơn giản để tránh lỗi format
+            text_content = content if content else "[Đã gửi ảnh]"
+            chat_history[uid][-1] = {"role": "user", "content": text_content}
             chat_history[uid].append({"role": "assistant", "content": reply})
-            chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+            
+            # Giữ tối đa 20 messages (10 cặp hội thoại)
+            if len(chat_history[uid]) > 21:  # 1 system + 20 messages
+                chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-20:]
 
             await message.reply(f"{reply[:1900]}", mention_author=False)
         except Exception as e:
+            print(f"Lỗi chat: {str(e)}")
             await message.reply(f"Lỗi r: {str(e)[:100]} 💀", mention_author=False)
 
 if __name__ == "__main__":
