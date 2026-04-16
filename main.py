@@ -1,3 +1,4 @@
+# Used AI
 import discord
 import os
 import asyncio
