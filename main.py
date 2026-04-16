@@ -1,3 +1,4 @@
+# Hi
 import discord
 import os
 import asyncio
