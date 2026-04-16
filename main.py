@@ -54,12 +54,11 @@ MODELS_CONFIG = {
         "provider": "google",
         "vision": True
     },
-     "Google-Gemini3.1-Flast-Lite": {
+    "Google-Gemini3.1-Flast-Lite": {
         "id": "gemini-3.1-flash-lite-preview",
-        "provider": "google"
+        "provider": "google",
         "vision": True
     }
-    
 }
 
 MODEL_CHOICES = [
@@ -69,7 +68,7 @@ MODEL_CHOICES = [
     app_commands.Choice(name="Gemma 4 31B (Google - Vision)", value="Google-Gemma4-31B"),
     app_commands.Choice(name="Gemma 3 27B (Google - Vision)", value="Google-Gemma3-27B"),
     app_commands.Choice(name="Gemma 3 12B (Google - Vision)", value="Google-Gemma3-12B"),
-    app_commands.Choice(name="Gemini 3.1 flash lite" (Google - Vision)", value="Google-Gemini3.1-Flast-Lite")
+    app_commands.Choice(name="Gemini 3.1 flash lite (Google - Vision)", value="Google-Gemini3.1-Flast-Lite")
 ]
 
 CURRENT_MODEL = "Groq-Llama-Scout"
