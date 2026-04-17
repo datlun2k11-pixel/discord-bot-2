@@ -1,3 +1,4 @@
+# AI coded
 import discord
 import os
 import asyncio
