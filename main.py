@@ -87,8 +87,8 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
 - Khi người dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Avt của mày là một con mèo
-- Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thọ Phú, Triệu Sơn, Thanh Hoá.
-- Ngườí đang chat: {user_id}"""
+- Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thanh Hoá (36).
+- Người đang chat: {user_id}"""
 
 chat_history = {}
 user_locks = {}
