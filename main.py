@@ -1,4 +1,3 @@
-
 import discord
 import os
 import asyncio
@@ -9,6 +8,7 @@ import pytz
 import base64
 import json
 import re
+import io  # THÊM CÁI NÀY
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -24,6 +24,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # --- Model Config ---
 MODELS_CONFIG = {
+    # Groq Models
     "Groq-Llama-Scout": {
         "id": "meta-llama/llama-4-scout-17b-16e-instruct",
         "provider": "groq",
@@ -34,6 +35,13 @@ MODELS_CONFIG = {
         "provider": "groq",
         "vision": False
     },
+    # Google AI Studio Models - Gemini 3.1 Flash Lite (MỚI)
+    "Google-Gemini-3.1-Flash-Lite": {
+        "id": "gemini-3.1-flash-lite-preview",
+        "provider": "google",
+        "vision": True
+    },
+    # Google AI Studio Models - Gemma 4
     "Google-Gemma4-26B": {
         "id": "gemma-4-26b-a4b-it",
         "provider": "google",
@@ -44,6 +52,7 @@ MODELS_CONFIG = {
         "provider": "google",
         "vision": True
     },
+    # Google AI Studio Models - Gemma 3
     "Google-Gemma3-27B": {
         "id": "gemma-3-27b-it",
         "provider": "google",
@@ -53,26 +62,28 @@ MODELS_CONFIG = {
         "id": "gemma-3-12b-it",
         "provider": "google",
         "vision": True
-    },
-    "Google-Gemini3.1-Flast-Lite": {
-        "id": "gemini-3.1-flash-lite-preview",
-        "provider": "google",
-        "vision": True
     }
 }
-# Sửa lại đoạn MODEL_CHOICES này cho chuẩn đét nè:
+
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
-    app_commands.Choice(name="Gemma 4 26B (Google - Vision)", value="Google-Gemma4-26B"),
-    app_commands.Choice(name="Gemma 4 31B (Google - Vision)", value="Google-Gemma4-31B"),
-    app_commands.Choice(name="Gemma 3 27B (Google - Vision)", value="Google-Gemma3-27B"),
-    app_commands.Choice(name="Gemma 3 12B (Google - Vision)", value="Google-Gemma3-12B"),
-    app_commands.Choice(name="Gemini 3.1 flash lite (Google - Vision)", value="Google-Gemini3.1-Flast-Lite")
+    app_commands.Choice(name="Gemini 3.1 Flash Lite (Google - Vision)", value="Google-Gemini-3.1-Flash-Lite"),  # MỚI
+    app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
+    app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
+    app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
+    app_commands.Choice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
 ]
 
-
 CURRENT_MODEL = "Groq-Llama-Scout"
+
+# Các file type support
+TEXT_EXTENSIONS = {
+    'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h', 
+    'java', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'xml',
+    'yaml', 'yml', 'ini', 'cfg', 'conf', 'sh', 'bat', 'ps1', 'ts', 'tsx',
+    'jsx', 'vue', 'sass', 'scss', 'less', 'dockerfile', 'gitignore'
+}
 
 # System Prompt
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhây vl, thằng bạn thân lầy lội nhất hệ mặt trời.
@@ -85,9 +96,9 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - TRẢ LỜI CỰC NGẮN (TỐI ĐA 1-2 DÒNG) - KHÔNG GIẢI THÍCH DÀI DÒNG
 - TUYỆT ĐỐI KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ, KHÔNG ĐƯỢC DÙNG THẺ <thinking> hay <thought>
 - CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
-- Khi người dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
+- Khi ngườí dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Avt của mày là một con mèo
-- Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thanh Hoá (36).
+- Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thọ Phú, Triệu Sơn, Thanh Hoá.
 - Người đang chat: {user_id}"""
 
 chat_history = {}
@@ -103,6 +114,30 @@ def random_vibe():
     vibes = ["(¬‿¬)", "(ಠ_ಠ)", "(•_•)", "(ง •_•)ง", "ಠ益ಠ"]
     emojis = ["💔", "🥀", "💀", "☠️", "🔥"]
     return f"{random.choice(vibes)} {random.choice(emojis)}"
+
+# --- HÀM ĐỌC FILE VĂN BẢN (THÊM MỚI) ---
+async def read_text_attachment(attachment):
+    """Đọc file văn bản từ Discord attachment"""
+    try:
+        content = await attachment.read()
+        # Decode với utf-8, nếu lỗi thì thử latin-1
+        try:
+            text = content.decode('utf-8')
+        except UnicodeDecodeError:
+            text = content.decode('latin-1')
+        return text[:15000]  # Giới hạn 15k chars để ko quá dài
+    except Exception as e:
+        return f"[Lỗi đọc file: {str(e)[:50]}]"
+
+# --- HÀM FORMAT CODE (THÊM MỚI) ---
+def format_code_snippet(filename, content, max_lines=50):
+    """Format code để gửi cho AI"""
+    lines = content.split('\n')
+    if len(lines) > max_lines:
+        content = '\n'.join(lines[:max_lines]) + f"\n\n... ({len(lines) - max_lines} dòng còn lại) ..."
+    
+    ext = filename.split('.')[-1].lower() if '.' in filename else 'txt'
+    return f"```{ext}\n{content}\n```"
 
 # --- GROQ ---
 async def get_groq_response(messages, model_config):
@@ -132,10 +167,10 @@ async def get_groq_response(messages, model_config):
         return reply
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
+
 # --- GOOGLE (FIXED CHO GEMMA 4 THINKING) ---
 async def get_google_response(messages, model_config):
     try:
-        # Tách system và user messages
         system_text = ""
         user_messages = []
         
@@ -145,8 +180,6 @@ async def get_google_response(messages, model_config):
             else:
                 user_messages.append(m)
 
-        # Build contents - gắn system vào user đầu tiên
-        # TẮT THINKING bằng cách KHÔNG thêm <|think|>
         contents = []
         first_user = True
         
@@ -173,7 +206,6 @@ async def get_google_response(messages, model_config):
                                 }
                             })
                 
-                # Gắn system vào text đầu tiên, KHÔNG thêm <|think|>
                 if text_parts and role == "user" and first_user and system_text:
                     text_parts[0] = f"{system_text}\n\n{text_parts[0]}"
                     first_user = False
@@ -201,10 +233,10 @@ async def get_google_response(messages, model_config):
         payload = {
             "contents": contents,
             "generationConfig": {
-                "temperature": 1.0,  # Gemma 4 khuyến nghị 1.0
+                "temperature": 1.0,
                 "maxOutputTokens": 2048,
                 "topP": 0.95,
-                "topK": 64  # Gemma 4 khuyến nghị 64
+                "topK": 64
             },
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -224,23 +256,18 @@ async def get_google_response(messages, model_config):
                     print(f"Google error {response.status}: {json.dumps(data, indent=2)}")
                     return f"Lỗi API {response.status}: {data.get('error', {}).get('message', 'Unknown')} 💀"
                 
-                # Parse response - xử lý cả trường hợp có thinking
                 if "candidates" in data and len(data["candidates"]) > 0:
                     candidate = data["candidates"][0]
                     
                     if candidate.get("finishReason") == "SAFETY":
                         return "Bị chặn vì safety settings bro 🥀"
                     
-                    # Check nếu có content
                     if "content" in candidate and "parts" in candidate["content"]:
                         parts = candidate["content"]["parts"]
                         
-                        # Tìm text part (có thể có nhiều parts)
                         for part in parts:
                             if "text" in part:
                                 res_text = part["text"]
-                                
-                                # Lọc thinking tags nếu có
                                 res_text = re.sub(r'<\|?think\|?>.*?</?\|?think\|?>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
                                 res_text = re.sub(r'<\|channel>thought.*?\|channel\|>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
                                 res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
@@ -248,21 +275,19 @@ async def get_google_response(messages, model_config):
                                 if res_text:
                                     return res_text[:1900]
                         
-                        # Nếu ko có text nào có nội dung
                         print(f"Empty text in parts: {json.dumps(parts, indent=2)}")
                         return "Gemma 4 trả về rỗng, thử lại đi bro 🥀"
                     
-                    # Trường hợp có reasoning field (hiếm khi xảy ra với Gemini API nhưng check cho chắc)
                     elif "reasoning" in candidate:
                         return candidate["reasoning"][:1900]
                 
-                # Log để debug
-                print(f"Unexpected response structure: {json.dumps(data, indent=2)[:800]}")
+                print(f"Unexpected response: {json.dumps(data, indent=2)[:800]}")
                 return "Im thin thít, thử lại đi bro 🥀"
 
     except Exception as e:
         print(f"Google exception: {str(e)}")
         return f"Lỗi code: {str(e)[:100]} 💀"
+
 # --- Router ---
 async def get_model_response(messages, model_config):
     if model_config["provider"] == "groq":
@@ -313,7 +338,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v19.1.0", inline=True)
+    embed.add_field(name="📜 Version", value="v19.1.0 (File Support)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -323,9 +348,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v19.1.0 - New Models", value="• Model mới `Gemini 3.1 flash lite`", inline=False)
-    embed.add_field(name="v19.0.0 - Full Fix", value="• Xóa enable_thinking (lỗi 400)\n• Fix systemInstruction cho Gemma 3/4\n• Code clean lại từ đầu", inline=False)
-    embed.set_footer(text="Updated 16/04/2026")
+    embed.add_field(name="v19.1.0 - File Support", value="• Thêm đọc file code (.py, .js, .html, v.v.)\n• Phân tích file văn bản đính kèm", inline=False)
+    embed.add_field(name="v19.0.0 - Full Fix", value="• Xóa enable_thinking (lỗi 400)\n• Fix Gemma 3/4 API", inline=False)
+    embed.set_footer(text="Updated 17/04/2026")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
@@ -340,7 +365,7 @@ async def clear(interaction: discord.Interaction):
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã reset ký ức")
 
-# --- Chat Handler ---
+# --- Chat Handler (ĐÃ UPDATE VỚI FILE SUPPORT) ---
 @bot.event
 async def on_message(message):
     global last_msg_time
@@ -387,16 +412,22 @@ async def on_message(message):
                 content = content.replace(mention.mention, "").strip()
 
             user_msg_content = []
+            file_contents = []  # Lưu nội dung file để gửi kèm
 
+            # Xử lý text content
             if content:
                 user_msg_content.append({"type": "text", "text": content})
             else:
                 user_msg_content.append({"type": "text", "text": "nx"})
 
-            # Xử lý ảnh nếu model hỗ trợ vision
-            if MODELS_CONFIG[CURRENT_MODEL]["vision"] and message.attachments:
+            # Xử lý attachments (ảnh + file văn bản) - PHẦN NÀY MỚI
+            if message.attachments:
                 for att in message.attachments:
-                    if att.content_type and att.content_type.startswith('image/'):
+                    filename = att.filename.lower()
+                    ext = filename.split('.')[-1] if '.' in filename else ''
+                    
+                    # 1. Xử lý ảnh nếu model support vision
+                    if MODELS_CONFIG[CURRENT_MODEL]["vision"] and att.content_type and att.content_type.startswith('image/'):
                         try:
                             img_data = await att.read()
                             img_base64 = base64.b64encode(img_data).decode('utf-8')
@@ -407,6 +438,24 @@ async def on_message(message):
                             })
                         except Exception as img_e:
                             print(f"Lỗi đọc ảnh: {img_e}")
+                    
+                    # 2. Xử lý file văn bản/code - PHẦN NÀY MỚI
+                    elif ext in TEXT_EXTENSIONS or att.content_type in ['text/plain', 'text/x-python', 'text/html', 'text/css', 'application/json', 'text/javascript', 'application/javascript']:
+                        try:
+                            file_text = await read_text_attachment(att)
+                            formatted = format_code_snippet(att.filename, file_text)
+                            file_contents.append(f"📄 **File: `{att.filename}`**\n{formatted}")
+                        except Exception as file_e:
+                            print(f"Lỗi đọc file {att.filename}: {file_e}")
+
+            # Nếu có file contents, thêm vào text message - PHẦN NÀY MỚI
+            if file_contents:
+                file_summary = "\n\n".join(file_contents)
+                if user_msg_content and user_msg_content[0]["type"] == "text":
+                    original_text = user_msg_content[0]["text"]
+                    user_msg_content[0]["text"] = f"{original_text}\n\n{file_summary}\n\nPhân tích giúp t đi m 🥀"
+                else:
+                    user_msg_content.insert(0, {"type": "text", "text": f"{file_summary}\n\nPhân tích giúp t đi m 🥀"})
 
             user_msg = {"role": "user", "content": user_msg_content}
 
@@ -414,7 +463,7 @@ async def on_message(message):
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
             # Lưu history dạng text đơn giản
-            text_content = content if content else "[Đã gửi ảnh]"
+            text_content = content if content else "[Đã gửi file/ảnh]"
             chat_history[uid][-1] = {"role": "user", "content": text_content}
             chat_history[uid].append({"role": "assistant", "content": reply})
             
