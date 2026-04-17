@@ -91,14 +91,14 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - Bây giờ là: {current_time}
 - Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân), vibe GenZ teencode (nx, th, cx, vs, k, thx, j,...)
 - Nhây lầy, cà khịa nhẹ, thỉnh thoảng chửi thề nhẹ cho vui
-- Luôn kèm Emoticon và Emoji (vd: 💔, 🥀, 💀) trong mọi câu rep
+- Luôn kèm Emoticon và Emoji (vd: 💔, 🥀, 💀, 🫩, ✌🏿,...) trong mọi câu rep
 - KHÔNG DÙNG DẤU "!" TRONG MỌI CÂU NÓI
 - TRẢ LỜI CỰC NGẮN (TỐI ĐA 1-2 DÒNG) - KHÔNG GIẢI THÍCH DÀI DÒNG
 - TUYỆT ĐỐI KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ, KHÔNG ĐƯỢC DÙNG THẺ <thinking> hay <thought>
 - CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
 - Khi ngườí dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Avt của mày là một con mèo
-- Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thọ Phú, Triệu Sơn, Thanh Hoá.
+- Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thanh Hoá (36).
 - Người đang chat: {user_id}"""
 
 chat_history = {}
@@ -365,14 +365,13 @@ async def clear(interaction: discord.Interaction):
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã reset ký ức")
 
-@bot.tree.command(name="meme", description="Gửi meme random xả stress")
+@bot.tree.command(name="meme", description="Gửi meme VN random xả stress")
 @app_commands.describe(số_lượng="Số meme muốn gửi (1-5, mặc định 1)")
 async def meme(interaction: discord.Interaction, số_lượng: int = 1):
     await interaction.response.defer()
     
-    # Check giới hạn 1-5
     if số_lượng < 1 or số_lượng > 5:
-        await interaction.followup.send("muốn discord gõ đầu t nên mới ghi số trên 5 hả🫩✌🏿🥀")
+        await interaction.followup.send("Gửi 1-5 meme thôi, muốn t bị ban à 💔")
         return
     
     memes_sent = 0
@@ -380,32 +379,26 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
     async with aiohttp.ClientSession() as session:
         for i in range(số_lượng):
             try:
-                async with session.get("https://meme-api.com/gimme") as resp:
+                # API trả về ảnh trực tiếp, ko phải JSON
+                async with session.get("https://phimtat.vn/api/random-meme/") as resp:
                     if resp.status == 200:
-                        data = await resp.json()
+                        img_data = await resp.read()
                         
-                        embed = discord.Embed(
-                            title=data.get("title", "Meme random")[:256],  # Discord giới hạn title
-                            color=discord.Color.random(),
-                            url=data.get("postLink", "")
-                        )
-                        embed.set_image(url=data.get("url"))
-                        embed.set_footer(
-                            text=f"👍 {data.get('ups', 0):,} | r/{data.get('subreddit', 'unknown')} | u/{data.get('author', 'anon')}"
-                        )
+                        # Tạo file từ bytes
+                        file = discord.File(io.BytesIO(img_data), filename=f"meme_{i+1}.jpg")
                         
-                        # Gửi embed, nếu là meme đầu thì edit vào deferred message
                         if i == 0:
-                            await interaction.followup.send(embed=embed)
+                            await interaction.followup.send(file=file)
                         else:
-                            await interaction.channel.send(embed=embed)
+                            await interaction.channel.send(file=file)
                         
                         memes_sent += 1
                     else:
+                        error_msg = f"💀 API đang die, status {resp.status}"
                         if i == 0:
-                            await interaction.followup.send(f"💀 API đang die, status {resp.status}")
+                            await interaction.followup.send(error_msg)
                         else:
-                            await interaction.channel.send(f"💀 Lỗi meme thứ {i+1}")
+                            await interaction.channel.send(error_msg)
                         
             except Exception as e:
                 error_msg = f"🥹 Lỗi rồi m: {str(e)[:50]}"
@@ -414,9 +407,8 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
                 else:
                     await interaction.channel.send(error_msg)
     
-    # Nếu gửi nhiều meme thì thông báo tổng kết
     if số_lượng > 1 and memes_sent > 0:
-        await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme r nha {random_vibe()}")
+        await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
 
 # --- Chat Handler (ĐÃ UPDATE VỚI FILE SUPPORT) ---
 @bot.event
