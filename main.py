@@ -338,7 +338,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v19.1.0 (File Support)", inline=True)
+    embed.add_field(name="📜 Version", value="v19.3.0", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -348,8 +348,8 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v19.3.0 - Cmds", value="• `/meme` cmds trở lại với API meme mới.", inline=False)
     embed.add_field(name="v19.1.0 - File Support", value="• Thêm đọc file code (.py, .js, .html, v.v.)\n• Phân tích file văn bản đính kèm", inline=False)
-    embed.add_field(name="v19.0.0 - Full Fix", value="• Xóa enable_thinking (lỗi 400)\n• Fix Gemma 3/4 API", inline=False)
     embed.set_footer(text="Updated 17/04/2026")
     await interaction.response.send_message(embed=embed)
 
@@ -364,6 +364,59 @@ async def clear(interaction: discord.Interaction):
     )
     chat_history[uid] = [{"role": "system", "content": current_sys}]
     await interaction.response.send_message(f"Đã reset ký ức")
+
+@bot.tree.command(name="meme", description="Gửi meme random xả stress")
+@app_commands.describe(số_lượng="Số meme muốn gửi (1-5, mặc định 1)")
+async def meme(interaction: discord.Interaction, số_lượng: int = 1):
+    await interaction.response.defer()
+    
+    # Check giới hạn 1-5
+    if số_lượng < 1 or số_lượng > 5:
+        await interaction.followup.send("muốn discord gõ đầu t nên mới ghi số trên 5 hả🫩✌🏿🥀")
+        return
+    
+    memes_sent = 0
+    
+    async with aiohttp.ClientSession() as session:
+        for i in range(số_lượng):
+            try:
+                async with session.get("https://meme-api.com/gimme") as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        
+                        embed = discord.Embed(
+                            title=data.get("title", "Meme random")[:256],  # Discord giới hạn title
+                            color=discord.Color.random(),
+                            url=data.get("postLink", "")
+                        )
+                        embed.set_image(url=data.get("url"))
+                        embed.set_footer(
+                            text=f"👍 {data.get('ups', 0):,} | r/{data.get('subreddit', 'unknown')} | u/{data.get('author', 'anon')}"
+                        )
+                        
+                        # Gửi embed, nếu là meme đầu thì edit vào deferred message
+                        if i == 0:
+                            await interaction.followup.send(embed=embed)
+                        else:
+                            await interaction.channel.send(embed=embed)
+                        
+                        memes_sent += 1
+                    else:
+                        if i == 0:
+                            await interaction.followup.send(f"💀 API đang die, status {resp.status}")
+                        else:
+                            await interaction.channel.send(f"💀 Lỗi meme thứ {i+1}")
+                        
+            except Exception as e:
+                error_msg = f"🥹 Lỗi rồi m: {str(e)[:50]}"
+                if i == 0:
+                    await interaction.followup.send(error_msg)
+                else:
+                    await interaction.channel.send(error_msg)
+    
+    # Nếu gửi nhiều meme thì thông báo tổng kết
+    if số_lượng > 1 and memes_sent > 0:
+        await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme r nha {random_vibe()}")
 
 # --- Chat Handler (ĐÃ UPDATE VỚI FILE SUPPORT) ---
 @bot.event
