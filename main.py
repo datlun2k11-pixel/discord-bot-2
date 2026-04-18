@@ -91,12 +91,12 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - KHÔNG DÙNG DẤU "!" TRONG MỌI CÂU NÓI
 - TRẢ LỜI CỰC NGẮN (TỐI ĐA 1-2 DÒNG) - KHÔNG GIẢI THÍCH DÀI DÒNG
 - TUYỆT ĐỐI KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ, KHÔNG ĐƯỢC DÙNG THẺ <thinking> hay <thought>
-- CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
 - Khi ngườí dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Avt của mày là một con mèo
 - Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thanh Hoá (36).
 - Ngườí đang chat: {user_id}
-- Khi cần thông tin mới/real-time, PHẢI dùng Google Search và trích dẫn nguồn"""
+- Khi cần thông tin mới/real-time, PHẢI dùng Google Search và trích dẫn nguồn
+- Do mày là bot discord, đây là các commands: `/model`, `/bot_info`, `/clear`(xoá ký ức), `/update_log`"""
 
 # === CHANNEL MEMORY SYSTEM ===
 # Key: channel_id hoặc user_id (cho DM)
@@ -225,21 +225,21 @@ async def get_google_response(messages, model_config):
             return "K có nội dung để xử lý bro 🥀"
 
         payload = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 1.0,
-                "maxOutputTokens": 2048,
-                "topP": 0.95,
-                "topK": 64
-            },
-            "tools": [{"google_search": {}}],
-            "safetySettings": [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-            ]
-        }
+    "contents": contents,
+    "generationConfig": {
+        "temperature": 1.0,
+        "maxOutputTokens": 2048,
+        "topP": 0.95,
+        "topK": 64
+    },
+    **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
+    "safetySettings": [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+    ]
+}
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
 
@@ -348,19 +348,19 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.0.0 (Channel Memory)", inline=True)
+    embed.add_field(name="📜 Version", value="v19.6.0 (Channel Memory)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
-    embed.add_field(name="💾 Memory", value="10 msgs/channel", inline=True)
+    embed.add_field(name="💾 Memory", value="15 msgs/channel", inline=True)
     embed.set_footer(text="Powered by Groq + Google | " + random_vibe())
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v20.0.0 - Channel Memory", value="• Nhìn thấy tất cả tin nhắn trong kênh\n• Chỉ rep khi được mention/reply/DM\n• Giảm memory xuống 10 tin nhắn", inline=False)
-    embed.add_field(name="v19.3.0 - Cmds", value="• `/meme` cmds trở lại", inline=False)
+    embed.add_field(name="v19.6.0 - Cmds", value="• `/ship` quay trở lại và đc nâng cấp thêm", inline=False)
+    embed.add_field(name="v19.5.0 - Channel Memory", value="• Nhìn thấy tất cả tin nhắn trong kênh\n• Chỉ rep khi được mention/reply/DM\n• Giảm memory xuống 10 tin nhắn", inline=False)
     embed.set_footer(text="Updated 18/04/2026")
     await interaction.response.send_message(embed=embed)
 
@@ -373,6 +373,66 @@ async def clear(interaction: discord.Interaction):
     if is_dm:
         uid = str(interaction.user.id)
 
+@bot.tree.command(name="ship", description="Ship 2 người random hoặc tự chọn 💘")
+@app_commands.describe(
+    user1="Người thứ nhất (để trống = random)",
+    user2="Người thứ hai (để trống = random)"
+)
+async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
+    await interaction.response.defer()
+    
+    members = [m for m in interaction.guild.members if not m.bot and m != interaction.user]
+    
+    if len(members) < 2:
+        await interaction.followup.send("Server có mỗi mình m à, ship với ai 💔")
+        return
+    
+    if user1 is None:
+        user1 = random.choice(members)
+    if user2 is None:
+        user2 = random.choice([m for m in members if m != user1])
+    
+    if user1 == user2:
+        user2 = random.choice([m for m in members if m != user1])
+    
+    combined = str(user1.id) + str(user2.id)
+    random.seed(combined)
+    love_percent = random.randint(1, 100)
+    random.seed()
+    
+    if love_percent >= 90:
+        tier, color, emojis, desc = "SOULMATES 💍", 0xff0066, ["💘", "🔥", "💍", "🥰"], "Cặp đôi trời sinh, cưới luôn đi m ơi"
+    elif love_percent >= 70:
+        tier, color, emojis, desc = "HIGH KEY SHIP 🌹", 0xff1493, ["🌹", "💖", "✨", "😍"], "Tình yêu đẹp vl, ship chính thức"
+    elif love_percent >= 50:
+        tier, color, emojis, desc = "CÓ CƠM GẮP THỊT 🍚", 0xff69b4, ["🍚", "🥢", "💕", "😏"], "Cũng được đó, thử hẹn hò đi"
+    elif love_percent >= 30:
+        tier, color, emojis, desc = "FRIENDZONE 🫂", 0xdda0dd, ["🫂", "💔", "😢", "🥲"], "Tình bạn đẹp, nhưng chỉ là bạn thôi"
+    elif love_percent >= 10:
+        tier, color, emojis, desc = "CHÁN VL 😴", 0x808080, ["😴", "💀", "😐", "🚮"], "Ko hợp nhau r, bỏ đi"
+    else:
+        tier, color, emojis, desc = "THÙ ĐỊCH ☠️", 0x1a1a1a, ["☠️", "🔪", "💀", "🤮"], "Ghét nhau đi, đừng gặp lại"
+    
+    bar = "█" * (love_percent // 10) + "░" * (10 - love_percent // 10)
+    
+    embed = discord.Embed(
+        title=f"{random.choice(emojis)} SHIP MACHINE {random.choice(emojis)}",
+        description=f"**{user1.display_name}** 💘 **{user2.display_name}**",
+        color=color
+    )
+    embed.add_field(name="Loving", value=f"`{bar}` {love_percent}%", inline=False)
+    embed.add_field(name="Tier", value=f"**{tier}**", inline=True)
+    embed.add_field(name="Comment", value=desc, inline=True)
+    
+    try:
+        embed.set_thumbnail(url=user1.display_avatar.url)
+        embed.set_image(url=user2.display_avatar.url)
+    except:
+        pass
+    
+    embed.set_footer(text=f"Requested by {interaction.user.display_name} | {random_vibe()}")
+    await interaction.followup.send(embed=embed)
+
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
     channel_name = interaction.channel.name if hasattr(interaction.channel, 'name') else 'DM'
@@ -381,7 +441,7 @@ async def clear(interaction: discord.Interaction):
         current_time=now
     )
     chat_history[uid] = [{"role": "system", "content": current_sys}]
-    await interaction.response.send_message(f"Đã reset ký ức cho kênh này 🥀")
+    await interaction.response.send_message(f"Đã reset ký ức (cho kênh) 🥀")
 
 @bot.tree.command(name="meme", description="Gửi meme VN random xả stress")
 @app_commands.describe(số_lượng="Số meme muốn gửi (1-5, mặc định 1)")
