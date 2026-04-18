@@ -348,7 +348,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v19.6.0 (Channel Memory)", inline=True)
+    embed.add_field(name="📜 Version", value="v19.6.1", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -359,19 +359,28 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v19.6.0 - Cmds", value="• `/ship` quay trở lại và đc nâng cấp thêm", inline=False)
+    embed.add_field(name="v19.6.1 - Cmds", value="• `/ship` quay trở lại và đc nâng cấp thêm\n• Bug Fixed", inline=False)
     embed.add_field(name="v19.5.0 - Channel Memory", value="• Nhìn thấy tất cả tin nhắn trong kênh\n• Chỉ rep khi được mention/reply/DM\n• Giảm memory xuống 10 tin nhắn", inline=False)
     embed.set_footer(text="Updated 18/04/2026")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
-    # Clear theo channel thay vì user
     uid = str(interaction.channel.id)
     is_dm = isinstance(interaction.channel, discord.DMChannel)
-
+    
     if is_dm:
         uid = str(interaction.user.id)
+    
+    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+    now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+    channel_name = interaction.channel.name if hasattr(interaction.channel, 'name') else 'DM'
+    current_sys = system_instruction.format(
+        user_id=f"Multiple users in {channel_name}",
+        current_time=now
+    )
+    chat_history[uid] = [{"role": "system", "content": current_sys}]
+    await interaction.response.send_message(f"Đã reset ký ức (cho kênh) 🥀")
 
 @bot.tree.command(name="ship", description="Ship 2 người random hoặc tự chọn 💘")
 @app_commands.describe(
