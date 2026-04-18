@@ -471,8 +471,8 @@ async def on_message(message):
     })
 
     # Giữ tối đa 10 tin nhắn (không tính system prompt)
-    if len(chat_history[uid]) > 11:  # 1 system + 10 messages
-        chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+    if len(chat_history[uid]) > 16:  # 1 system + 10 messages
+        chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
     # === END PASSIVE MONITORING ===
 
     # === CHECK: Chỉ rep khi được mention/reply/DM ===
@@ -571,8 +571,8 @@ async def on_message(message):
             chat_history[uid].append({"role": "assistant", "content": reply})
 
             # Giữ tối đa 10 tin nhắn
-            if len(chat_history[uid]) > 11:
-                chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-10:]
+            if len(chat_history[uid]) > 16:
+                chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
 
             await message.reply(f"{reply[:1900]}", mention_author=False)
 
