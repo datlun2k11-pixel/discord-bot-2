@@ -232,20 +232,21 @@ async def get_google_response(messages, model_config):
             return "K có nội dung để xử lý bro 🥀"
 
         payload = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 1.0,
-                "maxOutputTokens": 2048,
-                "topP": 0.95,
-                "topK": 64
-            },
-            "safetySettings": [
-                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-            ]
-        }
+    "contents": contents,
+    "generationConfig": {
+        "temperature": 1.0,
+        "maxOutputTokens": 2048,
+        "topP": 0.95,
+        "topK": 64
+    },
+    "tools": [{"google_search": {}}],  # ← THÊM DÒNG NÀY
+    "safetySettings": [
+        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+    ]
+}
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
         
@@ -274,7 +275,23 @@ async def get_google_response(messages, model_config):
                                 res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
                                 
                                 if res_text:
-                                    return res_text[:1900]
+    # Lấy grounding sources nếu có
+    sources = []
+    if "groundingMetadata" in candidate:
+        grounding = candidate["groundingMetadata"]
+        if "groundingChunks" in grounding:
+            for chunk in grounding["groundingChunks"]:
+                if "web" in chunk:
+                    web = chunk["web"]
+                    title = web.get("title", "Unknown")
+                    uri = web.get("uri", "")
+                    sources.append(f"• [{title}]({uri})")
+    
+    final_reply = res_text[:1800]  # Để chừa chỗ cho source
+    if sources:
+        final_reply += "\n\n📚 **Nguồn:**\n" + "\n".join(sources[:3])
+    
+    return final_reply
                         
                         print(f"Empty text in parts: {json.dumps(parts, indent=2)}")
                         return "Gemma 4 trả về rỗng, thử lại đi bro 🥀"
@@ -339,7 +356,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v19.3.0", inline=True)
+    embed.add_field(name="📜 Version", value="v19.4.0", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -349,8 +366,8 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v19.4.0 - Search Grounding", value="• Tính năng search quay trở lại với bug fix.", inline=False)
     embed.add_field(name="v19.3.0 - Cmds", value="• `/meme` cmds trở lại với API meme mới.", inline=False)
-    embed.add_field(name="v19.1.0 - File Support", value="• Thêm đọc file code (.py, .js, .html, v.v.)\n• Phân tích file văn bản đính kèm", inline=False)
     embed.set_footer(text="Updated 17/04/2026")
     await interaction.response.send_message(embed=embed)
 
