@@ -535,10 +535,10 @@ async def on_message(message):
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
     # === END PASSIVE MONITORING ===
 
-    # === CHECK: Chỉ rep khi được mention/reply/DM ===
+       # === CHECK: Rep khi được mention/reply/DM/KEYWORD ===
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
-
+    
     if message.reference:
         try:
             ref_msg = await message.channel.fetch_message(message.reference.message_id)
@@ -546,7 +546,12 @@ async def on_message(message):
         except:
             pass
 
-    if not (is_mentioned or is_dm or is_reply_to_bot):
+    # KEYWORD TRIGGER - Thêm đoạn này
+    trigger_keywords = ["ê bot", "ê ai", "bot ơi", "ai ơi", "gena", "gena bot", "gena-bot", "gen ai", "gen a"]
+    content_lower = message.content.lower()
+    is_keyword_trigger = any(keyword in content_lower for keyword in trigger_keywords)
+
+    if not (is_mentioned or is_dm or is_reply_to_bot or is_keyword_trigger):
         return  # Không rep, nhưng đã lưu tin nhắn rồi
     # === END CHECK ===
 
