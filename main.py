@@ -543,7 +543,7 @@ async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", đ
                 {"role": "user", "content": quiz_prompt}
             ]
 
-            raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
+            raw_response = await get_model_response(temp_messages, MODELS_CONFIG["GPT-OSS-120B"])
             raw_response = remove_thinking(raw_response)
             lines = raw_response.strip().splitlines()
             
