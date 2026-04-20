@@ -1,4 +1,4 @@
-# AI coded - GenA-bot v20.0 (Channel Memory Edition)
+# AI coded - GenA-bot v20.1 (Full Rewrite)
 import discord
 import os
 import asyncio
@@ -91,19 +91,22 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - AI nhâ
 - KHÔNG DÙNG DẤU "!" TRONG MỌI CÂU NÓI
 - TRẢ LỜI CỰC NGẮN (TỐI ĐA 1-2 DÒNG) - KHÔNG GIẢI THÍCH DÀI DÒNG
 - TUYỆT ĐỐI KHÔNG ĐƯỢC OUTPUT SUY NGHĨ NỘI BỘ, KHÔNG ĐƯỢC DÙNG THẺ <thinking> hay <thought>
+- CHỈ TRẢ LỜI TRỰC TIẾP, KHÔNG PHÂN TÍCH HAY GIẢI THÍCH GÌ THÊM
 - Khi ngườí dùng nhắn "ê" thì nói "sủa?" hoặc "cái loz j"
 - Avt của mày là một con mèo
 - Developer: <@1155129530122510376> (Đạt Lùn 2k11), sống ở Thanh Hoá (36).
 - Ngườí đang chat: {user_id}
 - Khi cần thông tin mới/real-time, PHẢI dùng Google Search và trích dẫn nguồn
-- Do mày là bot discord, đây là các commands: `/model`, `/bot_info`, `/clear`(xoá ký ức), `/update_log`"""
+- Do mày là bot discord, đây là các commands: `/model`, `/bot_info`, `/clear`(xoá ký ức), `/update_log`, `/ship`, `/quiz`, `/quiz_score`"""
 
-# === CHANNEL MEMORY SYSTEM ===
-# Key: channel_id hoặc user_id (cho DM)
-# Value: list of messages (max 10 + system prompt)
+# === GLOBALS ===
 chat_history = {}
 user_locks = {}
 last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
+
+# Quiz globals
+quiz_active = {}
+quiz_scores = {}
 
 app = Flask(__name__)
 @app.route('/')
@@ -162,7 +165,7 @@ async def get_groq_response(messages, model_config):
     except Exception as e:
         return f"Lỗi Groq r m ơi: {str(e)[:100]} (ಠ_ಠ)💔"
 
-# --- GOOGLE (WITH SEARCH GROUNDING) ---
+# --- GOOGLE ---
 async def get_google_response(messages, model_config):
     try:
         system_text = ""
@@ -225,21 +228,21 @@ async def get_google_response(messages, model_config):
             return "K có nội dung để xử lý bro 🥀"
 
         payload = {
-    "contents": contents,
-    "generationConfig": {
-        "temperature": 1.0,
-        "maxOutputTokens": 2048,
-        "topP": 0.95,
-        "topK": 64
-    },
-    **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
-    "safetySettings": [
-        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-    ]
-}
+            "contents": contents,
+            "generationConfig": {
+                "temperature": 1.0,
+                "maxOutputTokens": 2048,
+                "topP": 0.95,
+                "topK": 64
+            },
+            **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
+            "safetySettings": [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+            ]
+        }
 
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_config['id']}:generateContent?key={GEMINI_API_KEY}"
 
@@ -268,7 +271,6 @@ async def get_google_response(messages, model_config):
                                 res_text = re.sub(r'<(thinking|thought|reasoning)>.*?</\1>', '', res_text, flags=re.DOTALL | re.IGNORECASE).strip()
 
                                 if res_text:
-                                    # Lấy grounding sources nếu có
                                     sources = []
                                     if "groundingMetadata" in candidate:
                                         grounding = candidate["groundingMetadata"]
@@ -306,6 +308,7 @@ async def get_model_response(messages, model_config):
         return await get_google_response(messages, model_config)
     return "Provider lạ quá m ơi 💀"
 
+# === BOT SETUP ===
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 
 @bot.event
@@ -317,7 +320,8 @@ async def on_ready():
         print(f"Lỗi sync: {e}")
     print(f"GenA-bot Ready! 🔥")
 
-# --- Commands ---
+# === COMMANDS ===
+
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
 @app_commands.choices(chon_model=MODEL_CHOICES)
 async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
@@ -348,7 +352,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v19.6.1", inline=True)
+    embed.add_field(name="📜 Version", value="v20.1.0", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -359,19 +363,19 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v19.6.1 - Cmds", value="• `/ship` quay trở lại và đc nâng cấp thêm\n• Bug Fixed", inline=False)
-    embed.add_field(name="v19.5.0 - Channel Memory", value="• Nhìn thấy tất cả tin nhắn trong kênh\n• Chỉ rep khi được mention/reply/DM\n• Giảm memory xuống 10 tin nhắn", inline=False)
-    embed.set_footer(text="Updated 18/04/2026")
+    embed.add_field(name="v20.1.0 - Full Rewrite", value="• Fix /clear command\n• Fix /ship command\n• Thêm /quiz + /quiz_score\n• Keyword trigger stable", inline=False)
+    embed.add_field(name="v19.5.0 - Channel Memory", value="• Nhìn thấy tất cả tin nhắn trong kênh\n• Chỉ rep khi được mention/reply/DM/keyword", inline=False)
+    embed.set_footer(text="Updated 20/04/2026")
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
     uid = str(interaction.channel.id)
     is_dm = isinstance(interaction.channel, discord.DMChannel)
-    
+
     if is_dm:
         uid = str(interaction.user.id)
-    
+
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
     channel_name = interaction.channel.name if hasattr(interaction.channel, 'name') else 'DM'
@@ -389,26 +393,26 @@ async def clear(interaction: discord.Interaction):
 )
 async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
     await interaction.response.defer()
-    
+
     members = [m for m in interaction.guild.members if not m.bot and m != interaction.user]
-    
+
     if len(members) < 2:
         await interaction.followup.send("Server có mỗi mình m à, ship với ai 💔")
         return
-    
+
     if user1 is None:
         user1 = random.choice(members)
     if user2 is None:
         user2 = random.choice([m for m in members if m != user1])
-    
+
     if user1 == user2:
         user2 = random.choice([m for m in members if m != user1])
-    
+
     combined = str(user1.id) + str(user2.id)
     random.seed(combined)
     love_percent = random.randint(1, 100)
     random.seed()
-    
+
     if love_percent >= 90:
         tier, color, emojis, desc = "SOULMATES 💍", 0xff0066, ["💘", "🔥", "💍", "🥰"], "Cặp đôi trời sinh, cưới luôn đi m ơi"
     elif love_percent >= 70:
@@ -421,9 +425,9 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
         tier, color, emojis, desc = "CHÁN VL 😴", 0x808080, ["😴", "💀", "😐", "🚮"], "Ko hợp nhau r, bỏ đi"
     else:
         tier, color, emojis, desc = "THÙ ĐỊCH ☠️", 0x1a1a1a, ["☠️", "🔪", "💀", "🤮"], "Ghét nhau đi, đừng gặp lại"
-    
+
     bar = "█" * (love_percent // 10) + "░" * (10 - love_percent // 10)
-    
+
     embed = discord.Embed(
         title=f"{random.choice(emojis)} SHIP MACHINE {random.choice(emojis)}",
         description=f"**{user1.display_name}** 💘 **{user2.display_name}**",
@@ -432,25 +436,15 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
     embed.add_field(name="Loving", value=f"`{bar}` {love_percent}%", inline=False)
     embed.add_field(name="Tier", value=f"**{tier}**", inline=True)
     embed.add_field(name="Comment", value=desc, inline=True)
-    
+
     try:
         embed.set_thumbnail(url=user1.display_avatar.url)
         embed.set_image(url=user2.display_avatar.url)
     except:
         pass
-    
+
     embed.set_footer(text=f"Requested by {interaction.user.display_name} | {random_vibe()}")
     await interaction.followup.send(embed=embed)
-
-    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
-    now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
-    channel_name = interaction.channel.name if hasattr(interaction.channel, 'name') else 'DM'
-    current_sys = system_instruction.format(
-        user_id=f"Multiple users in {channel_name}",
-        current_time=now
-    )
-    chat_history[uid] = [{"role": "system", "content": current_sys}]
-    await interaction.response.send_message(f"Đã reset ký ức (cho kênh) 🥀")
 
 @bot.tree.command(name="meme", description="Gửi meme VN random xả stress")
 @app_commands.describe(số_lượng="Số meme muốn gửi (1-5, mặc định 1)")
@@ -494,20 +488,136 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
     if số_lượng > 1 and memes_sent > 0:
         await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
 
-# === MAIN MESSAGE HANDLER (CHANNEL MEMORY EDITION) ===
+# === QUIZ COMMANDS ===
+
+@bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng +1 điểm 🧠")
+@app_commands.describe(
+    chủ_đề="Chủ đề câu hỏi (mặc định: random)",
+    độ_khó="Dễ/Trung bình/Khó (mặc định: Trung bình)"
+)
+@app_commands.choices(độ_khó=[
+    app_commands.Choice(name="Dễ", value="dễ"),
+    app_commands.Choice(name="Trung bình", value="trung bình"),
+    app_commands.Choice(name="Khó", value="khó")
+])
+async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", độ_khó: app_commands.Choice[str] = None):
+    await interaction.response.defer()
+
+    channel_id = str(interaction.channel_id)
+    độ_khó_value = độ_khó.value if độ_khó else "trung bình"
+
+    if channel_id in quiz_active:
+        await interaction.followup.send("Đang có câu hỏi rồi m, trả lời đi r hỏi tiếp 💀")
+        return
+
+    quiz_prompt = f"""Tạo 1 câu hỏi trắc nghiệm chủ đề: {chủ_đề}, độ khó: {độ_khó_value}.
+YÊU CẦU:
+- Câu hỏi ngắn gọn, thú vị
+- 4 đáp án A/B/C/D
+- Chỉ 1 đáp án đúng
+- Format chính xác:
+CÂU HỎI: [nội dung câu hỏi]
+A. [đáp án A]
+B. [đáp án B]
+C. [đáp án C]
+D. [đáp án D]
+ĐÁP ÁN: [chữ cái đúng A/B/C/D]
+GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
+
+    try:
+        temp_messages = [
+            {"role": "system", "content": "Mày là bot tạo câu hỏi quiz thú vị, ngắn gọn."},
+            {"role": "user", "content": quiz_prompt}
+        ]
+
+        raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
+
+        lines = raw_response.strip().split('\n')
+        question_lines = []
+        answer_map = {}
+        correct_answer = None
+        explanation = ""
+
+        for line in lines:
+            line = line.strip()
+            if line.startswith("CÂU HỎI:"):
+                question_lines.append(line.replace("CÂU HỎI:", "").strip())
+            elif line.startswith(("A.", "B.", "C.", "D.")):
+                letter = line[0]
+                answer_text = line[2:].strip()
+                answer_map[letter] = answer_text
+                question_lines.append(line)
+            elif line.startswith("ĐÁP ÁN:"):
+                correct_answer = line.replace("ĐÁP ÁN:", "").strip().upper()
+            elif line.startswith("GIẢI THÍCH:"):
+                explanation = line.replace("GIẢI THÍCH:", "").strip()
+
+        if not correct_answer or correct_answer not in answer_map:
+            await interaction.followup.send("AI tạo câu hỏi lỗi r, thử lại đi 🥀")
+            return
+
+        quiz_active[channel_id] = {
+            "question": "\n".join(question_lines),
+            "answer": correct_answer,
+            "started_by": interaction.user.id,
+            "explanation": explanation
+        }
+
+        if channel_id not in quiz_scores:
+            quiz_scores[channel_id] = {}
+
+        embed = discord.Embed(
+            title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
+            description="\n".join(question_lines),
+            color=0xffd700
+        )
+        embed.set_footer(text=f"Độ khó: {độ_khó_value} | Trả lời bằng chữ A/B/C/D | {random_vibe()}")
+
+        await interaction.followup.send(embed=embed)
+
+        # Auto hủy sau 60s
+        await asyncio.sleep(60)
+        if channel_id in quiz_active:
+            old_quiz = quiz_active.pop(channel_id)
+            await interaction.channel.send(f"⏰ Hết giờ rồi m! Đáp án đúng là **{old_quiz['answer']}**. {old_quiz.get('explanation', '')}")
+
+    except Exception as e:
+        print(f"Lỗi quiz: {e}")
+        await interaction.followup.send(f"Lỗi tạo câu hỏi r: {str(e)[:50]} 💀")
+
+@bot.tree.command(name="quiz_score", description="Xem bảng xếp hạng quiz server 🏆")
+async def quiz_score(interaction: discord.Interaction):
+    channel_id = str(interaction.channel_id)
+
+    if channel_id not in quiz_scores or not quiz_scores[channel_id]:
+        await interaction.response.send_message("Chưa ai chơi quiz ở đây cả 🥀")
+        return
+
+    scores = quiz_scores[channel_id]
+    sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+
+    embed = discord.Embed(title="🏆 BẢNG XẾP HẠNG QUIZ", color=0xffd700)
+
+    for i, (user_id, score) in enumerate(sorted_scores[:10], 1):
+        user = interaction.guild.get_member(int(user_id))
+        name = user.display_name if user else f"User_{user_id[:6]}"
+        medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, "💩")
+        embed.add_field(name=f"{medal} #{i} {name}", value=f"{score} điểm", inline=False)
+
+    embed.set_footer(text=random_vibe())
+    await interaction.response.send_message(embed=embed)
+
+# === MAIN MESSAGE HANDLER ===
 @bot.event
 async def on_message(message):
     global last_msg_time
 
-    # Update activity time
     if not message.author.bot:
         last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
-    # Bot không xử lý chính mình
     if message.author.bot:
         return
 
-    # Xác định channel ID hoặc user ID (cho DM)
     is_dm = isinstance(message.channel, discord.DMChannel)
 
     if is_dm:
@@ -515,8 +625,7 @@ async def on_message(message):
     else:
         uid = str(message.channel.id)
 
-    # === PASSIVE MONITORING: Lưu tất cả tin nhắn ===
-    # Khởi tạo history nếu chưa có
+    # PASSIVE MONITORING
     if uid not in chat_history:
         tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
         now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
@@ -527,27 +636,34 @@ async def on_message(message):
         )
         chat_history[uid] = [{"role": "system", "content": current_sys}]
 
-    # Lưu tin nhắn vào history (preview dạng text)
     msg_preview = message.content[:300] if message.content else "[ảnh/file]"
     display_name = message.author.display_name
-
-    # Format: "TênUser: nội dung"
     preview_msg = f"{display_name}: {msg_preview}"
 
-    chat_history[uid].append({
-        "role": "user",
-        "content": preview_msg
-    })
+    chat_history[uid].append({"role": "user", "content": preview_msg})
 
-    # Giữ tối đa 10 tin nhắn (không tính system prompt)
-    if len(chat_history[uid]) > 16:  # 1 system + 10 messages
+    if len(chat_history[uid]) > 16:
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
-    # === END PASSIVE MONITORING ===
 
-       # === CHECK: Rep khi được mention/reply/DM/KEYWORD ===
+    # QUIZ ANSWER CHECK
+    channel_id = str(message.channel.id)
+    if channel_id in quiz_active and not message.author.bot:
+        content_lower = message.content.strip().upper()
+        if content_lower in ['A', 'B', 'C', 'D']:
+            quiz = quiz_active[channel_id]
+            if content_lower == quiz["answer"]:
+                user_id = str(message.author.id)
+                quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + 1
+                old_quiz = quiz_active.pop(channel_id)
+                await message.reply(f"✅ **ĐÚNG RỒI!** +1 điểm cho {message.author.display_name}! {old_quiz.get('explanation', '')} 🎉")
+            else:
+                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}**. Thử lại với `/quiz` đi 🥀")
+                quiz_active.pop(channel_id)
+
+    # CHECK TRIGGER
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
-    
+
     if message.reference:
         try:
             ref_msg = await message.channel.fetch_message(message.reference.message_id)
@@ -555,16 +671,14 @@ async def on_message(message):
         except:
             pass
 
-    # KEYWORD TRIGGER - Thêm đoạn này
     trigger_keywords = ["ê bot", "ê ai", "bot ơi", "ai ơi", "gena", "gena bot", "gena-bot", "gen ai", "gen a"]
     content_lower = message.content.lower()
     is_keyword_trigger = any(keyword in content_lower for keyword in trigger_keywords)
 
     if not (is_mentioned or is_dm or is_reply_to_bot or is_keyword_trigger):
-        return  # Không rep, nhưng đã lưu tin nhắn rồi
-    # === END CHECK ===
+        return
 
-    # === PROCESS REPLY ===
+    # PROCESS REPLY
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
     if lock.locked():
@@ -574,47 +688,32 @@ async def on_message(message):
         await message.channel.typing()
 
         try:
-            # Lấy content và xóa mention
             content = message.content
             for mention in message.mentions:
                 content = content.replace(mention.mention, "").strip()
 
-            # Xử lý attachments
             user_msg_content = []
             file_contents = []
 
-            # Text content với context đầy đủ
             if content:
-                user_msg_content.append({
-                    "type": "text",
-                    "text": f"{message.author.display_name} hỏi: {content}"
-                })
+                user_msg_content.append({"type": "text", "text": f"{message.author.display_name} hỏi: {content}"})
             else:
-                user_msg_content.append({
-                    "type": "text",
-                    "text": f"{message.author.display_name}: [gửi ảnh/file]"
-                })
+                user_msg_content.append({"type": "text", "text": f"{message.author.display_name}: [gửi ảnh/file]"})
 
-            # Xử lý file và ảnh
             if message.attachments:
                 for att in message.attachments:
                     filename = att.filename.lower()
                     ext = filename.split('.')[-1] if '.' in filename else ''
 
-                    # Ảnh nếu model support vision
                     if MODELS_CONFIG[CURRENT_MODEL]["vision"] and att.content_type and att.content_type.startswith('image/'):
                         try:
                             img_data = await att.read()
                             img_base64 = base64.b64encode(img_data).decode('utf-8')
                             img_url = f"data:{att.content_type};base64,{img_base64}"
-                            user_msg_content.append({
-                                "type": "image_url",
-                                "image_url": {"url": img_url}
-                            })
+                            user_msg_content.append({"type": "image_url", "image_url": {"url": img_url}})
                         except Exception as img_e:
                             print(f"Lỗi đọc ảnh: {img_e}")
 
-                    # File văn bản
                     elif ext in TEXT_EXTENSIONS or att.content_type in ['text/plain', 'text/x-python', 'text/html', 'text/css', 'application/json', 'text/javascript', 'application/javascript']:
                         try:
                             file_text = await read_text_attachment(att)
@@ -623,28 +722,21 @@ async def on_message(message):
                         except Exception as file_e:
                             print(f"Lỗi đọc file {att.filename}: {file_e}")
 
-            # Thêm file contents vào text
             if file_contents:
                 file_summary = "\n\n".join(file_contents)
                 original_text = user_msg_content[0]["text"]
                 user_msg_content[0]["text"] = f"{original_text}\n\n{file_summary}\n\nPhân tích giúp t đi m 🥀"
 
-            # Thay thế cái preview đã lưu bằng message đầy đủ
-            # Xóa cái preview cuối cùng
             if len(chat_history[uid]) > 1:
                 chat_history[uid].pop()
 
-            # Thêm message đầy đủ
             user_msg = {"role": "user", "content": user_msg_content}
             chat_history[uid].append(user_msg)
 
-            # Gọi model
             reply = await get_model_response(chat_history[uid], MODELS_CONFIG[CURRENT_MODEL])
 
-            # Lưu reply vào history
             chat_history[uid].append({"role": "assistant", "content": reply})
 
-            # Giữ tối đa 10 tin nhắn
             if len(chat_history[uid]) > 16:
                 chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
 
