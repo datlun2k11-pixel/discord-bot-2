@@ -525,14 +525,13 @@ D. [đáp án D]
 ĐÁP ÁN: [chữ cái đúng A/B/C/D]
 GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
-    try:
+        try:
         temp_messages = [
             {"role": "system", "content": "Mày là bot tạo câu hỏi quiz thú vị, ngắn gọn."},
             {"role": "user", "content": quiz_prompt}
         ]
-
-                raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
-
+        
+        raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
         lines = raw_response.strip().splitlines()
         question_lines = []
         answer_map = {}
