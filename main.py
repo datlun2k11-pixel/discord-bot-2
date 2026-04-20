@@ -138,6 +138,24 @@ def format_code_snippet(filename, content, max_lines=50):
     ext = filename.split('.')[-1].lower() if '.' in filename else 'txt'
     return f"```{ext}\n{content}\n```"
 
+def remove_thinking(text):
+    """Xóa tất cả thinking tags từ AI output"""
+    patterns = [
+        r'<\|?think\|?>.*?</?\|?think\|?>',
+        r'<\|channel>thought.*?\|channel\|>',
+        r'<(thinking|thought|reasoning)>.*?</\1>',
+        r'\[thinking\].*?\[/thinking\]',
+        r'\(thinking\).*?\(/thinking\)',
+        r'<!--thinking-->.*?<!--/thinking-->',
+    ]
+    
+    for pattern in patterns:
+        text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE).strip()
+    
+    # Xóa dòng trống thừa
+    lines = [line for line in text.split('\n') if line.strip()]
+    return '\n'.join(lines)
+    
 # --- GROQ ---
 async def get_groq_response(messages, model_config):
     try:
@@ -538,20 +556,25 @@ D. [đáp án D]
 GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
         try:
-            temp_messages = [
-                {"role": "system", "content": "Mày là bot tạo câu hỏi quiz thú vị, ngắn gọn. Mỗi câu phải hoàn toàn khác nhau."},
+                        temp_messages = [
+                {"role": "system", "content": "Mày là bot tạo câu hỏi quiz. TUYỆT ĐỐI KHÔNG OUTPUT SUY NGHĨ NỘI BỘ. KHÔNG DÙNG <thinking> HAY <thought>. CHỈ OUTPUT CÂU HỎI VÀ ĐÁP ÁN."},
                 {"role": "user", "content": quiz_prompt}
             ]
 
-            raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
+                        raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
+            # XÓA THINKING TRƯỚC KHI PARSE
+            raw_response = remove_thinking(raw_response)
             lines = raw_response.strip().splitlines()
             question_lines = []
             answer_map = {}
             correct_answer = None
             explanation = ""
 
-            for line in lines:
+                        for line in lines:
                 line = line.strip()
+                # Bỏ qua nếu là thinking tag còn sót
+                if any(tag in line.lower() for tag in ['think', 'thought', 'reasoning']):
+                    continue
                 if line.startswith("CÂU HỎI:"):
                     question_lines.append(line.replace("CÂU HỎI:", "").strip())
                 elif line.startswith(("A.", "B.", "C.", "D.")):
