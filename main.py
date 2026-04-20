@@ -525,7 +525,7 @@ D. [đáp án D]
 ĐÁP ÁN: [chữ cái đúng A/B/C/D]
 GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
-        try:
+    try:
         temp_messages = [
             {"role": "system", "content": "Mày là bot tạo câu hỏi quiz thú vị, ngắn gọn."},
             {"role": "user", "content": quiz_prompt}
@@ -557,8 +557,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
             return
 
         quiz_active[channel_id] = {
-            "question": "
-".join(question_lines),
+            "question": "\n".join(question_lines),
             "answer": correct_answer,
             "started_by": interaction.user.id,
             "explanation": explanation
@@ -569,8 +568,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
         embed = discord.Embed(
             title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
-            description="
-".join(question_lines),
+            description="\n".join(question_lines),
             color=0xffd700
         )
         embed.set_footer(text=f"Độ khó: {độ_khó_value} | Trả lời bằng chữ A/B/C/D | {random_vibe()}")
