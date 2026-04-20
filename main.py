@@ -1,4 +1,4 @@
-# AI coded - GenA-bot v20.1 (Full Rewrite)
+# AI coded
 import discord
 import os
 import asyncio
