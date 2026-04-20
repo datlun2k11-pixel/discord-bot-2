@@ -533,7 +533,8 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
         raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
 
-        lines = raw_response.strip().split('\n')
+        lines = raw_response.strip().split('
+')
         question_lines = []
         answer_map = {}
         correct_answer = None
@@ -558,7 +559,8 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
             return
 
         quiz_active[channel_id] = {
-            "question": "\n".join(question_lines),
+            "question": "
+".join(question_lines),
             "answer": correct_answer,
             "started_by": interaction.user.id,
             "explanation": explanation
@@ -569,7 +571,8 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
         embed = discord.Embed(
             title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
-            description="\n".join(question_lines),
+            description="
+".join(question_lines),
             color=0xffd700
         )
         embed.set_footer(text=f"Độ khó: {độ_khó_value} | Trả lời bằng chữ A/B/C/D | {random_vibe()}")
@@ -645,7 +648,7 @@ async def on_message(message):
     if len(chat_history[uid]) > 16:
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
 
-    # QUIZ ANSWER CHECK
+    # QUIZ ANSWER CHECK - TÁCH BIỆT KHỎI CHAT MEMORY
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
         content_upper = message.content.strip().upper()
@@ -659,7 +662,12 @@ async def on_message(message):
             else:
                 await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
                 quiz_active.pop(channel_id)
-            return  # ← THÊM DÒNG NÀY ĐỂ KO GỌI AI CHAT
+
+            # XÓA TIN NHẮN TRẢ LỜI QUIZ KHỎI CHAT_HISTORY
+            if uid in chat_history and len(chat_history[uid]) > 1:
+                chat_history[uid].pop()  # Xóa tin nhắn "A"/"B"/"C"/"D"
+
+            return  # KO GỌI AI CHAT
 
     # CHECK TRIGGER
     is_mentioned = bot.user in message.mentions
