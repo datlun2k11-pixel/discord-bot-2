@@ -556,7 +556,7 @@ D. [đáp án D]
 GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
         try:
-                        temp_messages = [
+                                temp_messages = [
                 {"role": "system", "content": "Mày là bot tạo câu hỏi quiz. TUYỆT ĐỐI KHÔNG OUTPUT SUY NGHĨ NỘI BỘ. KHÔNG DÙNG <thinking> HAY <thought>. CHỈ OUTPUT CÂU HỎI VÀ ĐÁP ÁN."},
                 {"role": "user", "content": quiz_prompt}
             ]
@@ -564,7 +564,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
         raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
         raw_response = remove_thinking(raw_response)
         lines = raw_response.strip().splitlines()
-            question_lines = []
+            question_lines = [] # <--- Thằng này thụt vào quá đà
             answer_map = {}
             correct_answer = None
             explanation = ""
