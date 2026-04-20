@@ -10,6 +10,7 @@ import base64
 import json
 import re
 import io
+import time
 from discord.ext import commands
 from discord import app_commands
 from groq import Groq
@@ -352,7 +353,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.1.0", inline=True)
+    embed.add_field(name="📜 Version", value="v20.1.5", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -363,7 +364,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v20.1.0 - Full Rewrite", value="• Fix /clear command\n• Fix /ship command\n• Thêm /quiz + /quiz_score\n• Keyword trigger stable", inline=False)
+    embed.add_field(name="v20.1.5 - Full Rewrite", value="• Fix /clear command\n• Fix /ship command\n• Thêm /quiz + /quiz_score\n• Keyword trigger stable\n• Sửa lỗi bot rep sau khi trl câu hỏi\n• Sửa lỗi Quiz bị lặp lại", inline=False)
     embed.add_field(name="v19.5.0 - Channel Memory", value="• Nhìn thấy tất cả tin nhắn trong kênh\n• Chỉ rep khi được mention/reply/DM/keyword", inline=False)
     embed.set_footer(text="Updated 20/04/2026")
     await interaction.response.send_message(embed=embed)
@@ -489,7 +490,6 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
         await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
 
 # === QUIZ COMMANDS ===
-
 @bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng +1 điểm 🧠")
 @app_commands.describe(
     chủ_đề="Chủ đề câu hỏi (mặc định: random)",
@@ -511,6 +511,7 @@ async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", đ
         return
 
     quiz_prompt = f"""Tạo 1 câu hỏi trắc nghiệm chủ đề: {chủ_đề}, độ khó: {độ_khó_value}.
+SEED: {int(time.time())}
 YÊU CẦU:
 - Câu hỏi ngắn gọn, thú vị
 - 4 đáp án A/B/C/D
@@ -575,7 +576,6 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
         await interaction.followup.send(embed=embed)
 
-        # Auto hủy sau 60s
         await asyncio.sleep(60)
         if channel_id in quiz_active:
             old_quiz = quiz_active.pop(channel_id)
@@ -648,17 +648,18 @@ async def on_message(message):
     # QUIZ ANSWER CHECK
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
-        content_lower = message.content.strip().upper()
-        if content_lower in ['A', 'B', 'C', 'D']:
+        content_upper = message.content.strip().upper()
+        if content_upper in ['A', 'B', 'C', 'D']:
             quiz = quiz_active[channel_id]
-            if content_lower == quiz["answer"]:
+            if content_upper == quiz["answer"]:
                 user_id = str(message.author.id)
                 quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + 1
                 old_quiz = quiz_active.pop(channel_id)
-                await message.reply(f"✅ **ĐÚNG RỒI!** +1 điểm cho {message.author.display_name}! {old_quiz.get('explanation', '')} 🎉")
+                await message.reply(f"✅ **ĐÚNG RỒI!** +1 điểm! {old_quiz.get('explanation', '')} 🎉")
             else:
-                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}**. Thử lại với `/quiz` đi 🥀")
+                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
                 quiz_active.pop(channel_id)
+            return  # ← THÊM DÒNG NÀY ĐỂ KO GỌI AI CHAT
 
     # CHECK TRIGGER
     is_mentioned = bot.user in message.mentions
