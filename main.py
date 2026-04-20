@@ -561,10 +561,10 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
                 {"role": "user", "content": quiz_prompt}
             ]
 
-                        raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
-            # XÓA THINKING TRƯỚC KHI PARSE
-            raw_response = remove_thinking(raw_response)
-            lines = raw_response.strip().splitlines()
+        raw_response = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
+        # XÓA THINKING TRƯỚC KHI PARSE
+        raw_response = remove_thinking(raw_response)
+        lines = raw_response.strip().splitlines()
             question_lines = []
             answer_map = {}
             correct_answer = None
