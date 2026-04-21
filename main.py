@@ -721,8 +721,8 @@ async def on_message(message):
                 quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
                 # Cancel task hết giờ nếu có
                 old_quiz = quiz_active.pop(channel_id)
-                    if "expire_task" in old_quiz:
-                    old_quiz["expire_task"].cancel()
+        if "expire_task" in old_quiz:
+             old_quiz["expire_task"].cancel()
                 
                  await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
             else:
