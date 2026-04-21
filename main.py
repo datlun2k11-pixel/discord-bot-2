@@ -372,7 +372,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.1.5", inline=True)
+    embed.add_field(name="📜 Version", value="v20.7.0", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -383,8 +383,8 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v20.7.0 - Quiz", value="• Thêm 3 độ khó mới cho lệnh `/quiz`\n• Bug fix", inline=False)
     embed.add_field(name="v20.1.5 - Full Rewrite", value="• Fix /clear command\n• Fix /ship command\n• Thêm /quiz + /quiz_score\n• Keyword trigger stable\n• Sửa lỗi bot rep sau khi trl câu hỏi\n• Sửa lỗi Quiz bị lặp lại", inline=False)
-    embed.add_field(name="v19.5.0 - Channel Memory", value="• Nhìn thấy tất cả tin nhắn trong kênh\n• Chỉ rep khi được mention/reply/DM/keyword", inline=False)
     embed.set_footer(text="Updated 20/04/2026")
     await interaction.response.send_message(embed=embed)
 
@@ -516,7 +516,9 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
     app_commands.Choice(name="Dễ (+1)", value="dễ"),
     app_commands.Choice(name="Trung bình (+2)", value="trung bình"),
     app_commands.Choice(name="Khó (+3)", value="khó"),
-    app_commands.Choice(name="Extreme 💀 (+4)", value="extreme")
+    app_commands.Choice(name="Extreme 💀 (+4)", value="extreme"),
+    app_commands.Choice(name="Impossible 💀💀 (+15)", value="impossible")
+
 ])
 async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", độ_khó: app_commands.Choice[str] = None):
     await interaction.response.defer()
@@ -564,7 +566,7 @@ GIẢI THÍCH: [1 dòng]"""
         if not correct or correct not in ans_map:
             return await interaction.followup.send("AI tạo lỗi r, thử lại đi 🥀")
 
-        pts = {"siêu dễ": 0.5, "dễ": 1, "trung bình": 2, "khó": 3, "extreme": 4}.get(do_kho_val, 1)
+                pts = {"siêu dễ": 0.5, "dễ": 1, "trung bình": 2, "khó": 3, "extreme": 4, "impossible": 15}.get(do_kho_val, 1)
         
         quiz_active[channel_id] = {
             "answer": correct,
