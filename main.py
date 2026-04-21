@@ -563,7 +563,8 @@ GIẢI THÍCH: [1 dòng]"""
             elif l.startswith("ĐÁP ÁN:"): correct = l.replace("ĐÁP ÁN:", "").strip().upper()
             elif l.startswith("GIẢI THÍCH:"): expl = l.replace("GIẢI THÍCH:", "").strip()
 
-                    if not correct or correct not in ans_map:
+                            # Dòng 566 bắt đầu từ đây (đảm bảo nó thụt vào 8 khoảng trắng)
+        if not correct or correct not in ans_map:
             return await interaction.followup.send("AI tạo lỗi r, thử lại đi 🥀")
 
         pts = {"siêu dễ": 0.5, "dễ": 1, "trung bình": 2, "khó": 3, "extreme": 4, "impossible": 15}.get(do_kho_val, 1)
