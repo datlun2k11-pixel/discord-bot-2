@@ -622,7 +622,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
 
                 embed = discord.Embed(
                 title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
-                description="\\n".join(question_lines),
+                description="\n".join(question_lines),
                 color=0xffd700
             )
             embed.set_footer(text=f"Độ khó: {độ_khó_value} (+{points}đ) | Trả lời A/B/C/D | {random_vibe()}")
