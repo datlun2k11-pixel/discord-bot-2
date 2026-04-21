@@ -607,8 +607,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
                 quiz_history[channel_id].pop(0)
 
         # Tạo quiz active
-        q_text = "
-".join(question_lines)
+        q_text = "\n".join(question_lines)
         quiz_active[channel_id] = {
             "question": q_text,
             "answer": correct_answer,
