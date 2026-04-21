@@ -724,8 +724,9 @@ async def on_message(message):
             if "expire_task" in old_quiz:
                 old_quiz["expire_task"].cancel()
             await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
-        else:
-            await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
+                else:
+            # Sửa quiz['answer'] thành quiz_active[channel_id]['answer']
+            await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz_active[channel_id]['answer']}** 🥀")
             quiz_active.pop(channel_id)
 
             # XÓA TIN NHẮN TRẢ LỜI QUIZ KHỎI CHAT_HISTORY
