@@ -604,15 +604,13 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
             if question_text and question_text in quiz_history[channel_id]:
                 if attempt < max_attempts - 1:
                     continue
-
             if question_text:
                 quiz_history[channel_id].append(question_text)
                 if len(quiz_history[channel_id]) > 100:
                     quiz_history[channel_id].pop(0)
 
-            quiz_active[channel_id] = {
-                "question": "
-".join(question_lines),
+                        quiz_active[channel_id] = {
+                "question": "\\n".join(question_lines),
                 "answer": correct_answer,
                 "started_by": interaction.user.id,
                 "explanation": explanation,
@@ -622,10 +620,9 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
             if channel_id not in quiz_scores:
                 quiz_scores[channel_id] = {}
 
-            embed = discord.Embed(
+                        embed = discord.Embed(
                 title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
-                description="
-".join(question_lines),
+                description="\\n".join(question_lines),
                 color=0xffd700
             )
             embed.set_footer(text=f"Độ khó: {độ_khó_value} (+{points}đ) | Trả lời A/B/C/D | {random_vibe()}")
