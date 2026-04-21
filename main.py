@@ -603,7 +603,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
             question_text = question_lines[0] if question_lines else ""
             if question_text and question_text in quiz_history[channel_id]:
                 if attempt < max_attempts - 1:
-                    continue
+                    break
             if question_text:
                 quiz_history[channel_id].append(question_text)
                 if len(quiz_history[channel_id]) > 100:
