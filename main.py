@@ -510,10 +510,7 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
 
 # === QUIZ COMMANDS ===
 @bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
-@app_commands.describe(
-    chủ_đề="Chủ đề câu hỏi (mặc định: random)",
-    độ_khó="Ultra easy/Dễ/Trung bình/Khó/Extreme (mặc định: Trung bình)"
-)
+@app_commands.describe(chủ_đề="Chủ đề câu hỏi (mặc định: random)", độ_khó="Mức độ")
 @app_commands.choices(độ_khó=[
     app_commands.Choice(name="Ultra Easy 🥱 (+0.5)", value="siêu dễ"),
     app_commands.Choice(name="Dễ (+1)", value="dễ"),
@@ -523,133 +520,73 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
 ])
 async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", độ_khó: app_commands.Choice[str] = None):
     await interaction.response.defer()
-
     channel_id = str(interaction.channel_id)
-    độ_khó_value = độ_khó.value if độ_khó else "trung bình"
+    do_kho_val = độ_khó.value if độ_khó else "trung bình"
 
     if channel_id in quiz_active:
-        await interaction.followup.send("Đang có câu hỏi rồi m, trả lời đi r hỏi tiếp 💀")
-        return
+        return await interaction.followup.send("Đang có câu hỏi rồi m, trl đi đã 💀")
 
-    if channel_id not in quiz_history:
-        quiz_history[channel_id] = []
+    if channel_id not in quiz_history: quiz_history[channel_id] = []
 
-    random_seed = random.randint(10000, 99999)
-    quiz_prompt = f"""Tạo 1 câu hỏi trắc nghiệm chủ đề: {chủ_đề}, độ khó: {độ_khó_value}.
-SEED: {random_seed}
+    quiz_prompt = f"""Tạo 1 câu hỏi trắc nghiệm chủ đề: {chủ_đề}, độ khó: {do_kho_val}.
+SEED: {random.randint(1000, 9999)}
 YÊU CẦU:
-- Câu hỏi ngắn gọn, thú vị
-- 4 đáp án A/B/C/D
-- Chỉ 1 đáp án đúng
+- Câu hỏi ngắn gọn, thú vị, 4 đáp án A/B/C/D
 - Format chính xác:
-CÂU HỎI: [nội dung câu hỏi]
+CÂU HỎI: [nội dung]
 A. [đáp án A]
 B. [đáp án B]
 C. [đáp án C]
 D. [đáp án D]
-ĐÁP ÁN: [chữ cái đúng A/B/C/D]
-GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
+ĐÁP ÁN: [chữ cái A/B/C/D]
+GIẢI THÍCH: [1 dòng]"""
 
     try:
-        temp_messages = [
-            {"role": "system", "content": "Mày là bot tạo câu hỏi quiz. TUYỆT ĐỐI KHÔNG OUTPUT SUY NGHĨ NỘI BỘ. KHÔNG DÙNG <thinking> HAY <thought>. CHỈ OUTPUT CÂU HỎI VÀ ĐÁP ÁN."},
+        temp_msgs = [
+            {"role": "system", "content": "M là bot tạo quiz, k output thinking, chỉ output câu hỏi và đáp án."},
             {"role": "user", "content": quiz_prompt}
         ]
+        raw = await get_model_response(temp_msgs, MODELS_CONFIG["GPT-OSS-120B"])
+        raw = remove_thinking(raw)
+        
+        lines = raw.strip().splitlines()
+        q_lines, ans_map, correct, expl = [], {}, None, ""
 
-        raw_response = await get_model_response(temp_messages, MODELS_CONFIG["GPT-OSS-120B"])
-        raw_response = remove_thinking(raw_response)
-        lines = raw_response.strip().splitlines()
+        for l in lines:
+            l = l.strip()
+            if l.startswith("CÂU HỎI:"): q_lines.append(l.replace("CÂU HỎI:", "").strip())
+            elif l.startswith(("A.", "B.", "C.", "D.")):
+                ans_map[l[0]] = l[2:].strip()
+                q_lines.append(l)
+            elif l.startswith("ĐÁP ÁN:"): correct = l.replace("ĐÁP ÁN:", "").strip().upper()
+            elif l.startswith("GIẢI THÍCH:"): expl = l.replace("GIẢI THÍCH:", "").strip()
 
-        question_lines = []
-        answer_map = {}
-        correct_answer = None
-        explanation = ""
+        if not correct or correct not in ans_map:
+            return await interaction.followup.send("AI tạo lỗi r, thử lại đi 🥀")
 
-        for line in lines:
-            line = line.strip()
-            if any(tag in line.lower() for tag in ['think', 'thought', 'reasoning']):
-                continue
-            if line.startswith("CÂU HỎI:"):
-                question_lines.append(line.replace("CÂU HỎI:", "").strip())
-            elif line.startswith(("A.", "B.", "C.", "D.")):
-                letter = line[0]
-                answer_text = line[2:].strip()
-                answer_map[letter] = answer_text
-                question_lines.append(line)
-            elif line.startswith("ĐÁP ÁN:"):
-                correct_answer = line.replace("ĐÁP ÁN:", "").strip().upper()
-            elif line.startswith("GIẢI THÍCH:"):
-                explanation = line.replace("GIẢI THÍCH:", "").strip()
-
-        if not correct_answer or correct_answer not in answer_map:
-            await interaction.followup.send("AI tạo câu hỏi lỗi r, thử lại đi 🥀")
-            return
-
-        # THANG ĐIỂM
-        difficulty_points = {
-            "siêu dễ": 0.5,
-            "dễ": 1,
-            "trung bình": 2,
-            "khó": 3,
-            "extreme": 4
-        }
-        points = difficulty_points.get(độ_khó_value, 1)
-
-        # Check trùng
-        question_text = question_lines[0] if question_lines else ""
-        if question_text and question_text in quiz_history[channel_id]:
-            await interaction.followup.send("Trùng câu hỏi cũ r, thử lại đi 🥀")
-            return
-
-        if question_text:
-            quiz_history[channel_id].append(question_text)
-            if len(quiz_history[channel_id]) > 100:
-                quiz_history[channel_id].pop(0)
-
-        # Tạo quiz active
-        q_text = "\n".join(question_lines)
+        pts = {"siêu dễ": 0.5, "dễ": 1, "trung bình": 2, "khó": 3, "extreme": 4}.get(do_kho_val, 1)
+        
         quiz_active[channel_id] = {
-            "question": q_text,
-            "answer": correct_answer,
-            "started_by": interaction.user.id,
-            "explanation": explanation,
-            "points": points
+            "answer": correct,
+            "explanation": expl,
+            "points": pts,
+            "expire_task": None
         }
 
-        if channel_id not in quiz_scores:
-            quiz_scores[channel_id] = {}
-
-        # Tạo embed
-        embed = discord.Embed(
-            title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
-            description=q_text,
-            color=0xffd700
-        )
-        embed.set_footer(text=f"Độ khó: {độ_khó_value} (+{points}đ) | Trả lời A/B/C/D | {random_vibe()}")
-
+        embed = discord.Embed(title=f"🧠 QUIZ - {chủ_đề.upper()}", description="\n".join(q_lines), color=0xffd700)
+        embed.set_footer(text=f"Độ khó: {do_kho_val} (+{pts}đ) | {random_vibe()}")
         await interaction.followup.send(embed=embed)
 
-        # Lưu task để có thể cancel nếu cần
         async def auto_expire():
             await asyncio.sleep(60)
             if channel_id in quiz_active:
-                old_quiz = quiz_active.pop(channel_id)
-                try:
-                    await interaction.channel.send(
-                        f"⏰ Hết giờ rồi m! Đáp án đúng là **{old_quiz['answer']}**. {old_quiz.get('explanation', '')}"
-                    )
-                except Exception as e:
-                    print(f"Lỗi gửi hết giờ: {e}")
+                old = quiz_active.pop(channel_id)
+                await interaction.channel.send(f"⏰ Hết giờ! Đáp án là **{old['answer']}**. {old.get('explanation', '')}")
 
-        # Tạo task và lưu vào quiz_active để có thể cancel
-        expire_task = asyncio.create_task(auto_expire())
-        quiz_active[channel_id]["expire_task"] = expire_task
-
-        asyncio.create_task(auto_expire())
+        quiz_active[channel_id]["expire_task"] = asyncio.create_task(auto_expire())
 
     except Exception as e:
-        print(f"Lỗi quiz: {e}")
-        await interaction.followup.send(f"Lỗi tạo câu hỏi r: {str(e)[:50]} 💀")
+        await interaction.followup.send(f"Lỗi: {str(e)[:50]} 💀")
 
 @bot.tree.command(name="quiz_score", description="Xem bảng xếp hạng quiz server 🏆")
 async def quiz_score(interaction: discord.Interaction):
@@ -710,25 +647,32 @@ async def on_message(message):
 
     if len(chat_history[uid]) > 16:
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
-    # QUIZ ANSWER CHECK - TÁCH BIỆT KHỎI CHAT MEMORY
+        # QUIZ ANSWER CHECK
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
-        content_upper = message.content.strip().upper()
-        if content_upper == quiz_active[channel_id]["answer"]:
-            user_id = str(message.author.id)
-            points = quiz_active[channel_id].get("points", 1)
-            quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
-            old_quiz = quiz_active.pop(channel_id)
-            if "expire_task" in old_quiz:
-                old_quiz["expire_task"].cancel()
-            await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
-        else:
-            await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz_active[channel_id]['answer']}** 🥀")
-            quiz_active.pop(channel_id)
+        user_answer = message.content.strip().upper()
+        
+        if user_answer in ["A", "B", "C", "D"]:
+            quiz_data = quiz_active[channel_id]
+            
+            if user_answer == quiz_data["answer"]:
+                u_id = str(message.author.id)
+                p = quiz_data["points"]
+                quiz_scores[channel_id][u_id] = quiz_scores[channel_id].get(u_id, 0) + p
+                
+                old_q = quiz_active.pop(channel_id)
+                if old_q["expire_task"]: old_q["expire_task"].cancel()
+                
+                await message.reply(f"✅ **ĐÚNG RỒI!** +{p} điểm! {old_q.get('explanation', '')} 🎉")
+            else:
+                old_q = quiz_active.pop(channel_id)
+                if old_q["expire_task"]: old_q["expire_task"].cancel()
+                
+                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{old_q['answer']}** 🥀")
 
             if uid in chat_history and len(chat_history[uid]) > 1:
                 chat_history[uid].pop()
-            return
+            return 
     # CHECK TRIGGER
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
