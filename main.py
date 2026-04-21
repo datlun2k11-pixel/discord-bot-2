@@ -715,7 +715,7 @@ async def on_message(message):
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
         content_upper = message.content.strip().upper()
-                if content_upper == quiz["answer"]:
+            if content_upper == quiz["answer"]:
             user_id = str(message.author.id)
             points = quiz.get("points", 1)
             quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
