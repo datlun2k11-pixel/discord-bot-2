@@ -715,18 +715,17 @@ async def on_message(message):
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
         content_upper = message.content.strip().upper()
-        if content_upper == quiz["answer"]:
-                user_id = str(message.author.id)
-                points = quiz.get("points", 1)
-                quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
-                # Cancel task hết giờ nếu có
-                old_quiz = quiz_active.pop(channel_id)
-        if "expire_task" in old_quiz:
-    old_quiz["expire_task"].cancel()
-    await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
-else:
-    await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
-    quiz_active.pop(channel_id)
+                if content_upper == quiz["answer"]:
+            user_id = str(message.author.id)
+            points = quiz.get("points", 1)
+            quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
+            old_quiz = quiz_active.pop(channel_id)
+            if "expire_task" in old_quiz:
+                old_quiz["expire_task"].cancel()
+            await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
+        else:
+            await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
+            quiz_active.pop(channel_id)
 
             # XÓA TIN NHẮN TRẢ LỜI QUIZ KHỎI CHAT_HISTORY
             if uid in chat_history and len(chat_history[uid]) > 1:
