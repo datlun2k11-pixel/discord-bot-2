@@ -515,9 +515,11 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
     độ_khó="Dễ/Trung bình/Khó (mặc định: Trung bình)"
 )
 @app_commands.choices(độ_khó=[
+    app_commands.Choice(name="Ultra Easy 🥱", value="ultra easy"),
     app_commands.Choice(name="Dễ", value="dễ"),
     app_commands.Choice(name="Trung bình", value="trung bình"),
-    app_commands.Choice(name="Khó", value="khó")
+    app_commands.Choice(name="Khó", value="khó"),
+    app_commands.Choice(name="Extreme 💀", value="extreme")
 ])
 async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", độ_khó: app_commands.Choice[str] = None):
     await interaction.response.defer()
@@ -565,11 +567,29 @@ async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", đ
                 elif line.startswith("GIẢI THÍCH:"):
                     explanation = line.replace("GIẢI THÍCH:", "").strip()
 
-            if not correct_answer or correct_answer not in answer_map:
+                        if not correct_answer or correct_answer not in answer_map:
                 if attempt == max_attempts - 1:
                     await interaction.followup.send("AI tạo câu hỏi lỗi r, thử lại đi 🥀")
                     return
                 continue
+
+            # === THANG ĐIỂM THEO ĐỘ KHÓ ===
+            difficulty_points = {
+                "siêu dễ": 0.5,
+                "dễ": 1,
+                "trung bình": 2,
+                "khó": 3,
+                "extreme": 4
+            }
+            points = difficulty_points.get(độ_khó_value, 1)
+
+            quiz_active[channel_id] = {
+                "question": "\n".join(question_lines),
+                "answer": correct_answer,
+                "started_by": interaction.user.id,
+                "explanation": explanation,
+                "points": points  # ← THÊM DÒNG NÀY
+            }
 
             quiz_active[channel_id] = {
                 "question": "\n".join(question_lines),
@@ -665,9 +685,10 @@ async def on_message(message):
             quiz = quiz_active[channel_id]
             if content_upper == quiz["answer"]:
                 user_id = str(message.author.id)
-                quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + 1
+                points = quiz.get("points", 1)  # ← LẤY ĐIỂM TỪ QUIZ
+                quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
                 old_quiz = quiz_active.pop(channel_id)
-                await message.reply(f"✅ **ĐÚNG RỒI!** +1 điểm! {old_quiz.get('explanation', '')} 🎉")
+                await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
             else:
                 await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
                 quiz_active.pop(channel_id)
