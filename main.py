@@ -712,7 +712,7 @@ async def on_message(message):
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
     # QUIZ ANSWER CHECK - TÁCH BIỆT KHỎI CHAT MEMORY
     channel_id = str(message.channel.id)
-        if channel_id in quiz_active and not message.author.bot:
+    if channel_id in quiz_active and not message.author.bot:
         content_upper = message.content.strip().upper()
         if content_upper == quiz_active[channel_id]["answer"]:
             user_id = str(message.author.id)
