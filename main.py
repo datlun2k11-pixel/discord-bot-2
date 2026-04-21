@@ -591,13 +591,6 @@ async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", đ
                 "points": points  # ← THÊM DÒNG NÀY
             }
 
-            quiz_active[channel_id] = {
-                "question": "\n".join(question_lines),
-                "answer": correct_answer,
-                "started_by": interaction.user.id,
-                "explanation": explanation
-            }
-
             if channel_id not in quiz_scores:
                 quiz_scores[channel_id] = {}
 
