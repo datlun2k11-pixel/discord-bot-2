@@ -567,7 +567,7 @@ async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", đ
                 elif line.startswith("GIẢI THÍCH:"):
                     explanation = line.replace("GIẢI THÍCH:", "").strip()
 
-                        if not correct_answer or correct_answer not in answer_map:
+                if not correct_answer or correct_answer not in answer_map:
                 if attempt == max_attempts - 1:
                     await interaction.followup.send("AI tạo câu hỏi lỗi r, thử lại đi 🥀")
                     return
