@@ -627,7 +627,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
         )
         embed.set_footer(text=f"Độ khó: {độ_khó_value} (+{points}đ) | Trả lời A/B/C/D | {random_vibe()}")
 
-                await interaction.followup.send(embed=embed)
+        await interaction.followup.send(embed=embed)
 
         # Lưu task để có thể cancel nếu cần
         async def auto_expire():
