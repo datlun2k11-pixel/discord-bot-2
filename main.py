@@ -647,7 +647,7 @@ async def on_message(message):
 
     if len(chat_history[uid]) > 16:
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
-        # QUIZ ANSWER CHECK
+            # QUIZ ANSWER CHECK
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
         user_answer = message.content.strip().upper()
@@ -658,6 +658,10 @@ async def on_message(message):
             if user_answer == quiz_data["answer"]:
                 u_id = str(message.author.id)
                 p = quiz_data["points"]
+                
+                # KHỞI TẠO DICT NẾU CHƯA CÓ
+                if channel_id not in quiz_scores: quiz_scores[channel_id] = {}
+                
                 quiz_scores[channel_id][u_id] = quiz_scores[channel_id].get(u_id, 0) + p
                 
                 old_q = quiz_active.pop(channel_id)
