@@ -130,7 +130,7 @@ async def read_text_attachment(attachment):
         return text[:15000]
     except Exception as e:
         return f"[Lỗi đọc file: {str(e)[:50]}]"
-
+        
 def format_code_snippet(filename, content, max_lines=50):
     lines = content.split('\n')
     if len(lines) > max_lines:
@@ -620,7 +620,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
             if channel_id not in quiz_scores:
                 quiz_scores[channel_id] = {}
 
-                 embed = discord.Embed(
+                embed = discord.Embed(
                 title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
                 description="\\n".join(question_lines),
                 color=0xffd700
