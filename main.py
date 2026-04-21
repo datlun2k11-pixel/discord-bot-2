@@ -627,13 +627,23 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
         )
         embed.set_footer(text=f"Độ khó: {độ_khó_value} (+{points}đ) | Trả lời A/B/C/D | {random_vibe()}")
 
-        await interaction.followup.send(embed=embed)
-        # Tạo task riêng để auto hủy sau 60s
+                await interaction.followup.send(embed=embed)
+
+        # Lưu task để có thể cancel nếu cần
         async def auto_expire():
             await asyncio.sleep(60)
             if channel_id in quiz_active:
                 old_quiz = quiz_active.pop(channel_id)
-                await interaction.channel.send(f"⏰ Hết giờ rồi m! Đáp án đúng là **{old_quiz['answer']}**. {old_quiz.get('explanation', '')}")
+                try:
+                    await interaction.channel.send(
+                        f"⏰ Hết giờ rồi m! Đáp án đúng là **{old_quiz['answer']}**. {old_quiz.get('explanation', '')}"
+                    )
+                except Exception as e:
+                    print(f"Lỗi gửi hết giờ: {e}")
+
+        # Tạo task và lưu vào quiz_active để có thể cancel
+        expire_task = asyncio.create_task(auto_expire())
+        quiz_active[channel_id]["expire_task"] = expire_task
 
         asyncio.create_task(auto_expire())
 
@@ -705,14 +715,16 @@ async def on_message(message):
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
         content_upper = message.content.strip().upper()
-        if content_upper in ['A', 'B', 'C', 'D']:
-            quiz = quiz_active[channel_id]
             if content_upper == quiz["answer"]:
                 user_id = str(message.author.id)
-                points = quiz.get("points", 1)  # ← LẤY ĐIỂM
+                points = quiz.get("points", 1)
                 quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
+                # Cancel task hết giờ nếu có
                 old_quiz = quiz_active.pop(channel_id)
-                await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
+                    if "expire_task" in old_quiz:
+                    old_quiz["expire_task"].cancel()
+                
+                 await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
             else:
                 await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
                 quiz_active.pop(channel_id)
