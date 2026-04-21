@@ -710,31 +710,25 @@ async def on_message(message):
 
     if len(chat_history[uid]) > 16:
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
-
     # QUIZ ANSWER CHECK - TÁCH BIỆT KHỎI CHAT MEMORY
     channel_id = str(message.channel.id)
-    if channel_id in quiz_active and not message.author.bot:
+        if channel_id in quiz_active and not message.author.bot:
         content_upper = message.content.strip().upper()
-                # Sửa dòng này:
         if content_upper == quiz_active[channel_id]["answer"]:
-            # Và các dòng dưới cũng phải lấy từ quiz_active[channel_id] chứ k phải quiz
+            user_id = str(message.author.id)
             points = quiz_active[channel_id].get("points", 1)
             quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
             old_quiz = quiz_active.pop(channel_id)
             if "expire_task" in old_quiz:
                 old_quiz["expire_task"].cancel()
             await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
-                else:
-            # Sửa quiz['answer'] thành quiz_active[channel_id]['answer']
+        else:
             await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz_active[channel_id]['answer']}** 🥀")
             quiz_active.pop(channel_id)
 
-            # XÓA TIN NHẮN TRẢ LỜI QUIZ KHỎI CHAT_HISTORY
             if uid in chat_history and len(chat_history[uid]) > 1:
-                chat_history[uid].pop()  # Xóa tin nhắn "A"/"B"/"C"/"D"
-
-            return  # KO GỌI AI CHAT
-
+                chat_history[uid].pop()
+            return
     # CHECK TRIGGER
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
