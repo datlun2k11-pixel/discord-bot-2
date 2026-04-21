@@ -609,7 +609,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
                 if len(quiz_history[channel_id]) > 100:
                     quiz_history[channel_id].pop(0)
 
-                        quiz_active[channel_id] = {
+                quiz_active[channel_id] = {
                 "question": "\\n".join(question_lines),
                 "answer": correct_answer,
                 "started_by": interaction.user.id,
@@ -620,7 +620,7 @@ GIẢI THÍCH: [giải thích ngắn 1 dòng]"""
             if channel_id not in quiz_scores:
                 quiz_scores[channel_id] = {}
 
-                        embed = discord.Embed(
+                 embed = discord.Embed(
                 title=f"🧠 QUIZ TIME - {chủ_đề.upper()}",
                 description="\\n".join(question_lines),
                 color=0xffd700
