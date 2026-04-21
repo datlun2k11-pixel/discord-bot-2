@@ -722,12 +722,11 @@ async def on_message(message):
                 # Cancel task hết giờ nếu có
                 old_quiz = quiz_active.pop(channel_id)
         if "expire_task" in old_quiz:
-             old_quiz["expire_task"].cancel()
-                
-                await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
-            else:
-                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
-                quiz_active.pop(channel_id)
+    old_quiz["expire_task"].cancel()
+await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {old_quiz.get('explanation', '')} 🎉")
+else:
+    await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{quiz['answer']}** 🥀")
+    quiz_active.pop(channel_id)
 
             # XÓA TIN NHẮN TRẢ LỜI QUIZ KHỎI CHAT_HISTORY
             if uid in chat_history and len(chat_history[uid]) > 1:
