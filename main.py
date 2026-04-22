@@ -504,7 +504,6 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
 
     if số_lượng > 1 and memes_sent > 0:
         await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
-
 # === QUIZ COMMANDS ===
 @bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
 @app_commands.describe(chủ_đề="Chủ đề câu hỏi (mặc định: random)", độ_khó="Mức độ")
@@ -576,6 +575,15 @@ GIẢI THÍCH: [1 dòng]"""
             "points": pts,
         }
 
+        # ===== THÊM ĐOẠN NÀY: LƯU VÀO CHAT HISTORY NGAY LẬP TỨC =====
+        quiz_context = f"[QUIZ ĐANG ACTIVE] Câu hỏi: {' '.join(q_lines[:1])} Đáp án đúng: {correct}. Giải thích: {expl}. Khi có người trả lời hoặc hỏi về quiz này, m có thể dùng thông tin này để trả lời."
+        if channel_id in chat_history:
+            chat_history[channel_id].append({"role": "assistant", "content": quiz_context})
+            # Giới hạn history
+            if len(chat_history[channel_id]) > 16:
+                chat_history[channel_id] = [chat_history[channel_id][0]] + chat_history[channel_id][-15:]
+        # ========================================================
+
         embed = discord.Embed(title=f"🧠 QUIZ - {chủ_đề.upper()}", description="\n".join(q_lines), color=0xffd700)
         embed.set_footer(text=f"Độ khó: {do_kho_val} (+{pts}đ) | {random_vibe()}")
         await interaction.followup.send(embed=embed)
@@ -591,9 +599,9 @@ GIẢI THÍCH: [1 dòng]"""
                 if channel_id in quiz_active:
                     old_quiz = quiz_active.pop(channel_id)
 
-                    # Lưu vào chat history để AI nhớ
+                    # Khi hết giờ, update lại context trong history
                     if channel_id in chat_history:
-                        quiz_result = f"Quiz vừa hết giờ! Đáp án đúng là {old_quiz['answer']}. Giải thích: {old_quiz.get('explanation', '')}"
+                        quiz_result = f"[QUIZ KẾT THÚC] Quiz vừa hết giờ! Đáp án đúng là {old_quiz['answer']}. Giải thích: {old_quiz.get('explanation', '')}"
                         chat_history[channel_id].append({"role": "assistant", "content": quiz_result})
                         if len(chat_history[channel_id]) > 16:
                             chat_history[channel_id] = [chat_history[channel_id][0]] + chat_history[channel_id][-15:]
