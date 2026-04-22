@@ -368,7 +368,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.7.1", inline=True)
+    embed.add_field(name="📜 Version", value="v20.8.0", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -379,9 +379,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v20.8.0 - Model", value="• Thêm tính năng tự chọn model vào quiz, ko cố định 1 model ngáo ngơ nữa.", inline=False)
     embed.add_field(name="v20.7.1 - Bug Fix", value="• Sửa lỗi quiz expire task\n• Tối ưu hóa bộ nhớ\n• Clean code", inline=False)
     embed.add_field(name="v20.7.0 - Quiz", value="• Thêm 3 độ khó mới cho lệnh `/quiz`\n• Bug fix", inline=False)
-    embed.add_field(name="v20.1.5 - Full Rewrite", value="• Fix /clear command\n• Fix /ship command\n• Thêm /quiz + /quiz_score\n• Keyword trigger stable\n• Sửa lỗi bot rep sau khi trl câu hỏi\n• Sửa lỗi Quiz bị lặp lại", inline=False)
     embed.set_footer(text="Updated 20/04/2026")
     await interaction.response.send_message(embed=embed)
 
@@ -506,19 +506,34 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
         await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
 # === QUIZ COMMANDS ===
 @bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
-@app_commands.describe(chủ_đề="Chủ đề câu hỏi (mặc định: random)", độ_khó="Mức độ")
-@app_commands.choices(độ_khó=[
-    app_commands.Choice(name="Ultra Easy 🥱 (+0.5)", value="siêu dễ"),
-    app_commands.Choice(name="Dễ (+1)", value="dễ"),
-    app_commands.Choice(name="Trung bình (+2.5)", value="trung bình"),
-    app_commands.Choice(name="Khó (+5)", value="khó"),
-    app_commands.Choice(name="Extreme 💀 (+8)", value="extreme"),
-    app_commands.Choice(name="Impossible 💀💀 (+15)", value="impossible")
-])
-async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", độ_khó: app_commands.Choice[str] = None):
+@app_commands.describe(
+    chủ_đề="Chủ đề câu hỏi (mặc định: random)", 
+    độ_khó="Mức độ",
+    model_quiz="Model tạo câu hỏi (mặc định: GPT-OSS-120B)"
+)
+@app_commands.choices(
+    độ_khó=[
+        app_commands.Choice(name="Ultra Easy 🥱 (+0.5)", value="siêu dễ"),
+        app_commands.Choice(name="Dễ (+1)", value="dễ"),
+        app_commands.Choice(name="Trung bình (+2.5)", value="trung bình"),
+        app_commands.Choice(name="Khó (+5)", value="khó"),
+        app_commands.Choice(name="Extreme 💀 (+8)", value="extreme"),
+        app_commands.Choice(name="Impossible 💀💀 (+15)", value="impossible")
+    ],
+    model_quiz=[
+        app_commands.Choice(name="GPT-OSS-120B (GROQ - Nhanh)", value="GPT-OSS-120B"),
+        app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
+        app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
+        app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
+        app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
+        app_commands.Choice(name="Gemini 3.1 Flash Lite (Google - Vision)", value="Google-Gemini-3.1-Flash-Lite")
+    ]
+)
+async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", độ_khó: app_commands.Choice[str] = None, model_quiz: app_commands.Choice[str] = None):
     await interaction.response.defer()
     channel_id = str(interaction.channel_id)
     do_kho_val = độ_khó.value if độ_khó else "trung bình"
+    quiz_model = model_quiz.value if model_quiz else "GPT-OSS-120B"  # Mặc định GPT-OSS-120B
 
     if channel_id in quiz_active:
         return await interaction.followup.send("Đang có câu hỏi rồi m, trl đi đã 💀")
@@ -543,10 +558,12 @@ GIẢI THÍCH: [1 dòng]"""
 
     try:
         temp_msgs = [
-            {"role": "system", "content": "M là bot tạo quiz, k output thinking, chỉ output câu hỏi và đáp án."},
+            {"role": "system", "content": "M là bot tạo quiz, k output thinking, chỉ output câu hỏi và đáp án theo format yêu cầu."},
             {"role": "user", "content": quiz_prompt}
         ]
-        raw = await get_model_response(temp_msgs, MODELS_CONFIG["GPT-OSS-120B"])
+        
+        # Dùng model được chọn để tạo quiz
+        raw = await get_model_response(temp_msgs, MODELS_CONFIG[quiz_model])
         raw = remove_thinking(raw)
 
         lines = raw.strip().splitlines()
@@ -573,19 +590,18 @@ GIẢI THÍCH: [1 dòng]"""
             "answer": correct,
             "explanation": expl,
             "points": pts,
+            "model_used": quiz_model  # Lưu lại model đã dùng để tạo quiz
         }
 
-        # ===== THÊM ĐOẠN NÀY: LƯU VÀO CHAT HISTORY NGAY LẬP TỨC =====
-        quiz_context = f"[QUIZ ĐANG ACTIVE] Câu hỏi: {' '.join(q_lines[:1])} Đáp án đúng: {correct}. Giải thích: {expl}. Khi có người trả lời hoặc hỏi về quiz này, m có thể dùng thông tin này để trả lời."
+        # LƯU VÀO CHAT HISTORY NGAY LẬP TỨC
+        quiz_context = f"[QUIZ ĐANG ACTIVE] Câu hỏi: {' '.join(q_lines[:1])} Đáp án đúng: {correct}. Giải thích: {expl}. Model tạo: {quiz_model}. Khi có người trả lời hoặc hỏi về quiz này, m có thể dùng thông tin này để trả lời."
         if channel_id in chat_history:
             chat_history[channel_id].append({"role": "assistant", "content": quiz_context})
-            # Giới hạn history
             if len(chat_history[channel_id]) > 16:
                 chat_history[channel_id] = [chat_history[channel_id][0]] + chat_history[channel_id][-15:]
-        # ========================================================
 
         embed = discord.Embed(title=f"🧠 QUIZ - {chủ_đề.upper()}", description="\n".join(q_lines), color=0xffd700)
-        embed.set_footer(text=f"Độ khó: {do_kho_val} (+{pts}đ) | {random_vibe()}")
+        embed.set_footer(text=f"Độ khó: {do_kho_val} (+{pts}đ) | Model: {quiz_model} | {random_vibe()}")
         await interaction.followup.send(embed=embed)
 
         # Hủy task cũ nếu có
@@ -599,7 +615,6 @@ GIẢI THÍCH: [1 dòng]"""
                 if channel_id in quiz_active:
                     old_quiz = quiz_active.pop(channel_id)
 
-                    # Khi hết giờ, update lại context trong history
                     if channel_id in chat_history:
                         quiz_result = f"[QUIZ KẾT THÚC] Quiz vừa hết giờ! Đáp án đúng là {old_quiz['answer']}. Giải thích: {old_quiz.get('explanation', '')}"
                         chat_history[channel_id].append({"role": "assistant", "content": quiz_result})
@@ -618,7 +633,7 @@ GIẢI THÍCH: [1 dòng]"""
         quiz_expire_tasks[channel_id] = task
 
     except Exception as e:
-        await interaction.followup.send(f"Lỗi: {str(e)[:50]} 💀")
+        await interaction.followup.send(f"Lỗi: {str(e)[:100]} 💀")
 
 @bot.tree.command(name="quiz_score", description="Xem bảng xếp hạng quiz server 🏆")
 async def quiz_score(interaction: discord.Interaction):
@@ -639,7 +654,7 @@ async def quiz_score(interaction: discord.Interaction):
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, "🥀")
         embed.add_field(name=f"{medal} #{i} {name}", value=f"{score} điểm", inline=False)
 
-    embed.set_footer(text=random_vibe())
+    embed.set_footer(text="reset mỗi lần update bot🥀")
     await interaction.response.send_message(embed=embed)
 
 # === MAIN MESSAGE HANDLER ===
