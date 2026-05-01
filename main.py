@@ -152,9 +152,13 @@ def remove_thinking(text):
         r'\[thinking\].*?\[/thinking\]',
         r'\(thinking\).*?\(/thinking\)',
         r'<!--thinking-->.*?<!--/thinking-->',
+        r'<\|start_header_id\|>.*?thought.*?\|end_header_id\|>.*?<\|eot_id\|>',  # Gemma 4 format
+        r'🤔.*?💭',  # Emoji thinking markers
     ]
     for pattern in patterns:
         text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE).strip()
+    
+    # Xóa dòng trống thừa
     lines = [line for line in text.split('\n') if line.strip()]
     return '\n'.join(lines)
 
@@ -250,13 +254,16 @@ async def get_google_response(messages, model_config):
             return "K có nội dung để xử lý bro 🥀"
 
         payload = {
-            "contents": contents,
-            "generationConfig": {
-                "temperature": 1.0,
-                "maxOutputTokens": 2048,
-                "topP": 0.95,
-                "topK": 64
-            },
+    "contents": contents,
+    "generationConfig": {
+        "temperature": 1.0,
+        "maxOutputTokens": 2048,
+        "topP": 0.95,
+        "topK": 64
+    },
+    "thinkingConfig": {
+        "includeThoughts": False  # 👈 TẮT THINKING Ở ĐÂY
+        },
             **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -372,7 +379,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.8.0", inline=True)
+    embed.add_field(name="📜 Version", value="v20.9.0", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -383,9 +390,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v20.9.0 - Fix", value="• Cố gắng sửa AI output lỗi", inline=False)
     embed.add_field(name="v20.8.0 - Model", value="• Thêm tính năng tự chọn model vào quiz, ko cố định 1 model ngáo ngơ nữa.", inline=False)
     embed.add_field(name="v20.7.1 - Bug Fix", value="• Sửa lỗi quiz expire task\n• Tối ưu hóa bộ nhớ\n• Clean code", inline=False)
-    embed.add_field(name="v20.7.0 - Quiz", value="• Thêm 3 độ khó mới cho lệnh `/quiz`\n• Bug fix", inline=False)
     embed.set_footer(text="Updated 20/04/2026")
     await interaction.response.send_message(embed=embed)
 
