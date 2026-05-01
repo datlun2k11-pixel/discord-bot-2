@@ -291,7 +291,7 @@ async def get_google_response(messages, model_config):
                     if "content" in candidate and "parts" in candidate["content"]:
                         parts = candidate["content"]["parts"]
 
-                                                for part in parts:
+                        for part in parts:
                             if "text" in part:
                                 res_text = part["text"]
                                 res_text = remove_thinking(res_text)
@@ -299,8 +299,6 @@ async def get_google_response(messages, model_config):
                                 first_line = res_text.split('\n')[0].lower().strip()
                                 if any(starter in first_line for starter in thinking_starters) and len(res_text.split('\n')) > 3:
                                     res_text = '\n'.join(res_text.split('\n')[1:]).strip()
-                                # Dùng hàm remove_thinking thống nhất
-                                res_text = remove_thinking(res_text)
 
                                 if res_text:
                                     sources = []
