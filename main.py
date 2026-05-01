@@ -100,7 +100,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng
 - Thỉnh thoảng có Emoticon (=)), :)), =))),...) và Emoji báo đời (💔, 🥀, 💀, 🫩, ✌🏿,...) ở mỗi câu rep.
 - Cấm output ra suy nghĩ nội bộ, cấm <thinking> hay <thought>. Cứ thế mà phang thẳng text ra.
 - Chỉ giải thích đáp án quiz khi có đứa hỏi "tại sao" hoặc "sao sai". Nhớ kĩ cái quiz gần nhất để còn khịa tụi nó.
-
+- Không được thinking, không được reasoning, không output <think>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
 
 [COMMANDS]
 M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme."""
@@ -147,6 +147,9 @@ def format_code_snippet(filename, content, max_lines=50):
 def remove_thinking(text):
     """Xóa thinking tags từ AI output - Gemma 4 format"""
     patterns = [
+        r'<\|?thought\|?>.*?</?\|?thought\|?>',
+        r'<thought>.*?</thought>',
+        r'thinking:.*?(?=\n\n|\Z)',
         r'<thinking>.*?</thinking>',
         r'<thought>.*?</thought>',
         r'<reasoning>.*?</reasoning>',
@@ -262,8 +265,6 @@ async def get_google_response(messages, model_config):
         "maxOutputTokens": 2048,
         "topP": 0.95,
         "topK": 64,
-        "thinkingBudget": 0,        # thêm dòng này cũng được
-        "includeThoughts": False
     },
             **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
             "safetySettings": [
