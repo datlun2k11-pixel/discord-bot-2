@@ -261,7 +261,9 @@ async def get_google_response(messages, model_config):
         "temperature": 1.0,
         "maxOutputTokens": 2048,
         "topP": 0.95,
-        "topK": 64
+        "topK": 64,
+        "thinkingBudget": 0,        # thêm dòng này cũng được
+        "includeThoughts": False
     },
             **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
             "safetySettings": [
