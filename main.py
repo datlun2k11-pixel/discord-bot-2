@@ -98,8 +98,9 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng
 
 [QUY TẮC CỨNG]
 - Thỉnh thoảng có Emoticon (=)), :)), =))),...) và Emoji báo đời (💔, 🥀, 💀, 🫩, ✌🏿,...) ở mỗi câu rep.
-- Cấm sủa ra suy nghĩ nội bộ, cấm <thinking> hay <thought>. Cứ thế mà phang thẳng text ra.
+- Cấm output ra suy nghĩ nội bộ, cấm <thinking> hay <thought>. Cứ thế mà phang thẳng text ra.
 - Chỉ giải thích đáp án quiz khi có đứa hỏi "tại sao" hoặc "sao sai". Nhớ kĩ cái quiz gần nhất để còn khịa tụi nó.
+
 
 [COMMANDS]
 M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme."""
@@ -144,21 +145,22 @@ def format_code_snippet(filename, content, max_lines=50):
     return f"```{ext}\n{content}\n```"
 
 def remove_thinking(text):
-    """Xóa tất cả thinking tags từ AI output"""
+    """Xóa thinking tags từ AI output - Gemma 4 format"""
     patterns = [
-        r'<\|?think\|?>.*?</?\|?think\|?>',
-        r'<\|channel>thought.*?\|channel\|>',
-        r'<(thinking|thought|reasoning)>.*?</\1>',
-        r'\[thinking\].*?\[/thinking\]',
+        r'<thinking>.*?</thinking>',
+        r'<thought>.*?</thought>',
+        r'<reasoning>.*?</reasoning>',
+        r'<\|think\|?>.*?</?\|?think\|?>',
+        r'\*\*Thinking:\*\*.*?(?=\n\n|\Z)',
+        r'\[Thinking\].*?\[/Thinking\]',
         r'\(thinking\).*?\(/thinking\)',
         r'<!--thinking-->.*?<!--/thinking-->',
-        r'<\|start_header_id\|>.*?thought.*?\|end_header_id\|>.*?<\|eot_id\|>',  # Gemma 4 format
-        r'🤔.*?💭',  # Emoji thinking markers
+        r'🤔.*?💭',
     ]
+    
     for pattern in patterns:
         text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE).strip()
     
-    # Xóa dòng trống thừa
     lines = [line for line in text.split('\n') if line.strip()]
     return '\n'.join(lines)
 
@@ -261,9 +263,6 @@ async def get_google_response(messages, model_config):
         "topP": 0.95,
         "topK": 64
     },
-    "thinkingConfig": {
-        "includeThoughts": False  # 👈 TẮT THINKING Ở ĐÂY
-        },
             **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -293,8 +292,18 @@ async def get_google_response(messages, model_config):
                         parts = candidate["content"]["parts"]
 
                         for part in parts:
-                            if "text" in part:
-                                res_text = part["text"]
+    if "text" in part:
+        res_text = part["text"]
+        
+        # Double check remove thinking
+        res_text = remove_thinking(res_text)
+        
+        # Nếu vẫn còn dấu hiệu thinking (bắt đầu bằng reasoning words)
+        thinking_starters = ["let me think", "hmm", "okay so", "first", "i need to", "step 1", "let's break"]
+        first_line = res_text.split('\n')[0].lower().strip()
+        if any(starter in first_line for starter in thinking_starters) and len(res_text.split('\n')) > 3:
+            # Bỏ dòng đầu nếu nó là thinking
+            res_text = '\n'.join(res_text.split('\n')[1:]).strip()
                                 # Dùng hàm remove_thinking thống nhất
                                 res_text = remove_thinking(res_text)
 
