@@ -35,11 +35,6 @@ MODELS_CONFIG = {
         "provider": "groq",
         "vision": False
     },
-    "Google-Gemini-3.1-Flash-Lite": {
-        "id": "gemini-3.1-flash-lite-preview",
-        "provider": "google",
-        "vision": True
-    },
     "Google-Gemma4-26B": {
         "id": "gemma-4-26b-a4b-it",
         "provider": "google",
@@ -65,7 +60,6 @@ MODELS_CONFIG = {
 MODEL_CHOICES = [
     app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
     app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
-    app_commands.Choice(name="Gemini 3.1 Flash Lite (Google - Vision)", value="Google-Gemini-3.1-Flash-Lite"),
     app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
     app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
     app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
@@ -102,9 +96,10 @@ chat_history = {}
 user_locks = {}
 last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 # Update cooldown
-BOT_UPDATED = True  
-UPDATE_COOLDOWN_SECONDS = 60  
-UPDATE_CHANNEL_ID = 1464203423191797841  
+BOT_UPDATED = True
+UPDATE_COOLDOWN_SECONDS = 60 
+UPDATE_CHANNEL_ID = 1464203423191797841 
+cooldown_start_time = None 
 TEXT_EXTENSIONS = {
     'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h',
     'java', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'xml',
@@ -346,9 +341,10 @@ async def get_model_response(messages, model_config):
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
 async def start_update_cooldown(bot_instance):
     """Bắt đầu cooldown sau update, gửi thông báo vào channel chỉ định"""
-    global BOT_UPDATED
+    global BOT_UPDATED, cooldown_start_time  # thêm cooldown_start_time
     
     BOT_UPDATED = True
+    cooldown_start_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))  # thêm dòng này
     
     # Gửi thông báo vào channel
     channel = bot_instance.get_channel(UPDATE_CHANNEL_ID)
@@ -356,14 +352,31 @@ async def start_update_cooldown(bot_instance):
         try:
             embed = discord.Embed(
                 title="🔄 Bot vừa update xong",
-                description="Update xong rồi nhưng chưa ổn định. Vui lòng đợi thêm 1 phút nữa... ",
+                description="Update xong rồi nhưng chưa ổn định. Vui lòng đợi thêm 1 phút nữa... 🥀",
                 color=0xff9900
             )
-            embed.set_footer(text=f"Vui lòng đợi {UPDATE_COOLDOWN_SECONDS}s | Unready for use;-;")
+            embed.set_footer(text=f"Vui lòng đợi {UPDATE_COOLDOWN_SECONDS}s | {random_vibe()}")
             await channel.send(embed=embed)
         except Exception as e:
             print(f"Lỗi gửi thông báo update: {e}")
     
+    # Đợi 60s
+    await asyncio.sleep(UPDATE_COOLDOWN_SECONDS)
+    
+    BOT_UPDATED = False
+    cooldown_start_time = None  # reset sau khi xong
+    # Thông báo sẵn sàng
+    if channel:
+        try:
+            embed = discord.Embed(
+                title="✅ Bot đã sẵn sàng",
+                description="Ok xong rồi, bot đã ổn định, quẩy tiếp đê m 🥀✌🏿",
+                color=0x00ff9d
+            )
+            embed.set_footer(text=f"Sẵn sàng phục vụ | {random_vibe()}")
+            await channel.send(embed=embed)
+        except Exception as e:
+            print(f"Lỗi gửi thông báo ready: {e}")
     # Đợi 60s
     await asyncio.sleep(UPDATE_COOLDOWN_SECONDS)
     
@@ -425,7 +438,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.0.0 (event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.0.5 (event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -436,7 +449,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v21.0.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• More coming soon :)", inline=False)
+    embed.add_field(name="v21.0.5 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix\n• More coming soon :)", inline=False)
     embed.add_field(name="v20.9.2 - Sum", value="• `/sum` command được thêm vào", inline=False)
     embed.add_field(name="v20.8.0 - Model", value="• Thêm tính năng tự chọn model vào quiz, ko cố định 1 model ngáo ngơ nữa.", inline=False)
     embed.set_footer(text="Updated 20/04/2026")
@@ -647,8 +660,7 @@ async def summarize_chat(interaction: discord.Interaction):
         app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
         app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
         app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
-        app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
-        app_commands.Choice(name="Gemini 3.1 Flash Lite (Google - Vision)", value="Google-Gemini-3.1-Flash-Lite")
+        app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B")
     ]
 )
 async def quiz(interaction: discord.Interaction, chủ_đề: str = "random", độ_khó: app_commands.Choice[str] = None, model_quiz: app_commands.Choice[str] = None):
@@ -816,11 +828,11 @@ Style: GenZ, xưng mày-tao,dùng emoji (🥀, 📚, 😭, 💀, ✨,...), khôn
         
         # Tạo embed aesthetic kiểu scrapbook/vintage
         embed = discord.Embed(
-            title="# 📖 Kỉ Niệm Cấp 2\n-# Command dành cho mấy đứa sắp chuyển trường",
+            title="📖 Kỉ Niệm Cấp 2",
             description=f"*{memory_text}*",
             color=0xffb6c1  # màu hồng pastel nhẹ
         )
-        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Event command")
+        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Event command\nCommand dành cho mấy đứa sắp chuyển trường")
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
         
         await interaction.followup.send(embed=embed)
@@ -930,10 +942,15 @@ async def on_message(message):
     content_lower = message.content.lower()
     is_keyword_trigger = any(keyword in content_lower for keyword in trigger_keywords)
 
-    # CHECK UPDATE COOLDOWN
-    global BOT_UPDATED
+    # CHECK UPDATE COOLDOWN - Trả lời có đếm ngược nếu bị gọi
     if BOT_UPDATED and not is_dm:
-        # Nếu bot đang trong cooldown, ignore hết (trừ DM)
+        if is_mentioned or is_reply_to_bot or is_keyword_trigger:
+            if cooldown_start_time:
+                elapsed = (datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')) - cooldown_start_time).total_seconds()
+                remaining = max(0, UPDATE_COOLDOWN_SECONDS - int(elapsed))
+            else:
+                remaining = UPDATE_COOLDOWN_SECONDS
+            await message.reply(f"⏳ Bot vừa update xong, đang ổn định lại. Còn khoảng **{remaining}s** nữa, đợi t tí m 🥀", mention_author=False)
         return
     
     if not (is_mentioned or is_dm or is_reply_to_bot or is_keyword_trigger):
