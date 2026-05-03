@@ -425,7 +425,7 @@ async def start_update_cooldown(bot_instance):
                 name="🎁 EVENT BONUS",
                 value=(
                     "• Điểm quiz x2 trong event period\n"
-                    "• Random memory có chance ra kỉ niệm "đặc biệt"\n"
+                    "• Random memory có chance ra kỉ niệm \"đặc biệt\"\n"
                     "• New vibe emojis mùa hè: 🌴🍉🏖️🌊\n"
                     "• Secret easter egg nếu gọi bot đúng giờ vàng"
                 ),
