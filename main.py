@@ -103,7 +103,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng
 - Không được thinking, không được reasoning, không output <think>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
 
 [COMMANDS]
-M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme."""
+M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /random_memory (tạo kỉ niệm mùa hè), /sum (tóm tắt 20 tin nhắn gần nhất)"""
 
 # === GLOBALS ===
 chat_history = {}
@@ -384,7 +384,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.9.2", inline=True)
+    embed.add_field(name="📜 Version", value="v21.0.0 (event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -395,9 +395,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v21.0.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• More coming soon :)", inline=False)
     embed.add_field(name="v20.9.2 - Sum", value="• `/sum` command được thêm vào", inline=False)
     embed.add_field(name="v20.8.0 - Model", value="• Thêm tính năng tự chọn model vào quiz, ko cố định 1 model ngáo ngơ nữa.", inline=False)
-    embed.add_field(name="v20.7.1 - Bug Fix", value="• Sửa lỗi quiz expire task\n• Tối ưu hóa bộ nhớ\n• Clean code", inline=False)
     embed.set_footer(text="Updated 20/04/2026")
     await interaction.response.send_message(embed=embed)
 
@@ -732,7 +732,55 @@ async def quiz_score(interaction: discord.Interaction):
 
     embed.set_footer(text="reset mỗi lần update bot🥀")
     await interaction.response.send_message(embed=embed)
+# Event Command
+@bot.tree.command(name="random_memory", description="Gen 1 kỉ niệm cấp 2 ngẫu nhiên (Event Command)")
+async def random_memory(interaction: discord.Interaction):
+    await interaction.response.defer()
+    
+    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+    now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+    
+    memory_prompt = f"""Mày là GenA-bot, thằng bạn thân báo thủ của đối phương. 
+Đối phương đang hoài niệm về cấp 2 sắp qua, hè cuối cùng trước khi lên cấp 3.
+Hãy tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN và HÀI HƯỚC, nghe thật như đếm nhưng KHÔNG DÍNH TÊN AI, chỉ dùng "mày", "tao", "thằng bạn", "con nhỏ", "đứa ngồi bàn trên", "thằng lớp phó", "con bạn thân", "đám con trai/gái",... 
+Không được bịa tên người cụ thể.
 
+Format:
+- 1 kỉ niệm ngắn (2-3 dòng)
+- Thời điểm: học kì 1/2 lớp 6/7/8/9 (random)
+- Địa điểm: lớp học/căn tin/sân trường/góc cầu thang/nhà xe...
+- Cảm xúc: vui/cười vỡ bụng/xấu hổ/trốn học/thầy cô phát hiện...
+
+Style: GenZ, xưng mày-tao,dùng emoji (🥀, 📚, 😭, 💀, ✨,...), không dùng dấu "!", cực kì nostalgia và nhây. Trả lời thẳng, không được dùng thinking."""
+
+    # Dùng system_instruction gốc cho chất giọng
+    sum_prompt = system_instruction.format(
+        user_id=f"{interaction.user.display_name}",
+        current_time=now
+    )
+    
+    temp_messages = [
+        {"role": "system", "content": sum_prompt},
+        {"role": "user", "content": memory_prompt}
+    ]
+    
+    try:
+        memory_text = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
+        memory_text = memory_text[:1500] if len(memory_text) > 1500 else memory_text
+        
+        # Tạo embed aesthetic kiểu scrapbook/vintage
+        embed = discord.Embed(
+            title="📖 Kỉ Niệm Cấp 2",
+            description=f"*{memory_text}*",
+            color=0xffb6c1  # màu hồng pastel nhẹ
+        )
+        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | dành cho 2k11")
+        embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        
+        await interaction.followup.send(embed=embed)
+        
+    except Exception as e:
+        await interaction.followup.send(f"Đầu óc t đang lag, thử lại sau đi m 🥀\n||{str(e)[:50]}||")
 # === MAIN MESSAGE HANDLER ===
 @bot.event
 async def on_message(message):
