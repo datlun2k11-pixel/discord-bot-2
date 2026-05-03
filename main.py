@@ -936,7 +936,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                     quiz_active.pop(channel_id, None)
                     return await interaction.followup.send("AI tạo lỗi r, thử lại đi 🥀")
                 else:
-                    await interaction.channel.send(f"Câu {q_num} bị lỗi format, skip nha 💀. btw, nên dủng `Model_quiz` là `GPT-OSS-120B` cho đỡ lỗi format nha=)")
+                    await interaction.channel.send(f"Câu {q_num} bị lỗi format, skip nha 💀")
                     continue
 
             q_data = {
@@ -1034,13 +1034,18 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                 await end_quiz_session(channel_id, interaction)
 
 
-async def end_quiz_session(channel_id, interaction):
+async def end_quiz_session(channel_id, interaction_or_message):
     """Kết thúc session quiz và hiển thị kết quả"""
     if channel_id not in quiz_active:
         return
 
     session = quiz_active[channel_id]
     session["running"] = False
+
+    # Handle cả interaction và message object
+    user = getattr(interaction_or_message, 'user', getattr(interaction_or_message, 'author', None))
+    channel = getattr(interaction_or_message, 'channel', None)
+    guild = getattr(interaction_or_message, 'guild', None)
 
     embed = discord.Embed(
         title="🏁 KẾT THÚC QUIZ",
@@ -1053,8 +1058,8 @@ async def end_quiz_session(channel_id, interaction):
         sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
         score_lines = []
         for i, (uid, score) in enumerate(sorted_scores[:5], 1):
-            user = interaction.guild.get_member(int(uid))
-            name = user.display_name if user else f"User_{uid[:6]}"
+            member = guild.get_member(int(uid)) if guild else None
+            name = member.display_name if member else f"User_{uid[:6]}"
             medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, "🥀")
             score_lines.append(f"{medal} **{name}**: `{score} điểm`")
         embed.add_field(name="📊 Bảng điểm session", value="\n".join(score_lines), inline=False)
@@ -1072,9 +1077,11 @@ async def end_quiz_session(channel_id, interaction):
     embed.add_field(name="🎯 Độ khó", value=f"`{session.get('difficulty', 'unknown')}`", inline=True)
     embed.add_field(name="⏱️ Thời gian/câu", value=f"`{session.get('time_per_q', 60)}s`", inline=True)
 
-    embed.set_footer(text=f"Quiz by {interaction.user.display_name} | {random_vibe()}")
+    requester_name = user.display_name if user else "Unknown"
+    embed.set_footer(text=f"Quiz by {requester_name} | {random_vibe()}")
 
-    await interaction.channel.send(embed=embed)
+    if channel:
+        await channel.send(embed=embed)
 
     if channel_id in quiz_scores:
         for uid, score in scores.items():
