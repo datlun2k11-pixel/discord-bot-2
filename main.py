@@ -121,6 +121,10 @@ quiz_expire_tasks = {}
 # Summon & event stats (mới)
 summon_active = {}
 event_stats = {}
+# Golden hour bonus (ẩn, ko thông báo)
+golden_hour_active = False
+golden_hour_end = None
+golden_hour_task = None
 
 app = Flask(__name__)
 
@@ -434,7 +438,7 @@ async def start_update_cooldown(bot_instance):
             )
 
             event_embed.set_footer(
-                text=f"Summer Event 2026 | GenA-bot v21.6.0 | {random_vibe()}",
+                text=f"Summer Event 2026 | GenA-bot v21.8.0 | {random_vibe()}",
                 icon_url=bot_instance.user.display_avatar.url if bot_instance.user.display_avatar else None
             )
 
@@ -468,6 +472,26 @@ async def check_event_end():
                 )
                 end_embed.set_footer(text="GenA-bot | Summer 2026")
                 await channel.send(embed=end_embed)
+async def golden_hour_scheduler():
+    """Mỗi 1 tiếng, 40% tỉ lệ kích hoạt x2 điểm quiz trong 1 tiếng"""
+    global golden_hour_active, golden_hour_end, golden_hour_task
+    
+    while True:
+        await asyncio.sleep(3600)  # đợi 1 tiếng
+        
+        if random.random() < 0.4:  # 40%
+            golden_hour_active = True
+            golden_hour_end = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')) + datetime.timedelta(hours=1)
+            
+            # Auto tắt sau 1 tiếng
+            async def end_golden_hour():
+                await asyncio.sleep(3600)
+                global golden_hour_active
+                golden_hour_active = False
+            
+            if golden_hour_task:
+                golden_hour_task.cancel()
+            golden_hour_task = asyncio.create_task(end_golden_hour())
 
 @bot.event
 async def on_ready():
@@ -480,6 +504,7 @@ async def on_ready():
 
     asyncio.create_task(start_update_cooldown(bot))
     asyncio.create_task(check_event_end())
+    asyncio.create_task(golden_hour_scheduler())
 
 # === COMMANDS ===
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
@@ -512,7 +537,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.6.0 (event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.8.0 (event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -523,6 +548,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v21.8.0 - Event", value="• 40% tỉ lệ nhân Golden Hour nhằm tránh lạm pháp điểm\n• Bugs fixing", inline=False)
     embed.add_field(name="v21.6.0 - Summon", value="• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history", inline=False)
     embed.add_field(name="v21.5.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix\n• More coming soon :)", inline=False)
     embed.add_field(name="v20.9.2 - Sum", value="• `/sum` command được thêm vào", inline=False)
@@ -811,9 +837,21 @@ async def quiz(
     pts_map = {"siêu dễ": 0.5, "dễ": 1, "trung bình": 2.5, "khó": 5, "extreme": 8, "impossible": 15}
     pts = pts_map.get(do_kho_val, 1)
 
+    multiplier = 1
+    bonus_texts = []
+
     if EVENT_ACTIVE:
-        pts *= 2
-        event_bonus_text = " (x2 EVENT)"
+        multiplier *= 2
+        bonus_texts.append("x2 EVENT")
+
+    if golden_hour_active:
+        multiplier *= 2
+        bonus_texts.append("x2 GOLDEN HOUR")
+
+    pts *= multiplier
+
+    if bonus_texts:
+        event_bonus_text = " (" + " + ".join(bonus_texts) + ")"
     else:
         event_bonus_text = ""
 
@@ -1154,7 +1192,7 @@ async def summon_user(
     task = asyncio.create_task(summon_timeout(channel_id))
     summon_active[channel_id]["timeout_task"] = task
 
-@bot.tree.command(name="event_lb", description="Bảng xếp hạng Summer Event 2026 🏆")
+@bot.tree.command(name="event_lb", description="Bảng xếp hạng Summer Event 🏆 (Event Command ☀️)")
 async def event_leaderboard(interaction: discord.Interaction):
     await interaction.response.defer()
 
@@ -1207,7 +1245,7 @@ async def event_leaderboard(interaction: discord.Interaction):
     embed.set_footer(text=f"Summer Event 2026 | {random_vibe()}")
     await interaction.followup.send(embed=embed)
 
-@bot.tree.command(name="event_status", description="Xem tình trạng Summer Event ☀️")
+@bot.tree.command(name="event_status", description="Xem tình trạng Summer Event ☀️ (Event Command ☀️)")
 async def event_status(interaction: discord.Interaction):
     await interaction.response.defer()
 
@@ -1240,6 +1278,20 @@ async def event_status(interaction: discord.Interaction):
         value="✅ Quiz x2 điểm\n✅ 15% kỉ niệm đặc biệt\n✅ Giờ vàng easter egg\n✅ Summon Duel/Team",
         inline=True
     )
+    # ⬇️ THÊM GOLDEN HOUR STATUS Ở ĐÂY ⬇️
+    golden_status = "🟡 ĐANG ACTIVE" if golden_hour_active else "⚫ Hiện ko có"
+    golden_text = golden_status
+    if golden_hour_active and golden_hour_end:
+        remaining_seconds = int((golden_hour_end - vn_now).total_seconds())
+        if remaining_seconds > 0:
+            remaining_min = remaining_seconds // 60
+            golden_text += f" (còn {remaining_min} phút)"
+    
+    embed.add_field(
+        name="🌟 Golden Hour",
+        value=f"{golden_text}\nX2 điểm quiz khi active (ẩn)",
+        inline=True
+    )
 
     embed.add_field(
         name="📊 Stats của m",
@@ -1256,7 +1308,7 @@ async def event_status(interaction: discord.Interaction):
     await interaction.followup.send(embed=embed)
 
 # === RANDOM_MEMORY COMMAND ===
-@bot.tree.command(name="random_memory", description="Gen 1 kỉ niệm cấp 2 ngẫu nhiên (Event Command)")
+@bot.tree.command(name="random_memory", description="Gen 1 kỉ niệm cấp 2 ngẫu nhiên (Event Command ☀️)")
 @app_commands.describe(
     cấp="Cấp học muốn hoài niệm (mặc định: random)",
     mood="Tâm trạng kỉ niệm",
