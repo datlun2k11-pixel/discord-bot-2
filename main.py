@@ -387,7 +387,7 @@ async def start_update_cooldown(bot_instance):
             embed.set_footer(text=f"Sẵn sàng phục vụ | {random_vibe()}")
             await channel.send(embed=embed)
         except Exception as e:
-            print(f"Lỗi gửi thông báo ready: {e}"
+            print(f"Lỗi gửi thông báo ready: {e}")
             
 @bot.event
 async def on_ready():
