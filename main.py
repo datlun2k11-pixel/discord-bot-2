@@ -1273,9 +1273,23 @@ async def event_status(interaction: discord.Interaction):
         value=f"{days_left} ngày {hours_left} giờ",
         inline=True
     )
+    # Tạo text bonus động
+    bonus_lines = []
+    if EVENT_ACTIVE:
+        bonus_lines.append("✅ Quiz x2 điểm (EVENT)")
+    else:
+        bonus_lines.append("❌ Quiz x2 điểm (EVENT đã kết thúc)")
+    
+    if golden_hour_active:
+        bonus_lines.append("🌟 Golden Hour x2 điểm")
+    
+    bonus_lines.append("✅ 15% kỉ niệm đặc biệt")
+    bonus_lines.append("✅ Giờ vàng easter egg")
+    bonus_lines.append("✅ Summon Duel/Team")
+    
     embed.add_field(
         name="🎁 Event Bonus",
-        value="✅ Quiz x2 điểm\n✅ 15% kỉ niệm đặc biệt\n✅ Giờ vàng easter egg\n✅ Summon Duel/Team",
+        value="\n".join(bonus_lines),
         inline=True
     )
     # ⬇️ THÊM GOLDEN HOUR STATUS Ở ĐÂY ⬇️
