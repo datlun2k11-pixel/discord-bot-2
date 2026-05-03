@@ -1,4 +1,4 @@
-# AI coded - Bug fixed & Optimized ver
+# AI coded - Bug fixed & Optimized ver v2
 import discord
 import os
 import asyncio
@@ -67,6 +67,7 @@ MODEL_CHOICES = [
 ]
 
 CURRENT_MODEL = "Groq-Llama-Scout"
+
 # System Prompt
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
 
@@ -86,38 +87,45 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng
 - Thỉnh thoảng có Emoticon (=)), :)), =))),...) và Emoji báo đời (💔, 🥀, 💀, 🫩, ✌🏿,...) ở mỗi câu rep.
 - Cấm output ra suy nghĩ nội bộ, cấm <thinking> hay <thought>. Cứ thế mà phang thẳng text ra.
 - Chỉ giải thích đáp án quiz khi có đứa hỏi "tại sao" hoặc "sao sai". Nhớ kĩ cái quiz gần nhất để còn khịa tụi nó.
-- Không được thinking, không được reasoning, không output <think>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
+- Không được thinking, không được reasoning, không output <thinking>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
 
 [COMMANDS]
 M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /random_memory (tạo kỉ niệm mùa hè), /sum (tóm tắt 20 tin nhắn gần nhất)"""
 
 # === GLOBALS ===
-EVENT_ACTIVE = True  # Bật event
+EVENT_ACTIVE = True
 EVENT_END_DATE = datetime.datetime(2026, 6, 30, 23, 59, tzinfo=pytz.timezone('Asia/Ho_Chi_Minh'))
 chat_history = {}
 user_locks = {}
 last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
+
 # Update cooldown
 BOT_UPDATED = True
-UPDATE_COOLDOWN_SECONDS = 60 
-UPDATE_CHANNEL_ID = 1464203423191797841 
-cooldown_start_time = None 
+UPDATE_COOLDOWN_SECONDS = 60
+UPDATE_CHANNEL_ID = 1464203423191797841
+cooldown_start_time = None
+
 TEXT_EXTENSIONS = {
     'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h',
     'java', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'xml',
     'yaml', 'yml', 'ini', 'cfg', 'conf', 'sh', 'bat', 'ps1', 'ts', 'tsx',
     'jsx', 'vue', 'sass', 'scss', 'less', 'dockerfile', 'gitignore'
 }
+
 # Quiz globals
 quiz_active = {}
 quiz_scores = {}
 quiz_history = {}
-quiz_expire_tasks = {}  # Store asyncio tasks
+quiz_expire_tasks = {}
 
 app = Flask(__name__)
+
 @app.route('/')
-def home(): return "GenA-bot Live! 🔥"
-def run_flask(): app.run(host="0.0.0.0", port=8000)
+def home():
+    return "GenA-bot Live! 🔥"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=8000)
 
 def random_vibe():
     if EVENT_ACTIVE:
@@ -153,7 +161,6 @@ def remove_thinking(text):
         r'<thought>.*?</thought>',
         r'thinking:.*?(?=\n\n|\Z)',
         r'<thinking>.*?</thinking>',
-        r'<thought>.*?</thought>',
         r'<reasoning>.*?</reasoning>',
         r'<\|think\|?>.*?</?\|?think\|?>',
         r'\*\*Thinking:\*\*.*?(?=\n\n|\Z)',
@@ -161,11 +168,13 @@ def remove_thinking(text):
         r'\(thinking\).*?\(/thinking\)',
         r'<!--thinking-->.*?<!--/thinking-->',
         r'🤔.*?💭',
+        r'<\|start_header_id\|>.*?<\|end_header_id\|>',
+        r'\[\w+\]:.*?\n',
     ]
-    
+
     for pattern in patterns:
         text = re.sub(pattern, '', text, flags=re.DOTALL | re.IGNORECASE).strip()
-    
+
     lines = [line for line in text.split('\n') if line.strip()]
     return '\n'.join(lines)
 
@@ -261,13 +270,13 @@ async def get_google_response(messages, model_config):
             return "K có nội dung để xử lý bro 🥀"
 
         payload = {
-    "contents": contents,
-    "generationConfig": {
-        "temperature": 1.0,
-        "maxOutputTokens": 2048,
-        "topP": 0.95,
-        "topK": 64,
-    },
+            "contents": contents,
+            "generationConfig": {
+                "temperature": 1.0,
+                "maxOutputTokens": 2048,
+                "topP": 0.95,
+                "topK": 64,
+            },
             **({"tools": [{"google_search": {}}]} if "gemma-3" not in model_config["id"] else {}),
             "safetySettings": [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
@@ -300,10 +309,15 @@ async def get_google_response(messages, model_config):
                             if "text" in part:
                                 res_text = part["text"]
                                 res_text = remove_thinking(res_text)
-                                thinking_starters = ["let me think", "hmm", "okay so", "first", "i need to", "step 1", "let's break"]
-                                first_line = res_text.split('\n')[0].lower().strip()
-                                if any(starter in first_line for starter in thinking_starters) and len(res_text.split('\n')) > 3:
-                                    res_text = '\n'.join(res_text.split('\n')[1:]).strip()
+
+                                # Remove thinking starters
+                                thinking_starters = ["let me think", "hmm", "okay so", "first", "i need to", 
+                                                   "step 1", "let's break", "i'll analyze", "thinking:", 
+                                                   "reasoning:", "let's see", "well,"]
+                                lines = res_text.split('\n')
+                                while lines and any(starter in lines[0].lower().strip() for starter in thinking_starters):
+                                    lines.pop(0)
+                                res_text = '\n'.join(lines).strip()
 
                                 if res_text:
                                     sources = []
@@ -353,7 +367,6 @@ async def start_update_cooldown(bot_instance):
     BOT_UPDATED = True
     cooldown_start_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
-    # Gửi thông báo update
     channel = bot_instance.get_channel(UPDATE_CHANNEL_ID)
     if channel:
         try:
@@ -367,7 +380,6 @@ async def start_update_cooldown(bot_instance):
         except Exception as e:
             print(f"Lỗi gửi thông báo update: {e}")
 
-    # Đợi cooldown
     await asyncio.sleep(UPDATE_COOLDOWN_SECONDS)
 
     BOT_UPDATED = False
@@ -376,20 +388,14 @@ async def start_update_cooldown(bot_instance):
     # === ☀️ SUMMER EVENT ANNOUNCEMENT ===
     if channel:
         try:
-            # Main event embed
             event_embed = discord.Embed(
                 title="☀️ SUMMER EVENT ĐÃ BẮT ĐẦU",
                 description="Hè rồi m ơi, bot cũng phải chill theo vibe mùa hè chứ 🥀\nEvent chạy đến hết tháng 6, tranh thủ quẩy đi",
                 color=0xFF6B35,
                 timestamp=discord.utils.utcnow()
             )
-
-            # Event banner image (optional - if you have one)
-            # event_embed.set_image(url="https://your-summer-banner.png")
-
             event_embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/☀️.png")
 
-            # New commands section
             event_embed.add_field(
                 name="🆕 COMMANDS MỚI",
                 value=(
@@ -406,7 +412,6 @@ async def start_update_cooldown(bot_instance):
                 inline=False
             )
 
-            # Improved features
             event_embed.add_field(
                 name="🔧 CẢI TIẾN",
                 value=(
@@ -420,27 +425,25 @@ async def start_update_cooldown(bot_instance):
                 inline=False
             )
 
-            # Event bonuses
             event_embed.add_field(
                 name="🎁 EVENT BONUS",
                 value=(
                     "• Điểm quiz x2 trong event period\n"
-                    "• Random memory có chance ra kỉ niệm \"đặc biệt\"\n"
+                    '• Random memory có chance ra kỉ niệm "đặc biệt"\n'
                     "• New vibe emojis mùa hè: 🌴🍉🏖️🌊\n"
                     "• Secret easter egg nếu gọi bot đúng giờ vàng"
                 ),
                 inline=False
             )
 
-            # How to participate
             event_embed.add_field(
                 name="🎮 THAM GIA",
                 value=(
                     "Chỉ cần chat bình thường thôi m\n"
                     "Dùng `/random_memory` để hoài niệm cấp 2\n"
                     "Dùng `/quiz` để đua điểm với đám bạn\n"
-                    "Tag bot là bot rep, đơn giản vậy thôi ✌🏿"
-                     "Cái này được viết bởi AI"
+                    "Tag bot là bot rep, đơn giản vậy thôi ✌🏿\n"
+                    "Cái này được viết bởi AI"
                 ),
                 inline=False
             )
@@ -452,7 +455,6 @@ async def start_update_cooldown(bot_instance):
 
             await channel.send(embed=event_embed)
 
-            # Secondary embed - just the ready notification
             ready_embed = discord.Embed(
                 title="✅ Bot đã sẵn sàng",
                 description="Ok xong rồi, bot đã ổn định, quẩy tiếp đê m 🥀✌🏿",
@@ -463,7 +465,6 @@ async def start_update_cooldown(bot_instance):
 
         except Exception as e:
             print(f"Lỗi gửi thông báo event: {e}")
-            # Fallback: just send ready message
             try:
                 fallback_embed = discord.Embed(
                     title="✅ Bot đã sẵn sàng",
@@ -474,6 +475,7 @@ async def start_update_cooldown(bot_instance):
                 await channel.send(embed=fallback_embed)
             except Exception as e2:
                 print(f"Lỗi gửi fallback ready: {e2}")
+
 async def check_event_end():
     """Background task kiểm tra event hết hạn"""
     global EVENT_ACTIVE
@@ -500,12 +502,10 @@ async def on_ready():
     except Exception as e:
         print(f"Lỗi sync: {e}")
     print(f"GenA-bot Ready! 🔥")
-    
-    # Bắt đầu cooldown update
+
     asyncio.create_task(start_update_cooldown(bot))
-    
-    # ☀️ Bắt đầu check event end
     asyncio.create_task(check_event_end())
+
 # === COMMANDS ===
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
 @app_commands.choices(chon_model=MODEL_CHOICES)
@@ -673,7 +673,7 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
 
     if số_lượng > 1 and memes_sent > 0:
         await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
-        
+
 @bot.tree.command(name="sum", description="Tóm tắt 20 tin nhắn gần nhất trong kênh")
 async def summarize_chat(interaction: discord.Interaction):
     await interaction.response.defer()
@@ -682,8 +682,7 @@ async def summarize_chat(interaction: discord.Interaction):
     messages = []
     async for msg in channel.history(limit=21):
         messages.append(msg)
-    
-    # Loại bỏ lệnh /sum nếu fetch trúng (check an toàn)
+
     if messages and messages[0].author == bot.user:
         try:
             if messages[0].interaction and messages[0].interaction.name == "sum":
@@ -696,7 +695,6 @@ async def summarize_chat(interaction: discord.Interaction):
         await interaction.followup.send("K có tin nhắn nào để tóm tắt bro 🥀")
         return
 
-    # CHỈ LẤY TEXT, BỎ QUA ẢNH/FILE
     chat_log_lines = []
     for msg in reversed(messages):
         author_name = msg.author.display_name
@@ -712,7 +710,7 @@ async def summarize_chat(interaction: discord.Interaction):
 
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
-    
+
     sum_prompt = system_instruction.format(
         user_id=f"{interaction.user.display_name} đang xài lệnh /sum",
         current_time=now
@@ -726,16 +724,16 @@ async def summarize_chat(interaction: discord.Interaction):
     try:
         summary = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
         summary = summary[:1900] if len(summary) > 1900 else summary
-        
+
         embed = discord.Embed(
             title="📋 Tóm tắt 20 msg gần nhất",
             description=summary,
             color=0x00ff9d
         )
         embed.set_footer(text=f"Requested bởi {interaction.user.display_name} | {random_vibe()}")
-        
+
         await interaction.followup.send(embed=embed)
-        
+
     except Exception as e:
         await interaction.followup.send(f"Lỗi khi tóm tắt: {str(e)[:100]} 💀")
 
@@ -760,8 +758,8 @@ async def quiz_score(interaction: discord.Interaction):
 
     embed.set_footer(text="reset mỗi lần update bot🥀")
     await interaction.response.send_message(embed=embed)
-# === QUIZ COMMAND (FULL VERSION) ===\n
-# === QUIZ COMMANDS ===
+
+# === QUIZ COMMANDS (FIXED) ===
 @bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
 @app_commands.describe(
     chủ_đề="Chủ đề câu hỏi (mặc định: random)", 
@@ -808,31 +806,25 @@ async def quiz(
     channel_id = str(interaction.channel_id)
     do_kho_val = độ_khó.value if độ_khó else "trung bình"
 
-    # Resolve model - default to CURRENT_MODEL
     if model_quiz and model_quiz.value != "current":
         quiz_model = model_quiz.value
     else:
         quiz_model = CURRENT_MODEL
 
-    # Validate model exists
     if quiz_model not in MODELS_CONFIG:
         return await interaction.followup.send(f"Model `{quiz_model}` ko tồn tại bro 💀")
 
-    # Validate số_câu
     if số_câu < 1 or số_câu > 5:
         return await interaction.followup.send("Số câu từ 1-5 thôi m, nhiều quá spam đó 💔")
 
-    # Validate thời_gian
     if thời_gian < 10 or thời_gian > 120:
         return await interaction.followup.send("Thời gian từ 10-120 giây thôi m 🥀")
 
     chế_độ_val = chế_độ.value if chế_độ else "normal"
 
-    # Check if quiz already active
     if channel_id in quiz_active and quiz_active[channel_id].get("running"):
         return await interaction.followup.send("Đang có câu hỏi rồi m, trl đi đã 💀")
 
-    # Init data structures
     if channel_id not in quiz_history:
         quiz_history[channel_id] = []
     if channel_id not in quiz_scores:
@@ -840,39 +832,27 @@ async def quiz(
     if channel_id not in quiz_expire_tasks:
         quiz_expire_tasks[channel_id] = {}
 
-    # Points mapping
     pts_map = {"siêu dễ": 0.5, "dễ": 1, "trung bình": 2.5, "khó": 5, "extreme": 8, "impossible": 15}
     pts = pts_map.get(do_kho_val, 1)
 
-    # ☀️ SUMMER EVENT: x2 điểm
     if EVENT_ACTIVE:
         pts *= 2
         event_bonus_text = " (x2 EVENT)"
     else:
         event_bonus_text = ""
-    # Difficulty color mapping
+
     diff_colors = {
-        "siêu dễ": 0x90EE90,
-        "dễ": 0x00FF7F,
-        "trung bình": 0xFFD700,
-        "khó": 0xFF8C00,
-        "extreme": 0xFF4500,
-        "impossible": 0x8B0000
+        "siêu dễ": 0x90EE90, "dễ": 0x00FF7F, "trung bình": 0xFFD700,
+        "khó": 0xFF8C00, "extreme": 0xFF4500, "impossible": 0x8B0000
     }
     diff_color = diff_colors.get(do_kho_val, 0xFFD700)
 
-    # Difficulty emoji mapping
     diff_emojis = {
-        "siêu dễ": "🥱",
-        "dễ": "😌",
-        "trung bình": "🤔",
-        "khó": "😰",
-        "extreme": "💀",
-        "impossible": "☠️"
+        "siêu dễ": "🥱", "dễ": "😌", "trung bình": "🤔",
+        "khó": "😰", "extreme": "💀", "impossible": "☠️"
     }
     diff_emoji = diff_emojis.get(do_kho_val, "🧠")
 
-    # Initialize quiz session
     quiz_active[channel_id] = {
         "running": True,
         "current_q": 0,
@@ -887,17 +867,16 @@ async def quiz(
         "time_per_q": thời_gian,
         "topic": chủ_đề,
         "answered_users": set(),
-        "interaction": interaction
+        "interaction": interaction,
+        "completed_questions": 0
     }
 
-    # Generate questions
     for q_num in range(1, số_câu + 1):
         if not quiz_active.get(channel_id, {}).get("running"):
             break
 
         quiz_active[channel_id]["current_q"] = q_num
 
-        # Build prompt
         seed = random.randint(1000, 9999)
         prev_q_hint = ""
         if q_num > 1:
@@ -917,7 +896,6 @@ D. [đáp án D]
 ĐÁP ÁN: [chữ cái A/B/C/D]
 GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"""
 
-        # Send generating message for multi-question
         if số_câu > 1:
             gen_embed = discord.Embed(
                 title=f"{diff_emoji} Đang tạo câu {q_num}/{số_câu}...",
@@ -928,6 +906,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                 gen_msg = await interaction.followup.send(embed=gen_embed)
             else:
                 await interaction.channel.send(embed=gen_embed)
+
         try:
             temp_msgs = [
                 {"role": "system", "content": "M là bot tạo quiz, k output thinking, chỉ output câu hỏi và đáp án theo format yêu cầu. Giải thích phải hài hước, ngắn gọn."},
@@ -937,7 +916,6 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             raw = await get_model_response(temp_msgs, MODELS_CONFIG[quiz_model])
             raw = remove_thinking(raw)
 
-            # Parse response
             lines = raw.strip().splitlines()
             q_lines, ans_map, correct, expl = [], {}, None, ""
 
@@ -958,10 +936,9 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                     quiz_active.pop(channel_id, None)
                     return await interaction.followup.send("AI tạo lỗi r, thử lại đi 🥀")
                 else:
-                    await interaction.channel.send(f"Câu {q_num} bị lỗi format, skip nha 💀")
+                    await interaction.channel.send(f"Câu {q_num} bị lỗi format, skip nha 💀. btw, nên dủng `Model_quiz` là `GPT-OSS-120B` cho đỡ lỗi format nha=)")
                     continue
 
-            # Store question data
             q_data = {
                 "q_num": q_num,
                 "question": q_lines[0] if q_lines else "Câu hỏi",
@@ -974,7 +951,6 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             }
             quiz_active[channel_id]["questions"].append(q_data)
 
-            # Build embed
             desc_lines = q_lines.copy()
             embed = discord.Embed(
                 title=f"{diff_emoji} QUIZ - Câu {q_num}/{số_câu} | {chủ_đề.upper()}",
@@ -994,14 +970,13 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             else:
                 await interaction.channel.send(embed=embed)
 
-            # Store in chat history
             quiz_context = f"[QUIZ ACTIVE - Câu {q_num}/{số_câu}] Q: {q_data['question']} | Đáp án: {correct} | Giải thích: {expl}"
             if channel_id in chat_history:
                 chat_history[channel_id].append({"role": "assistant", "content": quiz_context})
                 if len(chat_history[channel_id]) > 16:
                     chat_history[channel_id] = [chat_history[channel_id][0]] + chat_history[channel_id][-15:]
 
-            # Setup auto-expire for this question
+            # Setup auto-expire
             async def auto_expire_q(cid, qn, timeout):
                 try:
                     await asyncio.sleep(timeout)
@@ -1014,9 +989,9 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                                 f"⏰ Hết giờ câu {qn}! Đáp án đúng là **{q_data['answer']}**. {q_data.get('explanation', '')} 🥀"
                             )
                             q_data["answered"] = True
+                            quiz_active[cid]["completed_questions"] = quiz_active[cid].get("completed_questions", 0) + 1
 
-                            # Check if last question
-                            if qn >= quiz_active[cid].get("total_q", 1):
+                            if quiz_active[cid]["completed_questions"] >= quiz_active[cid].get("total_q", 1):
                                 await end_quiz_session(cid, interaction)
                 except asyncio.CancelledError:
                     pass
@@ -1026,7 +1001,6 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             task = asyncio.create_task(auto_expire_q(channel_id, q_num, thời_gian))
             quiz_expire_tasks[channel_id][q_num] = task
 
-            # Wait for answer or timeout before next question (for multi-question)
             if số_câu > 1 and q_num < số_câu:
                 answered = False
                 wait_start = asyncio.get_event_loop().time()
@@ -1039,6 +1013,9 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                     if not quiz_active.get(channel_id, {}).get("running"):
                         break
 
+                if not answered and not quiz_active.get(channel_id, {}).get("running"):
+                    break
+
         except Exception as e:
             print(f"Lỗi tạo câu hỏi {q_num}: {e}")
             if số_câu == 1:
@@ -1048,14 +1025,13 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                 await interaction.channel.send(f"Câu {q_num} lỗi rồi, skip nha 💀")
                 continue
 
-    # For single question, quiz stays active until answered or timeout
     if số_câu == 1:
-        pass  # Already handled by auto_expire
+        pass
     else:
-        # Multi-question: end session after all questions processed
         await asyncio.sleep(2)
         if channel_id in quiz_active and quiz_active[channel_id].get("running"):
-            await end_quiz_session(channel_id, interaction)
+            if quiz_active[channel_id].get("completed_questions", 0) >= quiz_active[channel_id].get("total_q", 1):
+                await end_quiz_session(channel_id, interaction)
 
 
 async def end_quiz_session(channel_id, interaction):
@@ -1066,14 +1042,12 @@ async def end_quiz_session(channel_id, interaction):
     session = quiz_active[channel_id]
     session["running"] = False
 
-    # Build results embed
     embed = discord.Embed(
         title="🏁 KẾT THÚC QUIZ",
-        description=f"Đã hoàn thành **{len(session['questions'])}** câu hỏi!",
+        description=f"Đã hoàn thành **{session.get('completed_questions', len(session['questions']))}** câu hỏi!",
         color=0x00FF9D
     )
 
-    # Show scoreboard
     scores = session.get("scores", {})
     if scores:
         sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
@@ -1087,7 +1061,6 @@ async def end_quiz_session(channel_id, interaction):
     else:
         embed.add_field(name="📊 Bảng điểm", value="Chả ai trả lời cả 🥀", inline=False)
 
-    # Show correct answers summary
     ans_summary = []
     for q in session.get("questions", []):
         status = "✅" if q.get("answered", False) else "⏰"
@@ -1103,18 +1076,16 @@ async def end_quiz_session(channel_id, interaction):
 
     await interaction.channel.send(embed=embed)
 
-    # Update global scores
     if channel_id in quiz_scores:
         for uid, score in scores.items():
             quiz_scores[channel_id][uid] = quiz_scores[channel_id].get(uid, 0) + score
     else:
-        quiz_scores[channel_id] = scores
+        quiz_scores[channel_id] = scores.copy()
 
-    # Cleanup
     quiz_active.pop(channel_id, None)
     quiz_expire_tasks.pop(channel_id, None)
-    # === RANDOM_MEMORY COMMAND (FULL VERSION) ===
-    # Event Command
+
+# === RANDOM_MEMORY COMMAND (FIXED - no duplicate) ===
 @bot.tree.command(name="random_memory", description="Gen 1 kỉ niệm cấp 2 ngẫu nhiên (Event Command)")
 @app_commands.describe(
     cấp="Cấp học muốn hoài niệm (mặc định: random)",
@@ -1182,7 +1153,6 @@ async def random_memory(
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
 
-    # Resolve parameters with random fallback
     cấp_val = cấp.value if cấp else "random"
     mood_val = mood.value if mood else "random"
     độ_dài_val = độ_dài.value if độ_dài else "random"
@@ -1190,7 +1160,6 @@ async def random_memory(
     friend_val = include_friend.value if include_friend else "random"
     crush_val = include_crush.value if include_crush else "random"
 
-    # Randomize if needed
     cấp_options = ["lớp 6", "lớp 7", "lớp 8", "lớp 9"]
     if cấp_val == "random":
         cấp_val = random.choice(cấp_options)
@@ -1215,7 +1184,6 @@ async def random_memory(
     if crush_val == "random":
         crush_val = random.choice(crush_options)
 
-    # Location options
     locations = [
         "lớp học", "căn tin", "sân trường", "góc cầu thang", "nhà xe",
         "phòng thí nghiệm", "thư viện", "phòng y tế", "sân thể chất",
@@ -1224,15 +1192,12 @@ async def random_memory(
     ]
     location = random.choice(locations)
 
-    # Time of day
     times = ["sáng sớm", "giữa buổi", "giờ ra chơi", "giờ tan học", "buổi chiều muộn", "hôm thứ 6"]
     time_of_day = random.choice(times)
 
-    # Season
     seasons = ["học kì 1", "học kì 2", "đầu năm học", "cuối năm học", "giữa năm"]
     season = random.choice(seasons)
 
-    # Build detailed prompt
     length_guide = {
         "ngắn": "1-2 dòng, súc tích",
         "vừa": "3-5 dòng",
@@ -1273,7 +1238,6 @@ Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
 - Thêm emoji phù hợp (🥀, 📚, 😭, 💀, ✨, 💔, 🔥,...)
 - Trả lời thẳng, không intro, không outro"""
 
-    # Use current model
     sum_prompt = system_instruction.format(
         user_id=f"{interaction.user.display_name}",
         current_time=now
@@ -1287,16 +1251,16 @@ Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
     try:
         memory_text = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
         memory_text = memory_text[:2000] if len(memory_text) > 2000 else memory_text
-# ☀️ SUMMER EVENT: 15% chance kỉ niệm đặc biệt
+
         is_special = EVENT_ACTIVE and random.random() < 0.15
 
         if is_special:
             memory_text = "⭐ **KỈ NIỆM ĐẶC BIỆT** ⭐\n\n" + memory_text
-            mood_color = 0xFFD700  # Gold
+            mood_color = 0xFFD700
             special_footer = " | ⭐ Kỉ niệm đặc biệt!"
         else:
             special_footer = ""
-        # Color based on mood
+
         mood_colors = {
             "hài hước": 0xFFD700,
             "xúc động": 0xFF69B4,
@@ -1308,7 +1272,6 @@ Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
         }
         mood_color = mood_colors.get(mood_val, 0xFFB6C1)
 
-        # Mood emoji
         mood_emojis = {
             "hài hước": "😂",
             "xúc động": "😭",
@@ -1320,7 +1283,6 @@ Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
         }
         mood_emoji = mood_emojis.get(mood_val, "📖")
 
-        # Style emoji
         style_emojis = {
             "genz": "📱",
             "nhật ký": "📓",
@@ -1336,15 +1298,13 @@ Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
             color=mood_color
         )
 
-        # Metadata fields
         embed.add_field(name="📚 Cấp", value=f"`{cấp_val}`", inline=True)
         embed.add_field(name="🎭 Tâm trạng", value=f"`{mood_val}`", inline=True)
         embed.add_field(name="✍️ Phong cách", value=f"`{style_val}`", inline=True)
         embed.add_field(name="📍 Địa điểm", value=f"`{location}`", inline=True)
         embed.add_field(name="⏰ Thời điểm", value=f"`{time_of_day}`", inline=True)
         embed.add_field(name="📅 Học kì", value=f"`{season}`", inline=True)
-# === FIXED random_memory footer ===
-        # Tags
+
         tags = []
         if friend_val == "yes":
             tags.append("👥 Có bạn thân")
@@ -1354,16 +1314,7 @@ Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
             embed.add_field(name="🏷️ Tags", value=" | ".join(tags), inline=False)
 
         embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Model: {CURRENT_MODEL} | Event command{special_footer}\nDành cho mấy đứa sắp chuyển trường 🥀")
-        try:
-            embed.set_thumbnail(url=interaction.user.display_avatar.url)
-        except:
-            pass
-                                # Gộp field Tags và Footer cho gọn
-        if tags:
-            embed.add_field(name="🏷️ Tags", value=" | ".join(tags), inline=False)
 
-        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Model: {CURRENT_MODEL} | Event command{special_footer}\nDành cho mấy đứa sắp chuyển trường 🥀")
-        
         try:
             embed.set_thumbnail(url=interaction.user.display_avatar.url)
         except:
@@ -1373,8 +1324,8 @@ Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
 
     except Exception as e:
         await interaction.followup.send(f"Đầu óc t đang lag, thử lại sau đi m 🥀\n||{str(e)[:50]}||")
-# === MAIN MESSAGE HANDLER ===
-# Fixing
+
+# === MAIN MESSAGE HANDLER (FIXED) ===
 @bot.event
 async def on_message(message):
     global last_msg_time
@@ -1412,7 +1363,7 @@ async def on_message(message):
     if len(chat_history[uid]) > 16:
         chat_history[uid] = [chat_history[uid][0]] + chat_history[uid][-15:]
 
-    # CHECK TRIGGER FIRST (before quiz, for easter egg)
+    # CHECK TRIGGER
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
 
@@ -1437,7 +1388,7 @@ async def on_message(message):
                 await message.reply("🌟 **GIỜ VÀNG!** M gọi t đúng lúc rồi đó, +1 luck cho m hôm nay 🍀", mention_author=False)
                 return
 
-    # CHECK UPDATE COOLDOWN - Trả lời có đếm ngược nếu bị gọi
+    # CHECK UPDATE COOLDOWN
     if BOT_UPDATED and not is_dm:
         if is_mentioned or is_reply_to_bot or is_keyword_trigger:
             if cooldown_start_time:
@@ -1451,14 +1402,11 @@ async def on_message(message):
     if not (is_mentioned or is_dm or is_reply_to_bot or is_keyword_trigger):
         return
 
-    # QUIZ ANSWER CHECK
+    # QUIZ ANSWER CHECK (FIXED - proper next question logic)
     channel_id = str(message.channel.id)
     if channel_id in quiz_active and not message.author.bot:
         quiz_session = quiz_active[channel_id]
-        if not quiz_session.get("running"):
-            pass  # continue to normal chat
-        else:
-            # Get current question
+        if quiz_session.get("running"):
             current_q_idx = quiz_session.get("current_q", 1) - 1
             questions = quiz_session.get("questions", [])
             if current_q_idx < len(questions):
@@ -1475,7 +1423,6 @@ async def on_message(message):
 
                         user_id = str(message.author.id)
 
-                        # Update session scores
                         if "scores" not in quiz_session:
                             quiz_session["scores"] = {}
 
@@ -1483,22 +1430,23 @@ async def on_message(message):
                             points = current_q.get("points", 1)
                             quiz_session["scores"][user_id] = quiz_session["scores"].get(user_id, 0) + points
 
-                            # Update global scores
                             if channel_id not in quiz_scores:
                                 quiz_scores[channel_id] = {}
                             quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
 
                             current_q["answered"] = True
+                            quiz_session["completed_questions"] = quiz_session.get("completed_questions", 0) + 1
 
                             # Check if last question
-                            if current_q_idx + 1 >= quiz_session.get("total_q", 1):
+                            if quiz_session["completed_questions"] >= quiz_session.get("total_q", 1):
                                 await end_quiz_session(channel_id, message)
                             else:
                                 await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {current_q.get('explanation', '')} 🎉")
                         else:
                             current_q["answered"] = True
+                            quiz_session["completed_questions"] = quiz_session.get("completed_questions", 0) + 1
 
-                            if current_q_idx + 1 >= quiz_session.get("total_q", 1):
+                            if quiz_session["completed_questions"] >= quiz_session.get("total_q", 1):
                                 await end_quiz_session(channel_id, message)
                             else:
                                 await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{current_q['answer']}**. {current_q.get('explanation', '')} 🥀")
