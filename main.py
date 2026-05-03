@@ -73,22 +73,6 @@ MODEL_CHOICES = [
 ]
 
 CURRENT_MODEL = "Groq-Llama-Scout"
-# === GLOBALS ===
-chat_history = {}
-user_locks = {}
-last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
-
-# Update cooldown
-BOT_UPDATED = True  # Mặc định True khi bot vừa khởi động
-UPDATE_COOLDOWN_SECONDS = 60  # 1 phút
-UPDATE_CHANNEL_ID = 1464203423191797841  # Channel nhận thông báo
-TEXT_EXTENSIONS = {
-    'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h',
-    'java', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'xml',
-    'yaml', 'yml', 'ini', 'cfg', 'conf', 'sh', 'bat', 'ps1', 'ts', 'tsx',
-    'jsx', 'vue', 'sass', 'scss', 'less', 'dockerfile', 'gitignore'
-}
-
 # System Prompt
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
 
@@ -117,7 +101,16 @@ M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ 
 chat_history = {}
 user_locks = {}
 last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
-
+# Update cooldown
+BOT_UPDATED = True  
+UPDATE_COOLDOWN_SECONDS = 60  
+UPDATE_CHANNEL_ID = 1464203423191797841  
+TEXT_EXTENSIONS = {
+    'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h',
+    'java', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'xml',
+    'yaml', 'yml', 'ini', 'cfg', 'conf', 'sh', 'bat', 'ps1', 'ts', 'tsx',
+    'jsx', 'vue', 'sass', 'scss', 'less', 'dockerfile', 'gitignore'
+}
 # Quiz globals
 quiz_active = {}
 quiz_scores = {}
@@ -363,10 +356,10 @@ async def start_update_cooldown(bot_instance):
         try:
             embed = discord.Embed(
                 title="🔄 Bot vừa update xong",
-                description="Update xong rồi nhưng chưa ổn định. Vui lòng đợi thêm 1 phút nữa... 🥀",
+                description="Update xong rồi nhưng chưa ổn định. Vui lòng đợi thêm 1 phút nữa... ",
                 color=0xff9900
             )
-            embed.set_footer(text=f"Vui lòng đợi {UPDATE_COOLDOWN_SECONDS}s | {random_vibe()}")
+            embed.set_footer(text=f"Vui lòng đợi {UPDATE_COOLDOWN_SECONDS}s | Unready for use;-;")
             await channel.send(embed=embed)
         except Exception as e:
             print(f"Lỗi gửi thông báo update: {e}")
@@ -381,10 +374,10 @@ async def start_update_cooldown(bot_instance):
         try:
             embed = discord.Embed(
                 title="✅ Bot đã sẵn sàng",
-                description="Ok xong rồi, bot đã ổn định, quẩy tiếp đê m 🥀✌🏿",
+                description="Ok xong rồi, bot đã ổn định, chat được rồi đó",
                 color=0x00ff9d
             )
-            embed.set_footer(text=f"Sẵn sàng phục vụ | {random_vibe()}")
+            embed.set_footer(text=f"Ready for use=))")
             await channel.send(embed=embed)
         except Exception as e:
             print(f"Lỗi gửi thông báo ready: {e}")
@@ -574,30 +567,37 @@ async def summarize_chat(interaction: discord.Interaction):
     await interaction.response.defer()
     channel = interaction.channel
 
-    # lấy 20 tin nhắn gần nhất
     messages = []
     async for msg in channel.history(limit=21):
         messages.append(msg)
     
-    # loại bỏ lệnh /sum nếu bị fetch trúng
-    if messages and messages[0].interaction and messages[0].interaction.name == "sum":
-        messages.pop(0)
+    # Loại bỏ lệnh /sum nếu fetch trúng (check an toàn)
+    if messages and messages[0].author == bot.user:
+        try:
+            if messages[0].interaction and messages[0].interaction.name == "sum":
+                messages.pop(0)
+        except:
+            pass
     messages = messages[:20]
 
     if not messages:
         await interaction.followup.send("K có tin nhắn nào để tóm tắt bro 🥀")
         return
 
-    # build log chat
+    # CHỈ LẤY TEXT, BỎ QUA ẢNH/FILE
     chat_log_lines = []
     for msg in reversed(messages):
         author_name = msg.author.display_name
-        content = msg.content[:200] if msg.content else "[ảnh/file]"
-        chat_log_lines.append(f"{author_name}: {content}")
+        if msg.content and msg.content.strip():
+            content = msg.content[:200]
+            chat_log_lines.append(f"{author_name}: {content}")
+
+    if not chat_log_lines:
+        await interaction.followup.send("20 msg gần nhất toàn ảnh với file, k có text để tóm tắt bro 🥀")
+        return
 
     chat_log = "\n".join(chat_log_lines)
 
-    # tạo sys prompt riêng cho lệnh sum (dùng chung format)
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
     
@@ -606,19 +606,17 @@ async def summarize_chat(interaction: discord.Interaction):
         current_time=now
     )
 
-    # chuẩn bị message cho AI
     temp_messages = [
         {"role": "system", "content": sum_prompt},
-        {"role": "user", "content": f"Tóm tắt 20 tin nhắn gần nhất trong channel đi m. chat log:\n\n{chat_log}"}
+        {"role": "user", "content": f"Tóm tắt 20 tin nhắn gần nhất channel đi m (chỉ text, ảnh/file đã lọc):\n\n{chat_log}"}
     ]
 
     try:
         summary = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
         summary = summary[:1900] if len(summary) > 1900 else summary
         
-        # embed cho đẹp
         embed = discord.Embed(
-            title="📋 Tóm tắt 20 tin nhắn gần nhất",
+            title="📋 Tóm tắt 20 msg gần nhất",
             description=summary,
             color=0x00ff9d
         )
@@ -818,11 +816,11 @@ Style: GenZ, xưng mày-tao,dùng emoji (🥀, 📚, 😭, 💀, ✨,...), khôn
         
         # Tạo embed aesthetic kiểu scrapbook/vintage
         embed = discord.Embed(
-            title="📖 Kỉ Niệm Cấp 2",
+            title="# 📖 Kỉ Niệm Cấp 2\n-# Command dành cho mấy đứa sắp chuyển trường",
             description=f"*{memory_text}*",
             color=0xffb6c1  # màu hồng pastel nhẹ
         )
-        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Event command \n Command dành cho mấy đứa sắp chuyển trường")
+        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Event command")
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
         
         await interaction.followup.send(embed=embed)
