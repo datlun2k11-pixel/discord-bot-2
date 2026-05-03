@@ -73,7 +73,15 @@ MODEL_CHOICES = [
 ]
 
 CURRENT_MODEL = "Groq-Llama-Scout"
+# === GLOBALS ===
+chat_history = {}
+user_locks = {}
+last_msg_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
+# Update cooldown
+BOT_UPDATED = True  # Mặc định True khi bot vừa khởi động
+UPDATE_COOLDOWN_SECONDS = 60  # 1 phút
+UPDATE_CHANNEL_ID = 1464203423191797841  # Channel nhận thông báo
 TEXT_EXTENSIONS = {
     'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h',
     'java', 'cs', 'php', 'rb', 'go', 'rs', 'swift', 'kt', 'sql', 'xml',
@@ -343,7 +351,44 @@ async def get_model_response(messages, model_config):
 
 # === BOT SETUP ===
 bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
-
+async def start_update_cooldown(bot_instance):
+    """Bắt đầu cooldown sau update, gửi thông báo vào channel chỉ định"""
+    global BOT_UPDATED
+    
+    BOT_UPDATED = True
+    
+    # Gửi thông báo vào channel
+    channel = bot_instance.get_channel(UPDATE_CHANNEL_ID)
+    if channel:
+        try:
+            embed = discord.Embed(
+                title="🔄 Bot vừa update xong",
+                description="Update xong rồi nhưng chưa ổn định. Vui lòng đợi thêm 1 phút nữa... 🥀",
+                color=0xff9900
+            )
+            embed.set_footer(text=f"Vui lòng đợi {UPDATE_COOLDOWN_SECONDS}s | {random_vibe()}")
+            await channel.send(embed=embed)
+        except Exception as e:
+            print(f"Lỗi gửi thông báo update: {e}")
+    
+    # Đợi 60s
+    await asyncio.sleep(UPDATE_COOLDOWN_SECONDS)
+    
+    BOT_UPDATED = False
+    
+    # Thông báo sẵn sàng
+    if channel:
+        try:
+            embed = discord.Embed(
+                title="✅ Bot đã sẵn sàng",
+                description="Ok xong rồi, bot đã ổn định, quẩy tiếp đê m 🥀✌🏿",
+                color=0x00ff9d
+            )
+            embed.set_footer(text=f"Sẵn sàng phục vụ | {random_vibe()}")
+            await channel.send(embed=embed)
+        except Exception as e:
+            print(f"Lỗi gửi thông báo ready: {e}"
+            
 @bot.event
 async def on_ready():
     try:
@@ -352,6 +397,9 @@ async def on_ready():
     except Exception as e:
         print(f"Lỗi sync: {e}")
     print(f"GenA-bot Ready! 🔥")
+    
+    # Bắt đầu cooldown update
+    asyncio.create_task(start_update_cooldown(bot))
 
 # === COMMANDS ===
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
@@ -774,7 +822,7 @@ Style: GenZ, xưng mày-tao,dùng emoji (🥀, 📚, 😭, 💀, ✨,...), khôn
             description=f"*{memory_text}*",
             color=0xffb6c1  # màu hồng pastel nhẹ
         )
-        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | dành cho 2k11")
+        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Event command \n Command dành cho mấy đứa sắp chuyển trường")
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
         
         await interaction.followup.send(embed=embed)
@@ -884,6 +932,12 @@ async def on_message(message):
     content_lower = message.content.lower()
     is_keyword_trigger = any(keyword in content_lower for keyword in trigger_keywords)
 
+    # CHECK UPDATE COOLDOWN
+    global BOT_UPDATED
+    if BOT_UPDATED and not is_dm:
+        # Nếu bot đang trong cooldown, ignore hết (trừ DM)
+        return
+    
     if not (is_mentioned or is_dm or is_reply_to_bot or is_keyword_trigger):
         return
 
