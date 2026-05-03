@@ -384,7 +384,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v20.9.0", inline=True)
+    embed.add_field(name="📜 Version", value="v20.9.2", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -395,7 +395,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v20.9.0 - Fix", value="• Cố gắng sửa AI output lỗi", inline=False)
+    embed.add_field(name="v20.9.2 - Sum", value="• `/sum` command được thêm vào", inline=False)
     embed.add_field(name="v20.8.0 - Model", value="• Thêm tính năng tự chọn model vào quiz, ko cố định 1 model ngáo ngơ nữa.", inline=False)
     embed.add_field(name="v20.7.1 - Bug Fix", value="• Sửa lỗi quiz expire task\n• Tối ưu hóa bộ nhớ\n• Clean code", inline=False)
     embed.set_footer(text="Updated 20/04/2026")
@@ -520,6 +520,66 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
 
     if số_lượng > 1 and memes_sent > 0:
         await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
+        
+@bot.tree.command(name="sum", description="Tóm tắt 20 tin nhắn gần nhất trong kênh")
+async def summarize_chat(interaction: discord.Interaction):
+    await interaction.response.defer()
+    channel = interaction.channel
+
+    # lấy 20 tin nhắn gần nhất
+    messages = []
+    async for msg in channel.history(limit=21):
+        messages.append(msg)
+    
+    # loại bỏ lệnh /sum nếu bị fetch trúng
+    if messages and messages[0].interaction and messages[0].interaction.name == "sum":
+        messages.pop(0)
+    messages = messages[:20]
+
+    if not messages:
+        await interaction.followup.send("K có tin nhắn nào để tóm tắt bro 🥀")
+        return
+
+    # build log chat
+    chat_log_lines = []
+    for msg in reversed(messages):
+        author_name = msg.author.display_name
+        content = msg.content[:200] if msg.content else "[ảnh/file]"
+        chat_log_lines.append(f"{author_name}: {content}")
+
+    chat_log = "\n".join(chat_log_lines)
+
+    # tạo sys prompt riêng cho lệnh sum (dùng chung format)
+    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
+    now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+    
+    sum_prompt = system_instruction.format(
+        user_id=f"{interaction.user.display_name} đang xài lệnh /sum",
+        current_time=now
+    )
+
+    # chuẩn bị message cho AI
+    temp_messages = [
+        {"role": "system", "content": sum_prompt},
+        {"role": "user", "content": f"Tóm tắt 20 tin nhắn gần nhất trong channel đi m. chat log:\n\n{chat_log}"}
+    ]
+
+    try:
+        summary = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
+        summary = summary[:1900] if len(summary) > 1900 else summary
+        
+        # embed cho đẹp
+        embed = discord.Embed(
+            title="📋 Tóm tắt 20 tin nhắn gần nhất",
+            description=summary,
+            color=0x00ff9d
+        )
+        embed.set_footer(text=f"Requested bởi {interaction.user.display_name} | {random_vibe()}")
+        
+        await interaction.followup.send(embed=embed)
+        
+    except Exception as e:
+        await interaction.followup.send(f"Lỗi khi tóm tắt: {str(e)[:100]} 💀")
 # === QUIZ COMMANDS ===
 @bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
 @app_commands.describe(
