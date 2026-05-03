@@ -1113,8 +1113,8 @@ async def end_quiz_session(channel_id, interaction):
     # Cleanup
     quiz_active.pop(channel_id, None)
     quiz_expire_tasks.pop(channel_id, None)
-\n\n# === RANDOM_MEMORY COMMAND (FULL VERSION) ===\n
-# Event Command
+    # === RANDOM_MEMORY COMMAND (FULL VERSION) ===
+    # Event Command
 @bot.tree.command(name="random_memory", description="Gen 1 kỉ niệm cấp 2 ngẫu nhiên (Event Command)")
 @app_commands.describe(
     cấp="Cấp học muốn hoài niệm (mặc định: random)",
