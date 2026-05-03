@@ -1278,7 +1278,7 @@ async def event_status(interaction: discord.Interaction):
     if EVENT_ACTIVE:
         bonus_lines.append("✅ Quiz x2 điểm (EVENT)")
     else:
-        bonus_lines.append("❌ Quiz x2 điểm (EVENT đã kết thúc)")
+        bonus_lines.append("❌ Quiz x2 điểm (EVENT chưa xảy ra)")
     
     if golden_hour_active:
         bonus_lines.append("🌟 Golden Hour x2 điểm")
