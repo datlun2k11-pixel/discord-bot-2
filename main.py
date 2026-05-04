@@ -393,6 +393,8 @@ async def start_update_cooldown(bot_instance):
     cooldown_start_time = None
 
     # === GIỚI THIỆU KHI BOT SẴN SÀNG ===
+    if channel:
+        try:
             vn_now = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
             if EVENT_ACTIVE:
                 days_left = (EVENT_END_DATE - vn_now).days
@@ -405,7 +407,7 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.1", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.6.0", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
@@ -445,23 +447,24 @@ async def check_event_end():
                 )
                 end_embed.set_footer(text="GenA-bot | Summer 2026")
                 await channel.send(embed=end_embed)
+
 async def golden_hour_scheduler():
     """Mỗi 1 tiếng, 40% tỉ lệ kích hoạt x2 điểm quiz trong 1 tiếng"""
     global golden_hour_active, golden_hour_end, golden_hour_task
-    
+
     while True:
         await asyncio.sleep(3600)  # đợi 1 tiếng
-        
+
         if random.random() < 0.4:  # 40%
             golden_hour_active = True
             golden_hour_end = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')) + datetime.timedelta(hours=1)
-            
+
             # Auto tắt sau 1 tiếng
             async def end_golden_hour():
                 await asyncio.sleep(3600)
                 global golden_hour_active
                 golden_hour_active = False
-            
+
             if golden_hour_task:
                 golden_hour_task.cancel()
             golden_hour_task = asyncio.create_task(end_golden_hour())
@@ -478,7 +481,6 @@ async def on_ready():
     asyncio.create_task(start_update_cooldown(bot))
     asyncio.create_task(check_event_end())
     asyncio.create_task(golden_hour_scheduler())
-
 # === COMMANDS ===
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
 @app_commands.choices(chon_model=MODEL_CHOICES)
