@@ -1,4 +1,4 @@
-# AI coded - 60% Kimi AI. 30% Deepeeek. 10% Gemini
+# AI coded - 60% Kimi AI. 30% Deepeeek. 10% Gemini.
 import discord
 import os
 import asyncio
