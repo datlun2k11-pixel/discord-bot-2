@@ -392,68 +392,41 @@ async def start_update_cooldown(bot_instance):
     BOT_UPDATED = False
     cooldown_start_time = None
 
-    # === ☀️ SUMMER EVENT ANNOUNCEMENT ===
-    if channel:
-        try:
-            event_embed = discord.Embed(
-                title="☀️ SUMMER EVENT ĐÃ BẮT ĐẦU",
-                description="Hè rồi m ơi, bot cũng phải chill theo vibe mùa hè chứ 🥀\nEvent chạy đến hết tháng 6, tranh thủ quẩy đi",
-                color=0xFF6B35,
-                timestamp=discord.utils.utcnow()
-            )
-            event_embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/☀️.png")
-
-            event_embed.add_field(
-                name="🆕 COMMANDS MỚI",
-                value=(
-                    "• `/random_memory` — Gen kỉ niệm cấp 2 ngẫu nhiên\n"
-                    "  ├ Có mood, style, độ dài tùy chỉnh\n"
-                    "  ├ Dành cho mấy đứa 2k11 sắp lên cấp 3 💔\n"
-                    "  └ Color embed theo tâm trạng luôn\n"
-                    "• `/quiz` — Upgrade full feature\n"
-                    "  ├ Chơi 1-5 câu liên tiếp\n"
-                    "  ├ 3 chế độ: Normal / Speedrun / Team\n"
-                    "  ├ Tự chọn model hoặc dùng current model\n"
-                    "  └ Bảng điểm session riêng biệt\n"
-                    "• `/summon` — Gọi bạn vào chơi quiz team ⚔️\n"
-                    "  ├ 3 chế độ: Team vs Bot, Duel 1v1, Coop\n"
-                    "  ├ 30s để accept, nếu ko sẽ bị roast\n"
-                    "  └ Tự động tính điểm cá nhân & team\n"
-                    "• `/event_lb` — Bảng xếp hạng Summer Event\n"
-                    "• `/event_status` — Xem tình trạng event"
-                ),
-                inline=False
-            )
-
-            event_embed.add_field(
-                name="🎮 THAM GIA",
-                value=(
-                    "Chỉ cần chat bình thường thôi m\n"
-                    "Dùng `/random_memory` để hoài niệm cấp 2\n"
-                    "Dùng `/quiz` để đua điểm với đám bạn\n"
-                    "Tag bot là bot rep, đơn giản vậy thôi ✌🏿\n"
-                    "Cái này được viết bởi AI"
-                ),
-                inline=False
-            )
-
-            event_embed.set_footer(
-                text=f"Summer Event 2026 | GenA-bot v21.8.0 | {random_vibe()}",
-                icon_url=bot_instance.user.display_avatar.url if bot_instance.user.display_avatar else None
-            )
-
-            await channel.send(embed=event_embed)
+    # === GIỚI THIỆU KHI BOT SẴN SÀNG ===
+            vn_now = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
+            if EVENT_ACTIVE:
+                days_left = (EVENT_END_DATE - vn_now).days
+                event_status_text = f"☀️ Đang diễn ra, còn **{days_left}** ngày"
+            else:
+                event_status_text = "⏸️ Đã kết thúc"
 
             ready_embed = discord.Embed(
-                title="✅ Bot đã sẵn sàng",
-                description="Ok xong rồi, bot đã ổn định, quẩy tiếp đê m 🥀✌🏿",
+                title="✅ GENABOT ĐÃ SẴN SÀNG",
+                description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
+            )
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.1", inline=True)
+            ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
+            ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
+            ready_embed.add_field(
+                name="🆕 Lệnh mới",
+                value=(
+                    "`/summon` - Gọi bạn đấu quiz (Duel/Team)\n"
+                    "`/event_lb` - Bảng xếp hạng event\n"
+                    "`/event_status` - Xem trạng thái & bonus"
+                ),
+                inline=False
+            )
+            ready_embed.add_field(
+                name="🌟 Golden Hour (ẩn)",
+                value="Mỗi giờ có 40% tự kích hoạt x2 điểm quiz\nGõ `/event_status` để check nha",
+                inline=False
             )
             ready_embed.set_footer(text=f"Sẵn sàng phục vụ | {random_vibe()}")
             await channel.send(embed=ready_embed)
 
         except Exception as e:
-            print(f"Lỗi gửi thông báo event: {e}")
+            print(f"Lỗi gửi thông báo sẵn sàng: {e}")
 
 async def check_event_end():
     """Background task kiểm tra event hết hạn"""
@@ -537,7 +510,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.8.0 (event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.1 (event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -548,6 +521,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v21.9.1 - Bug fix", value="• Bugs fixing", inline=False)
     embed.add_field(name="v21.8.0 - Event", value="• 40% tỉ lệ nhân Golden Hour nhằm tránh lạm pháp điểm\n• Bugs fixing", inline=False)
     embed.add_field(name="v21.6.0 - Summon", value="• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history", inline=False)
     embed.add_field(name="v21.5.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix\n• More coming soon :)", inline=False)
@@ -840,10 +814,7 @@ async def quiz(
     multiplier = 1
     bonus_texts = []
 
-    if EVENT_ACTIVE:
-        multiplier *= 2
-        bonus_texts.append("x2 EVENT")
-
+    # Bỏ EVENT_ACTIVE nhân điểm, chỉ giữ Golden Hour
     if golden_hour_active:
         multiplier *= 2
         bonus_texts.append("x2 GOLDEN HOUR")
@@ -1245,7 +1216,7 @@ async def event_leaderboard(interaction: discord.Interaction):
     embed.set_footer(text=f"Summer Event 2026 | {random_vibe()}")
     await interaction.followup.send(embed=embed)
 
-@bot.tree.command(name="event_status", description="Xem tình trạng Summer Event ☀️ (Event Command ☀️)")
+@bot.tree.command(name="event_status", description="Xem tình trạng Summer Event ☀️")
 async def event_status(interaction: discord.Interaction):
     await interaction.response.defer()
 
@@ -1263,47 +1234,41 @@ async def event_status(interaction: discord.Interaction):
         "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0
     })
 
-    embed = discord.Embed(
-        title="☀️ SUMMER EVENT STATUS",
-        color=0xFF6B35
-    )
+    embed = discord.Embed(title="☀️ SUMMER EVENT STATUS", color=0xFF6B35)
 
     embed.add_field(
         name="⏱️ Thời gian còn lại",
         value=f"{days_left} ngày {hours_left} giờ",
         inline=True
     )
-    # Tạo text bonus động
-    bonus_lines = []
-    if EVENT_ACTIVE:
-        bonus_lines.append("✅ Quiz x2 điểm (EVENT)")
-    else:
-        bonus_lines.append("❌ Quiz x2 điểm (EVENT chưa xảy ra)")
-    
+
+    # Event bonus (không còn auto x2 quiz, chỉ hiện golden hour nếu có)
+    bonus_lines = [
+        "✅ 15% kỉ niệm đặc biệt",
+        "✅ Giờ vàng easter egg",
+        "✅ Summon Duel/Team"
+    ]
     if golden_hour_active:
-        bonus_lines.append("🌟 Golden Hour x2 điểm")
-    
-    bonus_lines.append("✅ 15% kỉ niệm đặc biệt")
-    bonus_lines.append("✅ Giờ vàng easter egg")
-    bonus_lines.append("✅ Summon Duel/Team")
-    
+        bonus_lines.insert(0, "🌟 Golden Hour x2 điểm (đang active)")
+
     embed.add_field(
         name="🎁 Event Bonus",
         value="\n".join(bonus_lines),
         inline=True
     )
-    # ⬇️ THÊM GOLDEN HOUR STATUS Ở ĐÂY ⬇️
-    golden_status = "🟡 ĐANG ACTIVE" if golden_hour_active else "⚫ Hiện ko có"
+
+    # Golden hour status riêng
+    golden_status = "🟡 ĐANG ACTIVE" if golden_hour_active else "⚫ Hiện không có"
     golden_text = golden_status
     if golden_hour_active and golden_hour_end:
         remaining_seconds = int((golden_hour_end - vn_now).total_seconds())
         if remaining_seconds > 0:
             remaining_min = remaining_seconds // 60
             golden_text += f" (còn {remaining_min} phút)"
-    
+
     embed.add_field(
         name="🌟 Golden Hour",
-        value=f"{golden_text}\nX2 điểm quiz khi active (ẩn)",
+        value=f"{golden_text}\nX2 điểm quiz (tỉ lệ 40% mỗi giờ)",
         inline=True
     )
 
@@ -1595,7 +1560,7 @@ async def start_summon_quiz(channel_id, summon_data, message):
         "start_time": datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')),
         "model_used": CURRENT_MODEL,
         "difficulty": "trung bình",
-        "points_per_q": 5 if EVENT_ACTIVE else 2.5,
+        "points_per_q": 5 if golden_hour_active else 2.5,
         "time_per_q": 45,
         "topic": "random",
         "answered_users": set(),
@@ -1659,7 +1624,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                 "options": q_lines[1:] if len(q_lines) > 1 else [],
                 "answer": correct,
                 "explanation": expl,
-                "points": 5 if EVENT_ACTIVE else 2.5,
+                "points": 5 if golden_hour_active else 2.5,
                 "ans_map": ans_map,
                 "answered": False
             }
