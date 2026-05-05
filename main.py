@@ -712,8 +712,8 @@ async def gena_setting(interaction: discord.Interaction, thay_đổi: app_comman
 
     await interaction.response.defer(ephemeral=True)
     global system_instruction, BOT_UPDATED, cooldown_start_time, CHAT_DISABLED
-
-    choice = thay_đổi.value
+    global golden_hour_active, golden_hour_end, golden_hour_task, EVENT_ACTIVE
+    global QUIZ_DEFAULT_MODEL, CURRENT_MODEL, quiz_scores
 
     if choice == "sysprompt":
         if not giá_trị or len(giá_trị) < 20:
