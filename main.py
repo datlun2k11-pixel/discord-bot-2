@@ -410,14 +410,14 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.1-summer", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.5-summer", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
                 name="🆕 Lệnh mới",
                 value=(
                     "`/summon` - Gọi bạn đấu quiz\n"
-                    "`/daily_bonus` - Nhận điểm hàng ngày\n"
+                    "`/summer_gacha` - Gacha vật phẩm hàng ngày\n"
                     "`/summer_quote` - Quote mùa hè\n"
                     "`/summer_fact` - Fact thú vị\n"
                     "`/summer_predict` - Dự đoán hè\n"
@@ -1416,7 +1416,7 @@ async def summer_gacha(interaction: discord.Interaction):
     )
     embed.add_field(name="⭐ Độ hiếm", value=f"{rarity_emoji[roll]} **{rarity_text[roll]}**", inline=True)
     embed.add_field(name="🎁 Điểm thưởng", value=f"`+{pts} điểm`", inline=True)
-    embed.set_footer(text=f"Hẹn mai gacha tiếp | Dùng /event_status để xem tích luỹ")
+    embed.set_footer(text=f"20 lượt gacha mỗi ngày | Dùng /event_status để xem tích luỹ")
 
     await interaction.followup.send(embed=embed)
 
