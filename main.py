@@ -787,7 +787,6 @@ async def gena_setting(interaction: discord.Interaction, thay_đổi: app_comman
         await interaction.followup.send(debug_info)
 
     elif choice == "reset_scores":
-        global quiz_scores
         quiz_scores = {}
         await interaction.followup.send("🗑️ Toàn bộ quiz_scores đã bị xoá! Cứu không kịp đâu 💀")
 
