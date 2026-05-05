@@ -90,7 +90,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng
 - Không được thinking, không được reasoning, không output <thinking>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
 
 [COMMANDS]
-M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /random_memory (tạo kỉ niệm mùa hè), /sum (tóm tắt 20 tin nhắn gần nhất)"""
+M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /sum (tóm tắt 20 tin nhắn gần nhất), /summon, /event_lb, /event_status, /daily_bonus, /summer_quote, /summer_fact, /summer_predict"""
 
 # === GLOBALS ===
 EVENT_ACTIVE = True
@@ -125,6 +125,9 @@ event_stats = {}
 golden_hour_active = False
 golden_hour_end = None
 golden_hour_task = None
+
+# Daily bonus tracker
+daily_claim_tracker = {}
 
 app = Flask(__name__)
 
@@ -407,15 +410,19 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.6.0", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.1-summer", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
                 name="🆕 Lệnh mới",
                 value=(
-                    "`/summon` - Gọi bạn đấu quiz (Duel/Team)\n"
-                    "`/event_lb` - Bảng xếp hạng event\n"
-                    "`/event_status` - Xem trạng thái & bonus"
+                    "`/summon` - Gọi bạn đấu quiz\n"
+                    "`/daily_bonus` - Nhận điểm hàng ngày\n"
+                    "`/summer_quote` - Quote mùa hè\n"
+                    "`/summer_fact` - Fact thú vị\n"
+                    "`/summer_predict` - Dự đoán hè\n"
+                    "`/event_lb` - Bảng xếp hạng\n"
+                    "`/event_status` - Trạng thái & bonus"
                 ),
                 inline=False
             )
@@ -481,6 +488,21 @@ async def on_ready():
     asyncio.create_task(start_update_cooldown(bot))
     asyncio.create_task(check_event_end())
     asyncio.create_task(golden_hour_scheduler())
+# ===== THÊM ĐOẠN NÀY =====
+    # Khôi phục điểm quiz từ ENV
+    quiz_backup_raw = os.getenv("QUIZ_BACKUP")
+    if quiz_backup_raw:
+        try:
+            quiz_backup = json.loads(quiz_backup_raw)
+            for user_id, channels in quiz_backup.items():
+                for channel_id, score in channels.items():
+                    if channel_id not in quiz_scores:
+                        quiz_scores[channel_id] = {}
+                    quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + score
+            print(f"Đã khôi phục điểm quiz từ ENV: {quiz_backup}")
+        except Exception as e:
+            print(f"Lỗi parse QUIZ_BACKUP: {e}")
+# ===== HẾT ĐOẠN THÊM =====
 # === COMMANDS ===
 @bot.tree.command(name="model", description="Đổi model AI xịn hơn")
 @app_commands.choices(chon_model=MODEL_CHOICES)
@@ -512,7 +534,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.1 (event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.1 (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -523,10 +545,9 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-    embed.add_field(name="v21.9.1 - Bug fix", value="• Bugs fixing", inline=False)
-    embed.add_field(name="v21.8.0 - Event", value="• 40% tỉ lệ nhân Golden Hour nhằm tránh lạm pháp điểm\n• Bugs fixing", inline=False)
+    embed.add_field(name="v21.9.1 - Summer Boost", value="• Thêm /daily_bonus, /summer_quote, /summer_fact, /summer_predict\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory (đã lỗi thời)", inline=False)
     embed.add_field(name="v21.6.0 - Summon", value="• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history", inline=False)
-    embed.add_field(name="v21.5.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix\n• More coming soon :)", inline=False)
+    embed.add_field(name="v21.5.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix", inline=False)
     embed.add_field(name="v20.9.2 - Sum", value="• `/sum` command được thêm vào", inline=False)
     embed.add_field(name="v20.8.0 - Model", value="• Thêm tính năng tự chọn model vào quiz", inline=False)
     embed.set_footer(text="Updated 03/05/2026")
@@ -737,12 +758,11 @@ async def quiz_score(interaction: discord.Interaction):
     embed.set_footer(text="reset mỗi lần update bot🥀")
     await interaction.response.send_message(embed=embed)
 
-# === QUIZ COMMANDS ===
+# === QUIZ COMMANDS (MODIFIED: GPT-OSS-120B only, hide info until done) ===
 @bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
 @app_commands.describe(
     chủ_đề="Chủ đề câu hỏi (mặc định: random)",
     độ_khó="Mức độ",
-    model_quiz="Model tạo câu hỏi (mặc định: dùng current model)",
     số_câu="Số câu hỏi muốn chơi liên tiếp (1-5, mặc định 1)",
     thời_gian="Thời gian trả lời mỗi câu (giây, 10-120, mặc định 60)",
     chế_độ="Chế độ chơi"
@@ -756,15 +776,6 @@ async def quiz_score(interaction: discord.Interaction):
         app_commands.Choice(name="Extreme 💀 (+8)", value="extreme"),
         app_commands.Choice(name="Impossible 💀💀 (+15)", value="impossible")
     ],
-    model_quiz=[
-        app_commands.Choice(name="🔄 Dùng Current Model", value="current"),
-        app_commands.Choice(name="GPT-OSS-120B (GROQ - Nhanh)", value="GPT-OSS-120B"),
-        app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
-        app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
-        app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
-        app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
-        app_commands.Choice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
-    ],
     chế_độ=[
         app_commands.Choice(name="🎯 Thường - Trả lời A/B/C/D", value="normal"),
         app_commands.Choice(name="⚡ Speedrun - Trả lời nhanh nhất", value="speedrun"),
@@ -775,7 +786,6 @@ async def quiz(
     interaction: discord.Interaction,
     chủ_đề: str = "random",
     độ_khó: app_commands.Choice[str] = None,
-    model_quiz: app_commands.Choice[str] = None,
     số_câu: int = 1,
     thời_gian: int = 60,
     chế_độ: app_commands.Choice[str] = None
@@ -784,10 +794,8 @@ async def quiz(
     channel_id = str(interaction.channel_id)
     do_kho_val = độ_khó.value if độ_khó else "trung bình"
 
-    if model_quiz and model_quiz.value != "current":
-        quiz_model = model_quiz.value
-    else:
-        quiz_model = CURRENT_MODEL
+    # LUÔN DÙNG GPT-OSS-120B CHO QUIZ
+    quiz_model = "GPT-OSS-120B"
 
     if quiz_model not in MODELS_CONFIG:
         return await interaction.followup.send(f"Model `{quiz_model}` ko tồn tại bro 💀")
@@ -816,7 +824,6 @@ async def quiz(
     multiplier = 1
     bonus_texts = []
 
-    # Bỏ EVENT_ACTIVE nhân điểm, chỉ giữ Golden Hour
     if golden_hour_active:
         multiplier *= 2
         bonus_texts.append("x2 GOLDEN HOUR")
@@ -938,19 +945,13 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             }
             quiz_active[channel_id]["questions"].append(q_data)
 
-            desc_lines = q_lines.copy()
+            # Embed only title + question, NO info fields
             embed = discord.Embed(
                 title=f"{diff_emoji} QUIZ - Câu {q_num}/{số_câu} | {chủ_đề.upper()}",
-                description="\n".join(desc_lines),
+                description="\n".join(q_lines),
                 color=diff_color
             )
-            embed.add_field(name="⏱️ Thời gian", value=f"`{thời_gian}s`", inline=True)
-            embed.add_field(name="🏆 Điểm", value=f"`+{pts}đ`", inline=True)
-            embed.add_field(name="🎮 Chế độ", value=f"`{chế_độ_val}`", inline=True)
-            embed.add_field(name="🧠 Model", value=f"`{quiz_model}`", inline=True)
-            embed.add_field(name="📊 Độ khó", value=f"`{do_kho_val}`", inline=True)
-            embed.add_field(name="👤 Người hỏi", value=interaction.user.display_name, inline=True)
-            embed.set_footer(text=f"Trả lời A/B/C/D để chơi | Độ khó: {do_kho_val} (+{pts}đ{event_bonus_text}) | Model: {quiz_model} | {random_vibe()}")
+            embed.set_footer(text="Trả lời A/B/C/D để chơi")
 
             if số_câu == 1:
                 await interaction.followup.send(embed=embed)
@@ -973,7 +974,8 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                         if current_q_idx < len(q_list) and not q_list[current_q_idx].get("answered", False):
                             q_data = q_list[current_q_idx]
                             await interaction.channel.send(
-                                f"⏰ Hết giờ câu {qn}! Đáp án đúng là **{q_data['answer']}**. {q_data.get('explanation', '')} 🥀"
+                                f"⏰ Hết giờ câu {qn}! Đáp án đúng là **{q_data['answer']}**. {q_data.get('explanation', '')} 🥀\n"
+                                f"({do_kho_val} | {quiz_model} | {pts}đ{event_bonus_text} | {thời_gian}s)"
                             )
                             q_data["answered"] = True
                             quiz_active[cid]["completed_questions"] = quiz_active[cid].get("completed_questions", 0) + 1
@@ -1020,7 +1022,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
 
 
 async def end_quiz_session(channel_id, interaction_or_message):
-    """Kết thúc session quiz và hiển thị kết quả"""
+    """Kết thúc session quiz và hiển thị kết quả (có thông tin đầy đủ)"""
     if channel_id not in quiz_active:
         return
 
@@ -1033,7 +1035,9 @@ async def end_quiz_session(channel_id, interaction_or_message):
 
     embed = discord.Embed(
         title="🏁 KẾT THÚC QUIZ",
-        description=f"Đã hoàn thành **{session.get('completed_questions', len(session['questions']))}** câu hỏi!",
+        description=f"Đã hoàn thành **{session.get('completed_questions', len(session['questions']))}** câu hỏi!\n"
+                    f"🧠 Model: `{session.get('model_used')}` | 🎯 Độ khó: `{session.get('difficulty')}` | ⏱️ {session.get('time_per_q')}s/câu\n"
+                    f"🏆 Điểm mỗi câu: `{session.get('points_per_q')}đ`",
         color=0x00FF9D
     )
 
@@ -1057,10 +1061,6 @@ async def end_quiz_session(channel_id, interaction_or_message):
     if ans_summary:
         embed.add_field(name="📋 Đáp án", value="\n".join(ans_summary), inline=False)
 
-    embed.add_field(name="🧠 Model", value=f"`{session.get('model_used', 'unknown')}`", inline=True)
-    embed.add_field(name="🎯 Độ khó", value=f"`{session.get('difficulty', 'unknown')}`", inline=True)
-    embed.add_field(name="⏱️ Thời gian/câu", value=f"`{session.get('time_per_q', 60)}s`", inline=True)
-
     requester_name = user.display_name if user else "Unknown"
     embed.set_footer(text=f"Quiz by {requester_name} | {random_vibe()}")
 
@@ -1077,7 +1077,7 @@ async def end_quiz_session(channel_id, interaction_or_message):
     if EVENT_ACTIVE:
         for uid, pts in scores.items():
             if uid not in event_stats:
-                event_stats[uid] = {"memories_generated": 0, "special_memories": 0, "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0}
+                event_stats[uid] = {"memories_generated": 0, "special_memories": 0, "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0, "summer_points": 0}
             event_stats[uid]["quiz_points_event"] = event_stats[uid].get("quiz_points_event", 0) + pts
 
     quiz_active.pop(channel_id, None)
@@ -1184,7 +1184,8 @@ async def event_leaderboard(interaction: discord.Interaction):
             stats.get("special_memories", 0) * 10 +
             stats.get("duels_won", 0) * 5 -
             stats.get("duels_lost", 0) * 2 +
-            stats.get("memories_generated", 0)
+            stats.get("memories_generated", 0) +
+            stats.get("summer_points", 0)  # mới: điểm từ daily bonus
         )
         leaderboard.append((user_id, total_score, stats))
 
@@ -1207,7 +1208,8 @@ async def event_leaderboard(interaction: discord.Interaction):
             f"📝 Kỉ niệm: {stats.get('memories_generated', 0)} "
             f"| ⭐ Đặc biệt: {stats.get('special_memories', 0)}\n"
             f"🧠 Quiz pts: {stats.get('quiz_points_event', 0)} "
-            f"| ⚔️ Duel W/L: {stats.get('duels_won', 0)}/{stats.get('duels_lost', 0)}"
+            f"| ⚔️ Duel W/L: {stats.get('duels_won', 0)}/{stats.get('duels_lost', 0)}\n"
+            f"🎁 Summer pts: {stats.get('summer_points', 0)}"
         )
         embed.add_field(
             name=f"{medal} #{i} {name} — {score} pts",
@@ -1233,7 +1235,7 @@ async def event_status(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     stats = event_stats.get(user_id, {
         "memories_generated": 0, "special_memories": 0,
-        "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0
+        "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0, "summer_points": 0
     })
 
     embed = discord.Embed(title="☀️ SUMMER EVENT STATUS", color=0xFF6B35)
@@ -1244,14 +1246,14 @@ async def event_status(interaction: discord.Interaction):
         inline=True
     )
 
-    # Event bonus (không còn auto x2 quiz, chỉ hiện golden hour nếu có)
     bonus_lines = [
         "✅ 15% kỉ niệm đặc biệt",
         "✅ Giờ vàng easter egg",
-        "✅ Summon Duel/Team"
+        "✅ Summon Duel/Team",
+        "✅ Daily Bonus"
     ]
     if golden_hour_active:
-        bonus_lines.insert(0, "🌟 Golden Hour x2 điểm (đang active)")
+        bonus_lines.insert(0, "🌟 Golden Hour x2 điểm quiz (đang active)")
 
     embed.add_field(
         name="🎁 Event Bonus",
@@ -1259,7 +1261,6 @@ async def event_status(interaction: discord.Interaction):
         inline=True
     )
 
-    # Golden hour status riêng
     golden_status = "🟡 ĐANG ACTIVE" if golden_hour_active else "⚫ Hiện không có"
     golden_text = golden_status
     if golden_hour_active and golden_hour_end:
@@ -1280,7 +1281,8 @@ async def event_status(interaction: discord.Interaction):
             f"📝 Kỉ niệm đã gen: {stats['memories_generated']}\n"
             f"⭐ Kỉ niệm đặc biệt: {stats['special_memories']}\n"
             f"🧠 Quiz points: {stats['quiz_points_event']}\n"
-            f"⚔️ Duel W/L: {stats['duels_won']}/{stats['duels_lost']}"
+            f"⚔️ Duel W/L: {stats['duels_won']}/{stats['duels_lost']}\n"
+            f"🎁 Summer points: {stats['summer_points']}"
         ),
         inline=False
     )
@@ -1288,256 +1290,90 @@ async def event_status(interaction: discord.Interaction):
     embed.set_footer(text=f"GenA-bot Event | {random_vibe()}")
     await interaction.followup.send(embed=embed)
 
-# === RANDOM_MEMORY COMMAND ===
-@bot.tree.command(name="random_memory", description="Gen 1 kỉ niệm cấp 2 ngẫu nhiên (Event Command ☀️)")
-@app_commands.describe(
-    cấp="Cấp học muốn hoài niệm (mặc định: random)",
-    mood="Tâm trạng kỉ niệm",
-    độ_dài="Độ dài kỉ niệm",
-    style="Phong cách viết",
-    include_friend="Có nhắc đến 'thằng bạn' ko",
-    include_crush="Có nhắc đến crush ko 💔"
-)
-@app_commands.choices(
-    cấp=[
-        app_commands.Choice(name="🎲 Random", value="random"),
-        app_commands.Choice(name="Lớp 6 - Tân binh", value="lớp 6"),
-        app_commands.Choice(name="Lớp 7 - Quen dần", value="lớp 7"),
-        app_commands.Choice(name="Lớp 8 - Bắt đầu cháy", value="lớp 8"),
-        app_commands.Choice(name="Lớp 9 - Năm cuối cấp", value="lớp 9")
-    ],
-    mood=[
-        app_commands.Choice(name="🎲 Random", value="random"),
-        app_commands.Choice(name="😂 Hài hước", value="hài hước"),
-        app_commands.Choice(name="😭 Xúc động", value="xúc động"),
-        app_commands.Choice(name="😳 Xấu hổ", value="xấu hổ"),
-        app_commands.Choice(name="😤 Giận dữ", value="giận dữ"),
-        app_commands.Choice(name="🥰 Ngọt ngào", value="ngọt ngào"),
-        app_commands.Choice(name="💀 Hối hận", value="hối hận"),
-        app_commands.Choice(name="🔥 Bốc đồng", value="bốc đồng")
-    ],
-    độ_dài=[
-        app_commands.Choice(name="🎲 Random", value="random"),
-        app_commands.Choice(name="Siêu ngắn (1-2 dòng)", value="ngắn"),
-        app_commands.Choice(name="Vừa (3-5 dòng)", value="vừa"),
-        app_commands.Choice(name="Dài (6-10 dòng)", value="dài"),
-        app_commands.Choice(name="Siêu dài (cả đoạn văn)", value="siêu dài")
-    ],
-    style=[
-        app_commands.Choice(name="🎲 Random", value="random"),
-        app_commands.Choice(name="GenZ - Teen code", value="genz"),
-        app_commands.Choice(name="Nhật ký - Deep", value="nhật ký"),
-        app_commands.Choice(name="Kể chuyện - Hài", value="kể chuyện"),
-        app_commands.Choice(name="Thơ - Văn vẻ", value="thơ"),
-        app_commands.Choice(name="Chat log", value="chat log")
-    ],
-    include_friend=[
-        app_commands.Choice(name="🎲 Random", value="random"),
-        app_commands.Choice(name="Có - Thằng bạn thân", value="yes"),
-        app_commands.Choice(name="Không", value="no")
-    ],
-    include_crush=[
-        app_commands.Choice(name="🎲 Random", value="random"),
-        app_commands.Choice(name="Có - Crush 💔", value="yes"),
-        app_commands.Choice(name="Không", value="no")
+# === MỚI: SUMMER EVENT EXTRA COMMANDS ===
+
+SUMMER_QUOTES = [
+    "Mùa hè đến rồi, đừng ngồi trong phòng nữa, ra ngoài đốt cháy năng lượng đi 🔥",
+    "Đi biển đi mày ơi, sóng vỗ rì rào, nắng vàng rực rỡ 🏖️",
+    "Hè là để chill, đừng biến thành đứa chỉ biết cày game suốt ngày 💀",
+    "Ly sinh tố dưa hấu, cái quạt mo, và đám bạn thân - hè đúng chuẩn 🍉",
+    "Đừng để mùa hè trôi qua vô nghĩa, ít nhất cũng phải có vài tấm ảnh sống ảo chứ 📸",
+    "Hè này nhất định phải đi phượt, không thì ít nhất cũng đạp xe quanh xóm 🚲",
+    "Nắng hè làm da đen đi nhưng tâm hồn thì sáng hơn bao giờ hết ✨",
+    "Mùa hè năm nay, crush mày có nhớ mày không? Hay vẫn lạnh lùng như kem? 🍦💔",
+    "Lên kèo đi cắm trại, đốt lửa trại, đàn hát nghêu ngao, quên hết buồn phiền 🎸",
+    "Hè 2026, hứa với bản thân sẽ tạo thật nhiều kỉ niệm đáng nhớ 🥀"
+]
+
+SUMMER_FACTS = [
+    "Trái đất nhận được năng lượng mặt trời nhiều nhất vào mùa hè ở bán cầu bắc ☀️",
+    "Ngày hạ chí (21/6) là ngày dài nhất trong năm, tha hồ vui chơi",
+    "Dưa hấu có tới 92% là nước, giúp giải nhiệt cực tốt 🍉",
+    "Ve sầu chỉ sống dưới lòng đất 2-17 năm rồi mới chui lên hót vào mùa hè 🎶",
+    "Mùa hè là mùa của các lễ hội âm nhạc lớn nhất hành tinh 🔥",
+    "Cầu vồng thường xuất hiện sau cơn mưa mùa hè, đẹp mê ly 🌈",
+    "Kem ốc quế được phát minh vào năm 1904 tại Hội chợ Thế giới St. Louis 🍦",
+    "Nhiệt độ cao nhất từng ghi nhận trên Trái Đất là 56.7°C tại Thung lũng Chết, California 💀",
+    "Mùa hè là mùa sinh sản của rùa biển, chúng lên bờ đẻ trứng vào ban đêm 🐢",
+    "Bóng đá và bóng chuyền bãi biển là hai môn thể thao đặc trưng của mùa hè ⚽"
+]
+
+@bot.tree.command(name="summer_quote", description="Nhận một câu quote mùa hè ngẫu nhiên ☀️")
+async def summer_quote(interaction: discord.Interaction):
+    await interaction.response.send_message(random.choice(SUMMER_QUOTES) + f" {random_vibe().split()[-1]}")
+
+@bot.tree.command(name="summer_fact", description="Nhận một fact thú vị về mùa hè 🧊")
+async def summer_fact(interaction: discord.Interaction):
+    await interaction.response.send_message(random.choice(SUMMER_FACTS) + f" {random_vibe().split()[-1]}")
+
+@bot.tree.command(name="summer_predict", description="Dự đoán mùa hè của mày sẽ ra sao 🔮")
+async def summer_predict(interaction: discord.Interaction):
+    predictions = [
+        "Mày sẽ có một chuyến đi biển siêu đáng nhớ, nhưng nhớ bôi kem chống nắng kẻo cháy đen 💀",
+        "Crush sẽ bất ngờ rep story mày, tín hiệu vũ trụ đấy ✨",
+        "Một người bạn cũ bỗng xuất hiện, ôn lại kỉ niệm cấp 2 đầy xúc động",
+        "Mày sẽ trượt patin té sấp mặt nhưng mà vui, kiểu kỉ niệm khó quên 🛼",
+        "Đêm hè sẽ có một trận mưa sao băng, đừng quên ước nhé 🌠",
+        "Mày lỡ tay làm đổ nước vào laptop, nhưng không sao, hè mà 🙃",
+        "Sẽ có một bữa tiệc bất ngờ dành cho mày, chuẩn bị tinh thần đi 🎉",
+        "Điểm danh một kỉ niệm 'dở khóc dở cười' với đám bạn thân 🔥",
+        "Mày sẽ vô tình nhặt được thứ gì đó rất ý nghĩa trên bờ biển 🐚",
+        "Hè này mày sẽ tìm thấy đam mê mới, có khi lại thành tài lẻ luôn 🎨"
     ]
-)
-async def random_memory(
-    interaction: discord.Interaction,
-    cấp: app_commands.Choice[str] = None,
-    mood: app_commands.Choice[str] = None,
-    độ_dài: app_commands.Choice[str] = None,
-    style: app_commands.Choice[str] = None,
-    include_friend: app_commands.Choice[str] = None,
-    include_crush: app_commands.Choice[str] = None
-):
+    await interaction.response.send_message(random.choice(predictions) + f" {random_vibe().split()[-1]}")
+
+@bot.tree.command(name="daily_bonus", description="Nhận điểm thưởng mỗi ngày (Event ☀️)")
+async def daily_bonus(interaction: discord.Interaction):
     await interaction.response.defer()
+    if not EVENT_ACTIVE:
+        await interaction.followup.send("Event chưa diễn ra hoặc đã kết thúc rồi m 🥀")
+        return
 
-    tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
-    now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
+    user_id = str(interaction.user.id)
+    today_str = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).strftime("%Y-%m-%d")
 
-    cấp_val = cấp.value if cấp else "random"
-    mood_val = mood.value if mood else "random"
-    độ_dài_val = độ_dài.value if độ_dài else "random"
-    style_val = style.value if style else "random"
-    friend_val = include_friend.value if include_friend else "random"
-    crush_val = include_crush.value if include_crush else "random"
+    if daily_claim_tracker.get(user_id) == today_str:
+        await interaction.followup.send("Hôm nay m đã nhận rồi, quay lại ngày mai đi bro 💤")
+        return
 
-    cấp_options = ["lớp 6", "lớp 7", "lớp 8", "lớp 9"]
-    if cấp_val == "random":
-        cấp_val = random.choice(cấp_options)
-
-    mood_options = ["hài hước", "xúc động", "xấu hổ", "giận dữ", "ngọt ngào", "hối hận", "bốc đồng"]
-    if mood_val == "random":
-        mood_val = random.choice(mood_options)
-
-    độ_dài_options = ["ngắn", "vừa", "dài", "siêu dài"]
-    if độ_dài_val == "random":
-        độ_dài_val = random.choice(độ_dài_options)
-
-    style_options = ["genz", "nhật ký", "kể chuyện", "thơ", "chat log"]
-    if style_val == "random":
-        style_val = random.choice(style_options)
-
-    friend_options = ["yes", "no"]
-    if friend_val == "random":
-        friend_val = random.choice(friend_options)
-
-    crush_options = ["yes", "no"]
-    if crush_val == "random":
-        crush_val = random.choice(crush_options)
-
-    locations = [
-        "lớp học", "căn tin", "sân trường", "góc cầu thang", "nhà xe",
-        "phòng thí nghiệm", "thư viện", "phòng y tế", "sân thể chất",
-        "nhà vệ sinh", "hành lang", "phòng máy tính", "phòng nhạc",
-        "sân bóng rổ", "gốc cây bàng", "bãi cỏ sau trường"
-    ]
-    location = random.choice(locations)
-
-    times = ["sáng sớm", "giữa buổi", "giờ ra chơi", "giờ tan học", "buổi chiều muộn", "hôm thứ 6"]
-    time_of_day = random.choice(times)
-
-    seasons = ["học kì 1", "học kì 2", "đầu năm học", "cuối năm học", "giữa năm"]
-    season = random.choice(seasons)
-
-    length_guide = {
-        "ngắn": "1-2 dòng, súc tích",
-        "vừa": "3-5 dòng",
-        "dài": "6-10 dòng, chi tiết",
-        "siêu dài": "cả đoạn văn dài, tỉ mỉ, nhiều chi tiết"
-    }
-
-    style_guide = {
-        "genz": "GenZ, xưng mày-tao, teen code (nx, th, cx, vs, k, j,...), emoji nhiều, nhây lầy",
-        "nhật ký": "Viết như nhật ký cá nhân, tâm trạng, deep, có ngày tháng",
-        "kể chuyện": "Kể như đang kể chuyện cho bạn nghe, hài hước, có đoạn hội thoại",
-        "thơ": "Viết theo thể thơ tự do, có vần điệu nhẹ, văn vẻ",
-        "chat log": "Format như đoạn chat messenger/zalo, có timestamp, nhiều người chat"
-    }
-
-    friend_text = "CÓ nhắc đến 'thằng bạn thân'" if friend_val == "yes" else "KHÔNG nhắc đến bạn thân"
-    crush_text = "CÓ nhắc đến crush/đứa m thích" if crush_val == "yes" else "KHÔNG nhắc đến crush"
-
-    memory_prompt = f"""Mày là GenA-bot, thằng bạn thân báo thủ. 
-Tạo 1 kỉ niệm cấp 2 NGẪU NHIÊN theo yêu cầu sau:
-
-[THÔNG TIN]
-- Cấp: {cấp_val}
-- Học kì: {season}
-- Địa điểm: {location}
-- Thời điểm: {time_of_day}
-- Tâm trạng: {mood_val}
-- Độ dài: {length_guide[độ_dài_val]}
-- Phong cách: {style_guide[style_val]}
-- {friend_text}
-- {crush_text}
-
-[QUY TẮC]
-- KHÔNG được bịa tên người cụ thể. Chỉ dùng: "mày", "tao", "thằng bạn", "con nhỏ", "đứa ngồi bàn trên", "thằng lớp phó", "con bạn thân", "đám con trai/gái", "thầy/cô", "bảo vệ trường"
-- Không dùng dấu "!" dưới mọi hình thức
-- Không output thinking, reasoning, tags
-- Phải nghe THẬT như đếm, nhưng hài hước
-- Thêm emoji phù hợp (🥀, 📚, 😭, 💀, ✨, 💔, 🔥,...)
-- Trả lời thẳng, không intro, không outro"""
-
-    sum_prompt = system_instruction.format(
-        user_id=f"{interaction.user.display_name}",
-        current_time=now
-    )
-
-    temp_messages = [
-        {"role": "system", "content": sum_prompt},
-        {"role": "user", "content": memory_prompt}
-    ]
-
-    try:
-        memory_text = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
-        memory_text = memory_text[:2000] if len(memory_text) > 2000 else memory_text
-
-        is_special = EVENT_ACTIVE and random.random() < 0.15
-
-        if is_special:
-            memory_text = "⭐ **KỈ NIỆM ĐẶC BIỆT** ⭐\n\n" + memory_text
-            mood_color = 0xFFD700
-            special_footer = " | ⭐ Kỉ niệm đặc biệt!"
-        else:
-            special_footer = ""
-
-        mood_colors = {
-            "hài hước": 0xFFD700,
-            "xúc động": 0xFF69B4,
-            "xấu hổ": 0xFFA07A,
-            "giận dữ": 0xFF4500,
-            "ngọt ngào": 0xFFB6C1,
-            "hối hận": 0x696969,
-            "bốc đồng": 0xFF1493
+    # Khởi tạo stats nếu chưa có
+    if user_id not in event_stats:
+        event_stats[user_id] = {
+            "memories_generated": 0, "special_memories": 0,
+            "duels_won": 0, "duels_lost": 0,
+            "quiz_points_event": 0, "summer_points": 0
         }
-        mood_color = mood_colors.get(mood_val, 0xFFB6C1)
 
-        mood_emojis = {
-            "hài hước": "😂",
-            "xúc động": "😭",
-            "xấu hổ": "😳",
-            "giận dữ": "😤",
-            "ngọt ngào": "🥰",
-            "hối hận": "💀",
-            "bốc đồng": "🔥"
-        }
-        mood_emoji = mood_emojis.get(mood_val, "📖")
+    bonus = random.randint(1, 3)
+    event_stats[user_id]["summer_points"] = event_stats[user_id].get("summer_points", 0) + bonus
+    daily_claim_tracker[user_id] = today_str
 
-        style_emojis = {
-            "genz": "📱",
-            "nhật ký": "📓",
-            "kể chuyện": "🎤",
-            "thơ": "✍️",
-            "chat log": "💬"
-        }
-        style_emoji = style_emojis.get(style_val, "📖")
+    msg = f"Đã nhận **{bonus} điểm** summer bonus hôm nay! Tích luỹ đi m, cuối event có quà 🔥"
+    if bonus == 3:
+        msg = "Jackpot! M được **3 điểm** bonus, hên thấy mồ 💎 " + msg
+    await interaction.followup.send(msg)
 
-        embed = discord.Embed(
-            title=f"{mood_emoji} Kỉ Niệm Cấp 2",
-            description=f"*{memory_text}*",
-            color=mood_color
-        )
-
-        embed.add_field(name="📚 Cấp", value=f"`{cấp_val}`", inline=True)
-        embed.add_field(name="🎭 Tâm trạng", value=f"`{mood_val}`", inline=True)
-        embed.add_field(name="✍️ Phong cách", value=f"`{style_val}`", inline=True)
-        embed.add_field(name="📍 Địa điểm", value=f"`{location}`", inline=True)
-        embed.add_field(name="⏰ Thời điểm", value=f"`{time_of_day}`", inline=True)
-        embed.add_field(name="📅 Học kì", value=f"`{season}`", inline=True)
-
-        tags = []
-        if friend_val == "yes":
-            tags.append("👥 Có bạn thân")
-        if crush_val == "yes":
-            tags.append("💔 Có crush")
-        if tags:
-            embed.add_field(name="🏷️ Tags", value=" | ".join(tags), inline=False)
-
-        embed.set_footer(text=f"Kỉ niệm cho {interaction.user.display_name} | Model: {CURRENT_MODEL} | Event command{special_footer}\nDành cho mấy đứa sắp chuyển trường 🥀")
-
-        try:
-            embed.set_thumbnail(url=interaction.user.display_avatar.url)
-        except:
-            pass
-
-        await interaction.followup.send(embed=embed)
-
-        # Cập nhật event stats
-        if EVENT_ACTIVE:
-            uid = str(interaction.user.id)
-            if uid not in event_stats:
-                event_stats[uid] = {"memories_generated": 0, "special_memories": 0, "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0}
-            event_stats[uid]["memories_generated"] = event_stats[uid].get("memories_generated", 0) + 1
-            if is_special:
-                event_stats[uid]["special_memories"] = event_stats[uid].get("special_memories", 0) + 1
-
-    except Exception as e:
-        await interaction.followup.send(f"Đầu óc t đang lag, thử lại sau đi m 🥀\n||{str(e)[:50]}||")
-
-# === SUMMON QUIZ HANDLERS ===
+# === SUMMON QUIZ HANDLERS (dùng GPT-OSS-120B) ===
 async def start_summon_quiz(channel_id, summon_data, message):
     """Tạo quiz đặc biệt cho summon"""
     mode = summon_data.get("mode", "team_vs_bot")
@@ -1549,7 +1385,7 @@ async def start_summon_quiz(channel_id, summon_data, message):
         if uid not in event_stats:
             event_stats[uid] = {
                 "memories_generated": 0, "special_memories": 0,
-                "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0
+                "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0, "summer_points": 0
             }
 
     quiz_active[channel_id] = {
@@ -1560,7 +1396,7 @@ async def start_summon_quiz(channel_id, summon_data, message):
         "scores": {},
         "mode": mode,
         "start_time": datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')),
-        "model_used": CURRENT_MODEL,
+        "model_used": "GPT-OSS-120B",    # LUÔN DÙNG GPT-OSS-120B
         "difficulty": "trung bình",
         "points_per_q": 5 if golden_hour_active else 2.5,
         "time_per_q": 45,
@@ -1598,7 +1434,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                 {"role": "user", "content": quiz_prompt}
             ]
 
-            raw = await get_model_response(temp_msgs, MODELS_CONFIG[CURRENT_MODEL])
+            raw = await get_model_response(temp_msgs, MODELS_CONFIG["GPT-OSS-120B"])
             raw = remove_thinking(raw)
 
             lines = raw.strip().splitlines()
@@ -1638,11 +1474,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                 description="\n".join(q_lines),
                 color=0xFF6B35
             )
-            embed.add_field(name="⏱️ Thời gian", value="`45s`", inline=True)
-            embed.add_field(name="🏆 Điểm", value="`+5đ`", inline=True)
-            embed.add_field(name="👥 Người chơi", value=f"<@{inviter_id}> vs <@{invited_id}>", inline=True)
-            embed.set_footer(text=f"Trả lời A/B/C/D để chơi | {random_vibe()}")
-
+            embed.set_footer(text="Trả lời A/B/C/D để chơi")
             await message.channel.send(embed=embed)
 
             answered = False
@@ -1686,7 +1518,7 @@ async def end_summon_quiz(channel_id, message):
 
     embed = discord.Embed(
         title=f"🏁 KẾT THÚC SUMMON QUIZ | {mode.upper()}",
-        description="Kết quả đây m ơi 🔥",
+        description=f"Kết quả đây m ơi 🔥\n🧠 Model: `GPT-OSS-120B` | 🎯 Trung bình | ⏱️ 45s/câu",
         color=0x00FF9D
     )
 
@@ -1858,7 +1690,8 @@ async def on_message(message):
                             if quiz_session["completed_questions"] >= quiz_session.get("total_q", 1):
                                 await end_quiz_session(channel_id, message)
                             else:
-                                await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {current_q.get('explanation', '')} 🎉")
+                                await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {current_q.get('explanation', '')} 🎉\n"
+                                                    f"({quiz_session.get('difficulty')} | GPT-OSS-120B | {quiz_session.get('time_per_q')}s)")
                         else:
                             current_q["answered"] = True
                             quiz_session["completed_questions"] = quiz_session.get("completed_questions", 0) + 1
@@ -1866,7 +1699,8 @@ async def on_message(message):
                             if quiz_session["completed_questions"] >= quiz_session.get("total_q", 1):
                                 await end_quiz_session(channel_id, message)
                             else:
-                                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{current_q['answer']}**. {current_q.get('explanation', '')} 🥀")
+                                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{current_q['answer']}**. {current_q.get('explanation', '')} 🥀\n"
+                                                    f"({quiz_session.get('difficulty')} | GPT-OSS-120B | {quiz_session.get('time_per_q')}s)")
 
                         return
 
