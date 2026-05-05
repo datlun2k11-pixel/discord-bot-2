@@ -550,7 +550,7 @@ async def update_log(interaction: discord.Interaction):
     versions = [
         {
             "name": "v21.9.8b - Bug fix",
-            "desc": "• sửa 1 số lỗi logic gây hỏng code"
+            "desc": "• sửa 1 số lỗi logic gây hỏng code\n• sửa 1 số logic của lệnh `/setting`"
         },
         {
             "name": "v21.9.8 - Setting",
@@ -679,8 +679,8 @@ async def update_log(interaction: discord.Interaction):
     view = UpdateLogView()
     await interaction.response.send_message(embed=get_embed(0), view=view)
 
-# === GENA SETTING (OWNER ONLY) ===
-@bot.tree.command(name="setting", description="⚙️ Cài đặt GenA-bot (Owner only)")
+# === SETTING COMMAND (OWNER ONLY) ===
+@bot.tree.command(name="setting", description="⚙️ Cài đặt toàn bộ GenA-bot (Owner only)")
 @app_commands.describe(
     thay_đổi="Chọn thứ muốn chỉnh",
     giá_trị="Giá trị mới (nếu cần)"
@@ -692,28 +692,33 @@ async def update_log(interaction: discord.Interaction):
         app_commands.Choice(name="🔊 Bật chat bot", value="chat_on"),
         app_commands.Choice(name="📋 Xem System Prompt hiện tại", value="view_sysprompt"),
         app_commands.Choice(name="🔄 Reset System Prompt về mặc định", value="reset_sysprompt"),
+        app_commands.Choice(name="📊 Xem trạng thái bot", value="status"),
         app_commands.Choice(name="⚡ Force Golden Hour (bật/tắt)", value="force_golden"),
         app_commands.Choice(name="☀️ Tắt/Mở Summer Event", value="toggle_event"),
         app_commands.Choice(name="🧠 Đổi model mặc định cho quiz", value="set_quiz_model"),
-        app_commands.Choice(name="🔧 Xem toàn bộ global vars", value="debug_vars"),
-        app_commands.Choice(name="🗑️ Xoá toàn bộ quiz_scores", value="reset_scores"),
-        app_commands.Choice(name="📢 Gửi announce ra kênh update", value="announce"),
-        app_commands.Choice(name="📊 Xem trạng thái bot", value="status"),
+        app_commands.Choice(name="🎭 Set trạng thái bot", value="set_status"),
         app_commands.Choice(name="💾 Backup điểm quiz hiện tại", value="backup_quiz"),
-        app_commands.Choice(name="📥 Khôi phục điểm từ backup", value="restore_quiz")
+        app_commands.Choice(name="📥 Khôi phục điểm từ backup", value="restore_quiz"),
+        app_commands.Choice(name="🗑️ Xoá toàn bộ quiz_scores", value="reset_scores"),
+        app_commands.Choice(name="🔧 Xem toàn bộ global vars", value="debug_vars"),
+        app_commands.Choice(name="📢 Gửi announce ra kênh update", value="announce"),
     ]
 )
-async def gena_setting(interaction: discord.Interaction, thay_đổi: app_commands.Choice[str], giá_trị: str = None):
+async def setting(interaction: discord.Interaction, thay_đổi: app_commands.Choice[str], giá_trị: str = None):
     # ===== OWNER CHECK =====
     OWNER_ID = 1155129530122510376  # ← ĐỔI THÀNH ID CỦA BẠN
     if interaction.user.id != OWNER_ID:
-        await interaction.response.send_message("Chỉ owner (<@1155129530122510376>) mới có quyền access lệnh này",ephemeral=True)
+        await interaction.response.send_message("Mày đéo phải Đạt Lùn, cút ra 💀", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
+
+    # Global declarations (dồn hết lên đây)
     global system_instruction, BOT_UPDATED, cooldown_start_time, CHAT_DISABLED
     global golden_hour_active, golden_hour_end, golden_hour_task, EVENT_ACTIVE
     global QUIZ_DEFAULT_MODEL, CURRENT_MODEL, quiz_scores
+
+    choice = thay_đổi.value
 
     if choice == "sysprompt":
         if not giá_trị or len(giá_trị) < 20:
@@ -733,122 +738,6 @@ async def gena_setting(interaction: discord.Interaction, thay_đổi: app_comman
     elif choice == "view_sysprompt":
         await interaction.followup.send(f"📋 System Prompt hiện tại:\n```\n{system_instruction[:1900]}\n```")
 
-    elif choice == "force_golden":
-        global golden_hour_active, golden_hour_end, golden_hour_task
-        if golden_hour_active:
-            golden_hour_active = False
-            if golden_hour_task:
-                golden_hour_task.cancel()
-            await interaction.followup.send("🌟 Golden Hour đã TẮT thủ công!")
-        else:
-            golden_hour_active = True
-            golden_hour_end = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')) + datetime.timedelta(hours=1)
-            async def force_end_gh():
-                await asyncio.sleep(3600)
-                global golden_hour_active
-                golden_hour_active = False
-            if golden_hour_task:
-                golden_hour_task.cancel()
-            golden_hour_task = asyncio.create_task(force_end_gh())
-            await interaction.followup.send("🌟 Golden Hour đã BẬT thủ công trong 1 giờ! x2 điểm quiz 🔥")
-
-    elif choice == "toggle_event":
-        global EVENT_ACTIVE
-        EVENT_ACTIVE = not EVENT_ACTIVE
-        status = "BẬT ☀️" if EVENT_ACTIVE else "TẮT 💤"
-        await interaction.followup.send(f"☀️ Summer Event đã chuyển sang: **{status}**")
-
-    elif choice == "set_quiz_model":
-        if not giá_trị:
-            await interaction.followup.send("Thiếu tên model bro. Dùng 1 trong: `GPT-OSS-120B`, `Groq-Llama-Scout`, `Google-Gemma4-26B`, `Google-Gemma4-31B`, `Google-Gemma3-27B`, `Google-Gemma3-12B`")
-            return
-        if giá_trị not in MODELS_CONFIG:
-            await interaction.followup.send(f"Model `{giá_trị}` ko tồn tại! Chọn: {', '.join(MODELS_CONFIG.keys())}")
-            return
-        global QUIZ_DEFAULT_MODEL
-        QUIZ_DEFAULT_MODEL = giá_trị
-        await interaction.followup.send(f"🧠 Model quiz mặc định giờ là: **{giá_trị}**")
-
-    elif choice == "debug_vars":
-        debug_info = (
-            f"**GLOBALS:**\n"
-            f"• CHAT_DISABLED: `{CHAT_DISABLED}`\n"
-            f"• BOT_UPDATED: `{BOT_UPDATED}`\n"
-            f"• EVENT_ACTIVE: `{EVENT_ACTIVE}`\n"
-            f"• GOLDEN_HOUR: `{golden_hour_active}`\n"
-            f"• CURRENT_MODEL: `{CURRENT_MODEL}`\n"
-            f"• QUIZ_DEFAULT: `{QUIZ_DEFAULT_MODEL}`\n"
-            f"• chat_history keys: `{len(chat_history)}`\n"
-            f"• quiz_scores keys: `{len(quiz_scores)}`\n"
-            f"• event_stats users: `{len(event_stats)}`\n"
-            f"• summon_active: `{len(summon_active)}`\n"
-            f"• quiz_active: `{len(quiz_active)}`"
-        )
-        await interaction.followup.send(debug_info)
-
-    elif choice == "reset_scores":
-        quiz_scores = {}
-        await interaction.followup.send("🗑️ Toàn bộ quiz_scores đã bị xoá! Cứu không kịp đâu 💀")
-
-    elif choice == "announce":
-        if not giá_trị:
-            await interaction.followup.send("Thiếu nội dung announce bro 🥀")
-            return
-        channel = bot.get_channel(UPDATE_CHANNEL_ID)
-        if channel:
-            embed = discord.Embed(
-                title="📢 THÔNG BÁO TỪ OWNER",
-                description=giá_trị,
-                color=0xFF6B35
-            )
-            embed.set_footer(text=f"Gửi bởi {interaction.user.display_name} | {random_vibe()}")
-            await channel.send(embed=embed)
-            await interaction.followup.send("✅ Đã gửi announce ra kênh update!")
-        else:
-            await interaction.followup.send("❌ Không tìm thấy kênh update!")
-        # Dùng QUIZ_DEFAULT_MODEL thay vì hardcode
-    elif choice == "backup_quiz":
-        # Format 1 dòng cho ENV Koyeb
-        env_format = {}
-        for channel_id, users in quiz_scores.items():
-            for user_id, score in users.items():
-                if user_id not in env_format:
-                    env_format[user_id] = {}
-                env_format[user_id][channel_id] = score
-        
-        backup_1line = json.dumps(env_format, separators=(',', ':'), ensure_ascii=False)
-        
-        if len(backup_1line) > 1900:
-            await interaction.followup.send(
-                "💾 Backup quá dài, lưu vào file đây:",
-                file=discord.File(io.BytesIO(backup_1line.encode()), filename="quiz_backup_1line.txt")
-            )
-        else:
-            await interaction.followup.send(
-                "💾 **Backup Quiz Points (1 dòng cho Koyeb):**\n"
-                "Copy nguyên dòng dưới vào ENV `QUIZ_BACKUP`:\n"
-                f"``{backup_1line}``\n"
-                f"📊 Đã backup **{sum(len(c) for c in env_format.values())}** bản ghi!"
-            )
-
-    elif choice == "restore_quiz":
-        quiz_backup_raw = os.getenv("QUIZ_BACKUP")
-        if not quiz_backup_raw:
-            await interaction.followup.send("❌ ENV `QUIZ_BACKUP` trống, chưa có backup nào!")
-            return
-        try:
-            quiz_backup = json.loads(quiz_backup_raw)
-            restored_count = 0
-            for user_id, channels in quiz_backup.items():
-                for channel_id, score in channels.items():
-                    if channel_id not in quiz_scores:
-                        quiz_scores[channel_id] = {}
-                    quiz_scores[channel_id][user_id] = score
-                    restored_count += 1
-            await interaction.followup.send(f"✅ Đã khôi phục {restored_count} bản ghi điểm từ ENV!")
-        except Exception as e:
-            await interaction.followup.send(f"❌ Lỗi khôi phục: {e}")
-            
     elif choice == "reset_sysprompt":
         system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
 
@@ -875,14 +764,175 @@ M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ 
         await interaction.followup.send("🔄 Đã reset System Prompt về mặc định!")
 
     elif choice == "status":
-        chat_status = "🔊 ĐANG BẬT" if not BOT_UPDATED else "🔇 ĐANG TẮT"
+        chat_status = "🔊 ĐANG BẬT" if not CHAT_DISABLED else "🔇 ĐANG TẮT (bởi owner)"
         embed = discord.Embed(title="⚙️ GENA-BOT SETTINGS", color=0x00ff9d)
         embed.add_field(name="💬 Chat", value=chat_status, inline=True)
         embed.add_field(name="🧠 Model", value=CURRENT_MODEL, inline=True)
         embed.add_field(name="☀️ Event", value="Đang chạy" if EVENT_ACTIVE else "Đã tắt", inline=True)
         embed.add_field(name="🌟 Golden Hour", value="Active" if golden_hour_active else "Inactive", inline=True)
         embed.add_field(name="📝 SysPrompt dài", value=f"{len(system_instruction)} ký tự", inline=True)
+        embed.add_field(name="🎯 Quiz Model", value=QUIZ_DEFAULT_MODEL, inline=True)
         await interaction.followup.send(embed=embed)
+
+    elif choice == "force_golden":
+        if golden_hour_active:
+            golden_hour_active = False
+            if golden_hour_task:
+                golden_hour_task.cancel()
+            await interaction.followup.send("🌟 Golden Hour đã TẮT thủ công!")
+        else:
+            golden_hour_active = True
+            golden_hour_end = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')) + datetime.timedelta(hours=1)
+            async def force_end_gh():
+                await asyncio.sleep(3600)
+                global golden_hour_active
+                golden_hour_active = False
+            if golden_hour_task:
+                golden_hour_task.cancel()
+            golden_hour_task = asyncio.create_task(force_end_gh())
+            await interaction.followup.send("🌟 Golden Hour đã BẬT thủ công trong 1 giờ! x2 điểm quiz 🔥")
+
+    elif choice == "toggle_event":
+        EVENT_ACTIVE = not EVENT_ACTIVE
+        status = "BẬT ☀️" if EVENT_ACTIVE else "TẮT 💤"
+        await interaction.followup.send(f"☀️ Summer Event đã chuyển sang: **{status}**")
+
+    elif choice == "set_quiz_model":
+        if not giá_trị:
+            await interaction.followup.send("Thiếu tên model bro. Dùng 1 trong: `GPT-OSS-120B`, `Groq-Llama-Scout`, `Google-Gemma4-26B`, `Google-Gemma4-31B`, `Google-Gemma3-27B`, `Google-Gemma3-12B`")
+            return
+        if giá_trị not in MODELS_CONFIG:
+            await interaction.followup.send(f"Model `{giá_trị}` ko tồn tại! Chọn: {', '.join(MODELS_CONFIG.keys())}")
+            return
+        QUIZ_DEFAULT_MODEL = giá_trị
+        await interaction.followup.send(f"🧠 Model quiz mặc định giờ là: **{giá_trị}**")
+
+    elif choice == "set_status":
+        if not giá_trị:
+            await interaction.followup.send(
+                "Dùng format:\n"
+                "`playing, Nội dung` - Đang chơi...\n"
+                "`watching, Nội dung` - Đang xem...\n"
+                "`listening, Nội dung` - Đang nghe...\n"
+                "`competing, Nội dung` - Đang thi đấu...\n"
+                "Ví dụ: `watching, tụi mày chat`\n\n"
+                "Muốn đổi trạng thái online thì thêm `,online` cuối:\n"
+                "`watching, tụi mày chat, dnd` (dnd = đỏ, online = xanh, idle = vàng, invisible = xám)"
+            )
+            return
+
+        parts = giá_trị.split(",")
+        if len(parts) < 2:
+            await interaction.followup.send("Thiếu nội dung! Format: `kiểu, nội dung[, status]`")
+            return
+
+        activity_type = parts[0].strip().lower()
+        activity_text = parts[1].strip()
+        status_str = parts[2].strip().lower() if len(parts) > 2 else "dnd"
+
+        type_map = {
+            "playing": discord.ActivityType.playing,
+            "watching": discord.ActivityType.watching,
+            "listening": discord.ActivityType.listening,
+            "competing": discord.ActivityType.competing,
+            "streaming": discord.ActivityType.streaming,
+        }
+        status_map = {
+            "online": discord.Status.online,
+            "dnd": discord.Status.dnd,
+            "idle": discord.Status.idle,
+            "invisible": discord.Status.invisible,
+        }
+
+        if activity_type not in type_map:
+            await interaction.followup.send(f"Sai kiểu activity! Chọn: {', '.join(type_map.keys())}")
+            return
+        if status_str not in status_map:
+            await interaction.followup.send(f"Sai trạng thái! Chọn: {', '.join(status_map.keys())}")
+            return
+
+        activity = discord.Activity(type=type_map[activity_type], name=activity_text)
+        await bot.change_presence(activity=activity, status=status_map[status_str])
+        await interaction.followup.send(f"✅ Đã set: **{activity_type} {activity_text}** | Trạng thái: **{status_str}**")
+
+    elif choice == "backup_quiz":
+        env_format = {}
+        for channel_id, users in quiz_scores.items():
+            for user_id, score in users.items():
+                if user_id not in env_format:
+                    env_format[user_id] = {}
+                env_format[user_id][channel_id] = score
+
+        backup_1line = json.dumps(env_format, separators=(',', ':'), ensure_ascii=False)
+
+        if len(backup_1line) > 1900:
+            await interaction.followup.send(
+                "💾 Backup quá dài, lưu vào file đây:",
+                file=discord.File(io.BytesIO(backup_1line.encode()), filename="quiz_backup_1line.txt")
+            )
+        else:
+            await interaction.followup.send(
+                "💾 **Backup Quiz Points (1 dòng cho Koyeb):**\n"
+                "Copy nguyên dòng dưới vào ENV `QUIZ_BACKUP`:\n"
+                f"```json\n{backup_1line}\n```\n"
+                f"📊 Đã backup **{sum(len(c) for c in env_format.values())}** bản ghi!"
+            )
+
+    elif choice == "restore_quiz":
+        quiz_backup_raw = os.getenv("QUIZ_BACKUP")
+        if not quiz_backup_raw:
+            await interaction.followup.send("❌ ENV `QUIZ_BACKUP` trống, chưa có backup nào!")
+            return
+        try:
+            quiz_backup = json.loads(quiz_backup_raw)
+            restored_count = 0
+            for user_id, channels in quiz_backup.items():
+                for channel_id, score in channels.items():
+                    if channel_id not in quiz_scores:
+                        quiz_scores[channel_id] = {}
+                    quiz_scores[channel_id][user_id] = score
+                    restored_count += 1
+            await interaction.followup.send(f"✅ Đã khôi phục {restored_count} bản ghi điểm từ ENV!")
+        except Exception as e:
+            await interaction.followup.send(f"❌ Lỗi khôi phục: {e}")
+
+    elif choice == "reset_scores":
+        quiz_scores = {}
+        await interaction.followup.send("🗑️ Toàn bộ quiz_scores đã bị xoá! Cứu không kịp đâu 💀")
+
+    elif choice == "debug_vars":
+        debug_info = (
+            f"**GLOBALS:**\n"
+            f"• CHAT_DISABLED: `{CHAT_DISABLED}`\n"
+            f"• BOT_UPDATED: `{BOT_UPDATED}`\n"
+            f"• EVENT_ACTIVE: `{EVENT_ACTIVE}`\n"
+            f"• GOLDEN_HOUR: `{golden_hour_active}`\n"
+            f"• CURRENT_MODEL: `{CURRENT_MODEL}`\n"
+            f"• QUIZ_DEFAULT: `{QUIZ_DEFAULT_MODEL}`\n"
+            f"• chat_history keys: `{len(chat_history)}`\n"
+            f"• quiz_scores keys: `{len(quiz_scores)}`\n"
+            f"• event_stats users: `{len(event_stats)}`\n"
+            f"• summon_active: `{len(summon_active)}`\n"
+            f"• quiz_active: `{len(quiz_active)}`"
+        )
+        await interaction.followup.send(debug_info)
+
+    elif choice == "announce":
+        if not giá_trị:
+            await interaction.followup.send("Thiếu nội dung announce bro 🥀")
+            return
+        channel = bot.get_channel(UPDATE_CHANNEL_ID)
+        if channel:
+            embed = discord.Embed(
+                title="📢 THÔNG BÁO TỪ OWNER",
+                description=giá_trị,
+                color=0xFF6B35
+            )
+            embed.set_footer(text=f"Gửi bởi {interaction.user.display_name} | {random_vibe()}")
+            await channel.send(embed=embed)
+            await interaction.followup.send("✅ Đã gửi announce ra kênh update!")
+        else:
+            await interaction.followup.send("❌ Không tìm thấy kênh update!")
 
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
