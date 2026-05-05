@@ -534,7 +534,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.6 (summer event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.7 (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -544,17 +544,106 @@ async def bot_info(interaction: discord.Interaction):
 
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
-    embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
-  # embed.add_field(name="[version] - [title]", value="[content]", inline=False)
-    embed.add_field(name="v21.9.6 - Rarity & Items", value="• Thêm `Transcendent` rarity.\n• Thêm Items mới vào gacha\n• Thêm cơ chế tích điểm theo ngày mới", inline=False)
-    embed.add_field(name="v21.9.5 - Changing", value="• Thêm /summer_gacha (thay daily_bonus)\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory", inline=False)
-    embed.add_field(name="v21.9.1 - Summer Boost", value="• Thêm /daily_bonus, /summer_quote, /summer_fact, /summer_predict\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory (đã lỗi thời)", inline=False)
-    embed.add_field(name="v21.6.0 - Summon", value="• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history", inline=False)
-    embed.add_field(name="v21.5.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix", inline=False)
-    embed.add_field(name="v20.9.2 - Sum", value="• `/sum` command được thêm vào", inline=False)
-    embed.add_field(name="v20.8.0 - Model", value="• Thêm tính năng tự chọn model vào quiz", inline=False)
-    embed.set_footer(text="Updated 05/05/2026")
-    await interaction.response.send_message(embed=embed)
+    # Danh sách các phiên bản (mỗi page 3 version)
+    versions = [
+        {
+            "name": "v21.9.7 - Logs update",
+            "desc": "• Thêm tính năng phân trang cho `/update_log`\n• ko có gì khác"
+        },
+        {
+            "name": "v21.9.6 - Rarity & Items",
+            "desc": "• Thêm `Transcendent` rarity.\n• Thêm Items mới vào gacha\n• Thêm cơ chế tích điểm theo ngày mới"
+        },
+        {
+            "name": "v21.9.5 - Changing",
+            "desc": "• Thêm /summer_gacha (thay daily_bonus)\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory"
+        },
+        {
+            "name": "v21.9.1 - Summer Boost",
+            "desc": "• Thêm /daily_bonus, /summer_quote, /summer_fact, /summer_predict\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory (đã lỗi thời)"
+        },
+        {
+            "name": "v21.6.0 - Summon",
+            "desc": "• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history"
+        },
+        {
+            "name": "v21.5.0 - Event",
+            "desc": "• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix"
+        },
+        {
+            "name": "v20.9.2 - Sum",
+            "desc": "• `/sum` command được thêm vào"
+        },
+        {
+            "name": "v20.8.0 - Model",
+            "desc": "• Thêm tính năng tự chọn model vào quiz"
+        },
+    ]
+
+    # Chia page (3 version/page)
+    pages = [versions[i:i+3] for i in range(0, len(versions), 3)]
+    total_pages = len(pages)
+    current_page = 0
+
+    def get_embed(page_idx):
+        embed = discord.Embed(
+            title="GenA-bot Update Log 🗒️",
+            description=f"*Trang {page_idx + 1}/{total_pages}*",
+            color=0x9b59b6
+        )
+        for v in pages[page_idx]:
+            embed.add_field(name=v["name"], value=v["desc"], inline=False)
+        embed.set_footer(text="Updated 05/05/2026")
+        return embed
+
+    # View với nút điều hướng
+    class UpdateLogView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=120)
+            self.current_page = 0
+            self.update_buttons()
+
+        def update_buttons(self):
+            # Xoá hết nút cũ
+            self.clear_items()
+            # Nút Previous
+            prev_btn = discord.ui.Button(
+                emoji="◀️", 
+                style=discord.ButtonStyle.primary if self.current_page > 0 else discord.ButtonStyle.secondary,
+                disabled=(self.current_page == 0)
+            )
+            prev_btn.callback = self.prev_callback
+            self.add_item(prev_btn)
+            # Nút chỉ số trang (không bấm được)
+            page_btn = discord.ui.Button(
+                label=f"{self.current_page + 1}/{total_pages}",
+                style=discord.ButtonStyle.secondary,
+                disabled=True
+            )
+            self.add_item(page_btn)
+            # Nút Next
+            next_btn = discord.ui.Button(
+                emoji="▶️",
+                style=discord.ButtonStyle.primary if self.current_page < total_pages - 1 else discord.ButtonStyle.secondary,
+                disabled=(self.current_page >= total_pages - 1)
+            )
+            next_btn.callback = self.next_callback
+            self.add_item(next_btn)
+
+        async def prev_callback(self, btn_interaction: discord.Interaction):
+            if self.current_page > 0:
+                self.current_page -= 1
+                self.update_buttons()
+                await btn_interaction.response.edit_message(embed=get_embed(self.current_page), view=self)
+
+        async def next_callback(self, btn_interaction: discord.Interaction):
+            if self.current_page < total_pages - 1:
+                self.current_page += 1
+                self.update_buttons()
+                await btn_interaction.response.edit_message(embed=get_embed(self.current_page), view=self)
+
+    view = UpdateLogView()
+    await interaction.response.send_message(embed=get_embed(0), view=view)
 
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
