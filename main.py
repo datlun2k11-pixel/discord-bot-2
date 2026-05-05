@@ -90,7 +90,7 @@ system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng
 - Không được thinking, không được reasoning, không output <thinking>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
 
 [COMMANDS]
-M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /sum (tóm tắt 20 tin nhắn gần nhất), /summon, /event_lb, /event_status, /daily_bonus, /summer_quote, /summer_fact, /summer_predict"""
+M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /sum (tóm tắt 20 tin nhắn gần nhất), /summon, /event_lb, /event_status, /summer_gacha, /summer_quote, /summer_fact, /summer_predict"""
 
 # === GLOBALS ===
 EVENT_ACTIVE = True
@@ -534,7 +534,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.1 (summer event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.5 (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -545,6 +545,7 @@ async def bot_info(interaction: discord.Interaction):
 @bot.tree.command(name="update_log", description="Nhật ký update")
 async def update_log(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Update Log 🗒️", color=0x9b59b6)
+    embed.add_field(name="v21.9.5 - Summer Boost", value="• Thêm /summer_gacha (thay daily_bonus)\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory", inline=False)
     embed.add_field(name="v21.9.1 - Summer Boost", value="• Thêm /daily_bonus, /summer_quote, /summer_fact, /summer_predict\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory (đã lỗi thời)", inline=False)
     embed.add_field(name="v21.6.0 - Summon", value="• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history", inline=False)
     embed.add_field(name="v21.5.0 - Event", value="• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix", inline=False)
@@ -1304,7 +1305,23 @@ SUMMER_QUOTES = [
     "Lên kèo đi cắm trại, đốt lửa trại, đàn hát nghêu ngao, quên hết buồn phiền 🎸",
     "Hè 2026, hứa với bản thân sẽ tạo thật nhiều kỉ niệm đáng nhớ 🥀"
 ]
+# ===== GACHA ITEMS =====
+GACHA_ITEMS = {
+    "🍉 Dưa Hấu": {"rarity": "common", "desc": "Giải nhiệt +1, nhưng dễ vỡ"},
+    "🧊 Đá Lạnh": {"rarity": "common", "desc": "Tan nhanh trong nắng hè"},
+    "🕶️ Kính Mát": {"rarity": "common", "desc": "Ngầu lòi, che được mắt thâm"},
+    "🩴 Dép Lào": {"rarity": "common", "desc": "Quốc hồn quốc tuý, bền vcl"},
+    "🌊 Sóng Biển": {"rarity": "rare", "desc": "Mang hơi thở đại dương"},
+    "🎸 Guitar": {"rarity": "rare", "desc": "Đệm hát đốt lửa trại"},
+    "🏄 Ván Lướt": {"rarity": "rare", "desc": "Cưỡi sóng như pro"},
+    "📸 Camera": {"rarity": "rare", "desc": "Bắt khoảnh khắc sống ảo"},
+    "🌠 Sao Băng": {"rarity": "epic", "desc": "Ước gì được nấy (xạo đó)"},
+    "🔥 Pháo Hoa": {"rarity": "epic", "desc": "Thắp sáng bầu trời đêm hè"},
+    "💎 Ngọc Trai": {"rarity": "epic", "desc": "Lặn 100m mới thấy"},
+    "👑 Vương Miện Hè": {"rarity": "legendary", "desc": "Trở thành Vua/Nữ Hoàng mùa hè"},
+}
 
+GACHA_RATES = {"common": 50, "rare": 30, "epic": 15, "legendary": 5}
 SUMMER_FACTS = [
     "Trái đất nhận được năng lượng mặt trời nhiều nhất vào mùa hè ở bán cầu bắc ☀️",
     "Ngày hạ chí (21/6) là ngày dài nhất trong năm, tha hồ vui chơi",
@@ -1342,8 +1359,8 @@ async def summer_predict(interaction: discord.Interaction):
     ]
     await interaction.response.send_message(random.choice(predictions) + f" {random_vibe().split()[-1]}")
 
-@bot.tree.command(name="daily_bonus", description="Nhận điểm thưởng mỗi ngày (Event ☀️)")
-async def daily_bonus(interaction: discord.Interaction):
+@bot.tree.command(name="summer_gacha", description="Gacha item mùa hè - 1 lần/ngày (Event ☀️)")
+async def summer_gacha(interaction: discord.Interaction):
     await interaction.response.defer()
     if not EVENT_ACTIVE:
         await interaction.followup.send("Event chưa diễn ra hoặc đã kết thúc rồi m 🥀")
@@ -1353,8 +1370,23 @@ async def daily_bonus(interaction: discord.Interaction):
     today_str = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).strftime("%Y-%m-%d")
 
     if daily_claim_tracker.get(user_id) == today_str:
-        await interaction.followup.send("Hôm nay m đã nhận rồi, quay lại ngày mai đi bro 💤")
+        await interaction.followup.send("Hôm nay m đã gacha rồi, quay lại ngày mai đi bro 💤")
         return
+
+    # Roll gacha theo tỉ lệ
+    roll = random.choices(
+        list(GACHA_RATES.keys()),
+        weights=list(GACHA_RATES.values()),
+        k=1
+    )[0]
+
+    possible_items = [item for item, data in GACHA_ITEMS.items() if data["rarity"] == roll]
+    item = random.choice(possible_items)
+    item_data = GACHA_ITEMS[item]
+
+    # Điểm thưởng theo rarity
+    bonus_points = {"common": 1, "rare": 3, "epic": 7, "legendary": 15}
+    pts = bonus_points[roll]
 
     # Khởi tạo stats nếu chưa có
     if user_id not in event_stats:
@@ -1364,14 +1396,24 @@ async def daily_bonus(interaction: discord.Interaction):
             "quiz_points_event": 0, "summer_points": 0
         }
 
-    bonus = random.randint(1, 3)
-    event_stats[user_id]["summer_points"] = event_stats[user_id].get("summer_points", 0) + bonus
+    event_stats[user_id]["summer_points"] = event_stats[user_id].get("summer_points", 0) + pts
     daily_claim_tracker[user_id] = today_str
 
-    msg = f"Đã nhận **{bonus} điểm** summer bonus hôm nay! Tích luỹ đi m, cuối event có quà 🔥"
-    if bonus == 3:
-        msg = "Jackpot! M được **3 điểm** bonus, hên thấy mồ 💎 " + msg
-    await interaction.followup.send(msg)
+    rarity_emoji = {"common": "⚪", "rare": "🔵", "epic": "🟣", "legendary": "🟡"}
+    rarity_text = {"common": "CÙI BẮP", "rare": "HIẾM", "epic": "SIÊU HIẾM", "legendary": "HUYỀN THOẠI"}
+
+    embed = discord.Embed(
+        title=f"🎰 SUMMER GACHA",
+        description=f"**{interaction.user.display_name}** đã roll được...\n\n"
+                    f"# {item}\n"
+                    f"*{item_data['desc']}*",
+        color={"common": 0x808080, "rare": 0x3498db, "epic": 0x9b59b6, "legendary": 0xffd700}[roll]
+    )
+    embed.add_field(name="⭐ Độ hiếm", value=f"{rarity_emoji[roll]} **{rarity_text[roll]}**", inline=True)
+    embed.add_field(name="🎁 Điểm thưởng", value=f"`+{pts} điểm`", inline=True)
+    embed.set_footer(text=f"Hẹn mai gacha tiếp | Dùng /event_status để xem tích luỹ")
+
+    await interaction.followup.send(embed=embed)
 
 # === SUMMON QUIZ HANDLERS (dùng GPT-OSS-120B) ===
 async def start_summon_quiz(channel_id, summon_data, message):
