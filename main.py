@@ -1369,8 +1369,10 @@ async def summer_gacha(interaction: discord.Interaction):
     user_id = str(interaction.user.id)
     today_str = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).strftime("%Y-%m-%d")
 
-    if daily_claim_tracker.get(user_id) == today_str:
-        await interaction.followup.send("Hôm nay m đã gacha rồi, quay lại ngày mai đi bro 💤")
+    # Tăng limit lên 20 lần/ngày
+    claim_count = daily_claim_tracker.get(user_id, {}).get(today_str, 0)
+    if claim_count >= 20:
+        await interaction.followup.send("Hôm nay m gacha đủ 20 lần rồi, quay lại ngày mai đi bro 💤")
         return
 
     # Roll gacha theo tỉ lệ
@@ -1397,7 +1399,10 @@ async def summer_gacha(interaction: discord.Interaction):
         }
 
     event_stats[user_id]["summer_points"] = event_stats[user_id].get("summer_points", 0) + pts
-    daily_claim_tracker[user_id] = today_str
+    # Tăng số lần gacha hôm nay
+    if user_id not in daily_claim_tracker:
+        daily_claim_tracker[user_id] = {}
+    daily_claim_tracker[user_id][today_str] = daily_claim_tracker[user_id].get(today_str, 0) + 1
 
     rarity_emoji = {"common": "⚪", "rare": "🔵", "epic": "🟣", "legendary": "🟡"}
     rarity_text = {"common": "CÙI BẮP", "rare": "HIẾM", "epic": "SIÊU HIẾM", "legendary": "HUYỀN THOẠI"}
