@@ -411,7 +411,7 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.73b-summer", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.74-summer", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
@@ -535,7 +535,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.73b (summer event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.74 (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -547,6 +547,10 @@ async def bot_info(interaction: discord.Interaction):
 async def update_log(interaction: discord.Interaction):
     # Danh sách các phiên bản (mỗi page 3 version)
     versions = [
+        {
+            "name": "v21.9.74 - Model Quiz",
+            "desc": "• Thêm lại option `Model_quiz` cho lệnh `/quiz`"
+        },
         {
             "name": "v21.9.73b - Bug fix",
             "desc": "• Sửa 1 lỗi nhỏ"
@@ -594,6 +598,10 @@ async def update_log(interaction: discord.Interaction):
         {
             "name": "v20.8.0 - Model",
             "desc": "• Thêm tính năng tự chọn model vào quiz"
+        },
+        {
+            "name": "older version",
+            "desc": "• Các phiên bản cũ hơn ko có thông tin chi tiết"
         },
     ]
 
@@ -997,6 +1005,7 @@ async def quiz_score(interaction: discord.Interaction):
 @app_commands.describe(
     chủ_đề="Chủ đề câu hỏi (mặc định: random)",
     độ_khó="Mức độ",
+    model_quiz="Model tạo câu hỏi (mặc định: GPT-OSS-120B)",
     số_câu="Số câu hỏi muốn chơi liên tiếp (1-5, mặc định 1)",
     thời_gian="Thời gian trả lời mỗi câu (giây, 10-120, mặc định 60)",
     chế_độ="Chế độ chơi"
@@ -1010,6 +1019,15 @@ async def quiz_score(interaction: discord.Interaction):
         app_commands.Choice(name="Extreme 💀 (+8)", value="extreme"),
         app_commands.Choice(name="Impossible 💀💀 (+15)", value="impossible")
     ],
+    model_quiz=[                                      # ← THÊM CỤC NÀY
+        app_commands.Choice(name="⚡ GPT-OSS-120B (Mặc định)", value="GPT-OSS-120B"),
+        app_commands.Choice(name="🔄 Dùng Current Model", value="current"),
+        app_commands.Choice(name="🦙 Llama 4 Scout (GROQ)", value="Groq-Llama-Scout"),
+        app_commands.Choice(name="💎 Gemma4 26B (Google)", value="Google-Gemma4-26B"),
+        app_commands.Choice(name="💎 Gemma4 31B (Google)", value="Google-Gemma4-31B"),
+        app_commands.Choice(name="🧠 Gemma3 27B (Google)", value="Google-Gemma3-27B"),
+        app_commands.Choice(name="🧠 Gemma3 12B (Google)", value="Google-Gemma3-12B"),
+    ],
     chế_độ=[
         app_commands.Choice(name="🎯 Thường - Trả lời A/B/C/D", value="normal"),
         app_commands.Choice(name="⚡ Speedrun - Trả lời nhanh nhất", value="speedrun"),
@@ -1020,6 +1038,7 @@ async def quiz(
     interaction: discord.Interaction,
     chủ_đề: str = "random",
     độ_khó: app_commands.Choice[str] = None,
+    model_quiz: app_commands.Choice[str] = None,
     số_câu: int = 1,
     thời_gian: int = 60,
     chế_độ: app_commands.Choice[str] = None
@@ -1028,8 +1047,13 @@ async def quiz(
     channel_id = str(interaction.channel_id)
     do_kho_val = độ_khó.value if độ_khó else "trung bình"
 
-    # LUÔN DÙNG GPT-OSS-120B CHO QUIZ
-    quiz_model = "GPT-OSS-120B"
+    # Chọn model cho quiz
+    if model_quiz and model_quiz.value == "current":
+        quiz_model = CURRENT_MODEL
+    elif model_quiz and model_quiz.value in MODELS_CONFIG:
+        quiz_model = model_quiz.value
+    else:
+        quiz_model = "GPT-OSS-120B"  # Mặc định
 
     if quiz_model not in MODELS_CONFIG:
         return await interaction.followup.send(f"Model `{quiz_model}` ko tồn tại bro 💀")
