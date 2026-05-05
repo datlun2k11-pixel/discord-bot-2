@@ -412,7 +412,7 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.74-summer", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.8b-summer", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
@@ -536,7 +536,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.8 (summer event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.8b (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -548,6 +548,10 @@ async def bot_info(interaction: discord.Interaction):
 async def update_log(interaction: discord.Interaction):
     # Danh sách các phiên bản (mỗi page 3 version)
     versions = [
+        {
+            "name": "v21.9.8b - Bug fix",
+            "desc": "• sửa 1 số lỗi logic gây hỏng code"
+        },
         {
             "name": "v21.9.8 - Setting",
             "desc": "• Thêm một số tính năng quyền năng cho owner/mod\n• Bao gồm gửi thông báo, golden hour forcing, set quiz_model,... (im lazy showing)"
@@ -728,7 +732,8 @@ async def gena_setting(interaction: discord.Interaction, thay_đổi: app_comman
 
     elif choice == "view_sysprompt":
         await interaction.followup.send(f"📋 System Prompt hiện tại:\n```\n{system_instruction[:1900]}\n```")
-        elif choice == "force_golden":
+
+    elif choice == "force_golden":
         global golden_hour_active, golden_hour_end, golden_hour_task
         if golden_hour_active:
             golden_hour_active = False
