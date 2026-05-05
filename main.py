@@ -410,7 +410,7 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.6-summer", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.71-summer", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
@@ -534,7 +534,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.7 (summer event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.71 (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -546,6 +546,10 @@ async def bot_info(interaction: discord.Interaction):
 async def update_log(interaction: discord.Interaction):
     # Danh sách các phiên bản (mỗi page 3 version)
     versions = [
+        {
+            "name": "v21.9.71 - Setting",
+            "desc": "• Thêm lệnh `/setting` cho bot\n• Thêm 1 số Items mới vào `/summer_gacha`"
+        },
         {
             "name": "v21.9.7 - Logs update",
             "desc": "• Thêm tính năng phân trang cho `/update_log`\n• ko có gì khác"
@@ -644,6 +648,89 @@ async def update_log(interaction: discord.Interaction):
 
     view = UpdateLogView()
     await interaction.response.send_message(embed=get_embed(0), view=view)
+
+# === GENA SETTING (OWNER ONLY) ===
+@bot.tree.command(name="setting", description="⚙️ Cài đặt GenA-bot (Owner only)")
+@app_commands.describe(
+    thay_đổi="Chọn thứ muốn chỉnh",
+    giá_trị="Giá trị mới (nếu cần)"
+)
+@app_commands.choices(
+    thay_đổi=[
+        app_commands.Choice(name="📝 Sửa System Prompt", value="sysprompt"),
+        app_commands.Choice(name="🔇 Tắt chat bot", value="chat_off"),
+        app_commands.Choice(name="🔊 Bật chat bot", value="chat_on"),
+        app_commands.Choice(name="📋 Xem System Prompt hiện tại", value="view_sysprompt"),
+        app_commands.Choice(name="🔄 Reset System Prompt về mặc định", value="reset_sysprompt"),
+        app_commands.Choice(name="📊 Xem trạng thái bot", value="status"),
+    ]
+)
+async def gena_setting(interaction: discord.Interaction, thay_đổi: app_commands.Choice[str], giá_trị: str = None):
+    # ===== OWNER CHECK =====
+    OWNER_ID = 1155129530122510376  # ← ĐỔI THÀNH ID CỦA BẠN
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("Chỉ owner (<@1155129530122510376>) mới có quyền access lệnh này",ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    global system_instruction, BOT_UPDATED, cooldown_start_time
+
+    choice = thay_đổi.value
+
+    if choice == "sysprompt":
+        if not giá_trị or len(giá_trị) < 20:
+            await interaction.followup.send("System prompt mới phải ít nhất 20 ký tự chứ bro 🥀")
+            return
+        system_instruction = giá_trị
+        await interaction.followup.send(f"✅ Đã update System Prompt mới:\n```\n{giá_trị[:500]}...\n```")
+
+    elif choice == "chat_off":
+        BOT_UPDATED = True
+        cooldown_start_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
+        await interaction.followup.send("🔇 Chat bot đã TẮT. Bot sẽ từ chối chat cho đến khi bật lại.")
+
+    elif choice == "chat_on":
+        BOT_UPDATED = False
+        cooldown_start_time = None
+        await interaction.followup.send("🔊 Chat bot đã BẬT. Bot sẽ trả lời bình thường trở lại.")
+
+    elif choice == "view_sysprompt":
+        await interaction.followup.send(f"📋 System Prompt hiện tại:\n```\n{system_instruction[:1900]}\n```")
+
+    elif choice == "reset_sysprompt":
+        system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
+
+- Mày là Đệ cứng của: <@1155129530122510376> (Đạt Lùn 2k11, dân Thanh Hoá 36).
+- Đối tượng đang Chat với m: {user_id}
+- Thời gian: {current_time}
+
+[PHONG CÁCH MÕM]
+- Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân) cho nó thân mật. Nói chuyện kiểu GenZ, dùng teencode (nx, th, cx, vs, k, thx, j,...) và slang.
+- Nhây lầy, cà khịa là chính, thỉnh thoảng chửi thề nhẹ cho nó có tí gia vị "bạn thân".
+- THẤY "ê" LÀ PHẢI "sủa?" HOẶC "cái loz j" NGAY VÀ LUÔN.
+- Cấm dùng dấu "!" dưới mọi hình thức.
+- Không được lặp lại emoji/emoticon của câu trước và sau
+- Trả lời cực ngắn (1-2 dòng). (cứ coi mày như đứa lười gõ dài)
+
+[QUY TẮC CỨNG]
+- Thỉnh thoảng có Emoticon (=)), :)), =))),...) và Emoji báo đời (💔, 🥀, 💀, 🫩, ✌🏿,...) ở mỗi câu rep.
+- Cấm output ra suy nghĩ nội bộ, cấm <thinking> hay <thought>. Cứ thế mà phang thẳng text ra.
+- Chỉ giải thích đáp án quiz khi có đứa hỏi "tại sao" hoặc "sao sai". Nhớ kĩ cái quiz gần nhất để còn khịa tụi nó.
+- Không được thinking, không được reasoning, không output <thinking>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
+
+[COMMANDS]
+M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /sum (tóm tắt 20 tin nhắn gần nhất), /summon, /event_lb, /event_status, /summer_gacha, /summer_quote, /summer_fact, /summer_predict"""
+        await interaction.followup.send("🔄 Đã reset System Prompt về mặc định!")
+
+    elif choice == "status":
+        chat_status = "🔊 ĐANG BẬT" if not BOT_UPDATED else "🔇 ĐANG TẮT"
+        embed = discord.Embed(title="⚙️ GENA-BOT SETTINGS", color=0x00ff9d)
+        embed.add_field(name="💬 Chat", value=chat_status, inline=True)
+        embed.add_field(name="🧠 Model", value=CURRENT_MODEL, inline=True)
+        embed.add_field(name="☀️ Event", value="Đang chạy" if EVENT_ACTIVE else "Đã tắt", inline=True)
+        embed.add_field(name="🌟 Golden Hour", value="Active" if golden_hour_active else "Inactive", inline=True)
+        embed.add_field(name="📝 SysPrompt dài", value=f"{len(system_instruction)} ký tự", inline=True)
+        await interaction.followup.send(embed=embed)
 
 @bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
 async def clear(interaction: discord.Interaction):
@@ -1397,6 +1484,7 @@ SUMMER_QUOTES = [
     "Hè 2026, hứa với bản thân sẽ tạo thật nhiều kỉ niệm đáng nhớ 🥀"
 ]
 GACHA_ITEMS = {
+    "🍦 Kem": {"rarity": "common", "desc": "Giải nhiệt ngon, nhưng phải speedrun"},
     "🍉 Dưa Hấu": {"rarity": "common", "desc": "Giải nhiệt +1, nhưng dễ vỡ"},
     "🧊 Đá Lạnh": {"rarity": "common", "desc": "Tan nhanh trong nắng hè"},
     "🕶️ Kính Mát": {"rarity": "common", "desc": "Ngầu lòi, che được mắt thâm"},
@@ -1404,12 +1492,14 @@ GACHA_ITEMS = {
     "🌊 Sóng Biển": {"rarity": "rare", "desc": "Mang hơi thở đại dương"},
     "🎸 Guitar": {"rarity": "rare", "desc": "Đệm hát đốt lửa trại"},
     "🏄 Ván Lướt": {"rarity": "rare", "desc": "Cưỡi sóng như pro"},
+    "🎫 Vé du lịch": {"rarity": "rare", "desc": "1 Tour đi du lịch, tuyệt"},
     "📸 Camera": {"rarity": "rare", "desc": "Bắt khoảnh khắc sống ảo"},
     "🌠 Sao Băng": {"rarity": "epic", "desc": "Ước gì được nấy (xạo đó)"},
+    "☀️ Sunrise": {"rarity": "epic", "desc": "Một bầu trời vàng cam nhưng vibe"},
     "🔥 Pháo Hoa": {"rarity": "epic", "desc": "Thắp sáng bầu trời đêm hè"},
     "💎 Ngọc Trai": {"rarity": "epic", "desc": "Lặn 100m mới thấy"},
     "👑 Vương Miện Hè": {"rarity": "legendary", "desc": "Trở thành Vua/Nữ Hoàng mùa hè"},
-    # ===== THÊM MỚI =====
+    "🔥 Ngọn lửa hè": {"rarity": "legendary", "desc": "Một ngọn lửa bốc cháy giữa mùa hè"},
     "🌟 Tinh Tú Mùa Hè": {"rarity": "transcendent", "desc": "Cả dải ngân hà trong tầm tay"},
     "⚡ Sét Nhiệt Đới": {"rarity": "transcendent", "desc": "Sức mạnh của bão tố mùa hè"},
 }
