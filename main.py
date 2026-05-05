@@ -411,7 +411,7 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.73-summer", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.73b-summer", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
@@ -535,7 +535,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.73 (summer event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.73b (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -547,6 +547,10 @@ async def bot_info(interaction: discord.Interaction):
 async def update_log(interaction: discord.Interaction):
     # Danh sách các phiên bản (mỗi page 3 version)
     versions = [
+        {
+            "name": "v21.9.73b - Bug fix",
+            "desc": "• Sửa 1 lỗi nhỏ"
+        },
         {
             "name": "v21.9.73 - Setting",
             "desc": "• Thêm tính năng `backup` để giữ điểm cho dễ"
@@ -707,21 +711,27 @@ async def gena_setting(interaction: discord.Interaction, thay_đổi: app_comman
         await interaction.followup.send(f"📋 System Prompt hiện tại:\n```\n{system_instruction[:1900]}\n```")
         
     elif choice == "backup_quiz":
-        # Gom tất cả quiz_scores thành JSON
-        backup_data = json.dumps(quiz_scores, indent=2)
-        if len(backup_data) > 1900:
-            # Nếu quá dài thì lưu vào file
-            file = discord.File(io.BytesIO(backup_data.encode()), filename="quiz_backup.json")
+        # Format 1 dòng cho ENV Koyeb
+        env_format = {}
+        for channel_id, users in quiz_scores.items():
+            for user_id, score in users.items():
+                if user_id not in env_format:
+                    env_format[user_id] = {}
+                env_format[user_id][channel_id] = score
+        
+        backup_1line = json.dumps(env_format, separators=(',', ':'), ensure_ascii=False)
+        
+        if len(backup_1line) > 1900:
             await interaction.followup.send(
-                "💾 Backup quiz points:\n"
-                "Dán JSON này vào ENV `QUIZ_BACKUP` trên Koyeb để khôi phục sau này:",
-                file=file
+                "💾 Backup quá dài, lưu vào file đây:",
+                file=discord.File(io.BytesIO(backup_1line.encode()), filename="quiz_backup_1line.txt")
             )
         else:
             await interaction.followup.send(
-                "💾 Backup quiz points:\n"
-                "Copy dòng dưới vào ENV `QUIZ_BACKUP` trên Koyeb:\n"
-                f"```json\n{backup_data}\n```"
+                "💾 **Backup Quiz Points (1 dòng cho Koyeb):**\n"
+                "Copy nguyên dòng dưới vào ENV `QUIZ_BACKUP`:\n"
+                f"``{backup_1line}``\n"
+                f"📊 Đã backup **{sum(len(c) for c in env_format.values())}** bản ghi!"
             )
 
     elif choice == "restore_quiz":
