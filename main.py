@@ -104,6 +104,7 @@ BOT_UPDATED = True
 UPDATE_COOLDOWN_SECONDS = 60
 UPDATE_CHANNEL_ID = 1464203423191797841
 cooldown_start_time = None
+CHAT_DISABLED = False  
 
 TEXT_EXTENSIONS = {
     'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h',
@@ -410,7 +411,7 @@ async def start_update_cooldown(bot_instance):
                 description="Update xong rồi, vô chiến tiếp đê m 🔥\nCần gì thì tag tao, đừng ngại ✌🏿",
                 color=0x00ff9d
             )
-            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.71-summer", inline=True)
+            ready_embed.add_field(name="📌 Phiên bản", value="v21.9.72-summer", inline=True)
             ready_embed.add_field(name="🧠 Model", value=f"`{CURRENT_MODEL}`", inline=True)
             ready_embed.add_field(name="☀️ Summer Event", value=event_status_text, inline=True)
             ready_embed.add_field(
@@ -534,7 +535,7 @@ async def bot_info(interaction: discord.Interaction):
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
-    embed.add_field(name="📜 Version", value="v21.9.71 (summer event)", inline=True)
+    embed.add_field(name="📜 Version", value="v21.9.72 (summer event)", inline=True)
     embed.add_field(name="🧠 Model", value=f"**{CURRENT_MODEL}**", inline=False)
     embed.add_field(name="🛠️ Provider", value=provider, inline=True)
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
@@ -546,6 +547,10 @@ async def bot_info(interaction: discord.Interaction):
 async def update_log(interaction: discord.Interaction):
     # Danh sách các phiên bản (mỗi page 3 version)
     versions = [
+        {
+            "name": "v21.9.72 - Fixing",
+            "desc": "• Fix lỗi, bot sẽ ko phải hồi thay vì phản hồi biến update"
+        },
         {
             "name": "v21.9.71 - Setting",
             "desc": "• Thêm lệnh `/setting` cho bot\n• Thêm 1 số Items mới vào `/summer_gacha`"
@@ -673,7 +678,7 @@ async def gena_setting(interaction: discord.Interaction, thay_đổi: app_comman
         return
 
     await interaction.response.defer(ephemeral=True)
-    global system_instruction, BOT_UPDATED, cooldown_start_time
+    global system_instruction, BOT_UPDATED, cooldown_start_time, CHAT_DISABLED
 
     choice = thay_đổi.value
 
@@ -685,13 +690,11 @@ async def gena_setting(interaction: discord.Interaction, thay_đổi: app_comman
         await interaction.followup.send(f"✅ Đã update System Prompt mới:\n```\n{giá_trị[:500]}...\n```")
 
     elif choice == "chat_off":
-        BOT_UPDATED = True
-        cooldown_start_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
+        CHAT_DISABLED = True
         await interaction.followup.send("🔇 Chat bot đã TẮT. Bot sẽ từ chối chat cho đến khi bật lại.")
 
     elif choice == "chat_on":
-        BOT_UPDATED = False
-        cooldown_start_time = None
+        CHAT_DISABLED = False
         await interaction.followup.send("🔊 Chat bot đã BẬT. Bot sẽ trả lời bình thường trở lại.")
 
     elif choice == "view_sysprompt":
@@ -1950,10 +1953,17 @@ async def on_message(message):
                                                     f"({quiz_session.get('difficulty')} | GPT-OSS-120B | {quiz_session.get('time_per_q')}s)")
 
                         return
-
-    # Nếu không trigger, chỉ thêm vào history nếu sẽ phản hồi
+                        
+    # ==== Bot setting ====
     if not should_respond:
         return
+
+    if not should_respond:
+        return
+        
+    if CHAT_DISABLED:
+        return  
+    # ===== HẾT =====
 
     # Update cooldown check
     if BOT_UPDATED and not is_dm:
