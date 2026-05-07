@@ -517,7 +517,6 @@ async def upload_to_catbox(file_path):
 # ===== /record =====
 @bot.slash_command(name="record", description="ghi âm voice")
 async def record(ctx: discord.ApplicationContext):
-    # 1. Check sơ bộ, respond ngay nếu lỗi (không cần defer)
     if not ctx.author.voice:
         return await ctx.respond("m phải vào voice đã 💀", ephemeral=True)
     if ctx.guild.id in recordings:
@@ -525,32 +524,36 @@ async def record(ctx: discord.ApplicationContext):
 
     vc_channel = ctx.author.voice.channel
 
-    # 2. Defer ngay lập tức để chống timeout 3s
+    # Defer ngay (hiện "Bot is thinking...")
     await ctx.defer()
+
+    # Kiểm tra quyền cơ bản
+    permissions = vc_channel.permissions_for(ctx.guild.me)
+    if not permissions.connect or not permissions.speak:
+        await ctx.edit(content="t cần quyền `CONNECT` với `SPEAK` trong voice channel đó đã 💀")
+        return
 
     voice = None
     try:
-        # 3. Lấy voice client hiện có hoặc connect mới
+        # Thử lấy voice client có sẵn
         voice = ctx.guild.voice_client
         if voice is None:
-            # Connect với timeout 10 giây, tránh treo vô hạn
-            voice = await asyncio.wait_for(
-                vc_channel.connect(),
-                timeout=10.0
-            )
+            # Connect với timeout 20 giây
+            voice = await asyncio.wait_for(vc_channel.connect(), timeout=20.0)
         elif voice.channel != vc_channel:
             await voice.move_to(vc_channel)
 
-        # 4. Kiểm tra voice đã sẵn sàng chưa
         if not voice or not voice.is_connected():
-            raise Exception("Không thể kết nối voice")
+            raise Exception("Không kết nối được")
 
     except asyncio.TimeoutError:
-        return await ctx.respond("connect voice quá 10s, thử lại đi 🥀")
+        await ctx.edit(content="connect voice quá 20s, m kiểm tra lại mạng với quyền đi 🥀")
+        return
     except Exception as e:
-        return await ctx.respond(f"lỗi voice: `{str(e)[:80]}` 💔")
+        await ctx.edit(content=f"lỗi voice: `{str(e)[:80]}` 💔")
+        return
 
-    # 5. Chuẩn bị ghi âm
+    # Chuẩn bị ghi âm
     filename = f"record_{ctx.guild.id}_{int(time.time())}.mp3"
     sink = MP3Sink()
     recordings[ctx.guild.id] = {
@@ -559,7 +562,6 @@ async def record(ctx: discord.ApplicationContext):
         "channel": ctx.channel
     }
 
-    # 6. Callback khi record xong
     async def finished_callback(sink, channel, *args):
         await asyncio.sleep(0.5)
         try:
@@ -584,19 +586,18 @@ async def record(ctx: discord.ApplicationContext):
                 if rec["voice"] and rec["voice"].is_connected():
                     await rec["voice"].disconnect()
 
-    # 7. Bắt đầu ghi âm (có thể throw lỗi)
     try:
         voice.start_recording(sink, finished_callback, ctx.channel)
     except Exception as e:
         if ctx.guild.id in recordings:
             del recordings[ctx.guild.id]
-        await voice.disconnect()
-        return await ctx.respond(f"start recording lỗi: `{str(e)[:80]}` 💔")
+        if voice.is_connected():
+            await voice.disconnect()
+        await ctx.edit(content=f"start recording lỗi: `{str(e)[:80]}` 💔")
+        return
 
-    # 8. Phản hồi thành công
-    await ctx.respond("bắt đầu record r 🔥\n*gõ /stop để dừng*")
+    await ctx.edit(content="bắt đầu record r 🔥\n*gõ /stop để dừng*")
 
-    # Auto-stop sau 45 phút
     async def auto_stop():
         await asyncio.sleep(2700)
         if ctx.guild.id in recordings:
@@ -620,19 +621,21 @@ async def stop(ctx: discord.ApplicationContext):
 
     if not voice or not voice.is_connected():
         recordings.pop(ctx.guild.id, None)
-        return await ctx.respond("bot đã out voice, dọn dẹp r 🥀")
+        await ctx.edit(content="bot đã out voice rồi, dọn dẹp 🥀")
+        return
 
     if not voice.is_recording():
         recordings.pop(ctx.guild.id, None)
-        return await ctx.respond("đang ko record, thôi hủy 🥀")
+        await ctx.edit(content="đang ko record, thôi hủy 🥀")
+        return
 
     try:
         voice.stop_recording()
-        await ctx.respond("đã stop record 🥀")
+        await ctx.edit(content="đã stop record 🥀")
     except Exception as e:
         recordings.pop(ctx.guild.id, None)
         await voice.disconnect()
-        await ctx.respond(f"force stop: `{str(e)[:50]}`")
+        await ctx.edit(content=f"force stop: `{str(e)[:50]}`")
 
 # ===== /model =====
 model_choices = [
