@@ -517,59 +517,142 @@ async def upload_to_catbox(file_path):
 # ===== /record =====
 @bot.slash_command(name="record", description="ghi âm voice")
 async def record(ctx: discord.ApplicationContext):
+    # Check voice state TRƯỚC KHI defer
     if not ctx.author.voice:
         return await ctx.respond("m phải vào voice đã 💀", ephemeral=True)
+    
     vc = ctx.author.voice.channel
+    
     if ctx.guild.id in recordings:
         return await ctx.respond("đang record r mà 🥀", ephemeral=True)
-
-    voice = await vc.connect()
+    
+    # Defer ngay để tránh timeout
+    await ctx.defer()
+    
+    try:
+        voice = await vc.connect()
+    except Exception as e:
+        return await ctx.respond(f"kết nối voice lỗi: `{e}` 💔")
+    
     filename = f"record_{ctx.guild.id}_{int(time.time())}.mp3"
     sink = discord.sinks.MP3Sink()
+    
     recordings[ctx.guild.id] = {
         "voice": voice,
-        "file": filename
+        "file": filename,
+        "channel": ctx.channel  # Lưu channel để callback dùng
     }
 
     async def finished_callback(sink, channel, *args):
-        audio = sink.audio_data
-        with open(filename, "wb") as f:
-            for user_id, data in audio.items():
-                f.write(data.file.read())
+        # Đợi 1 chút cho file ghi xong hoàn toàn
+        await asyncio.sleep(0.5)
+        
         try:
-            link = await upload_to_catbox(filename)
-            await ctx.channel.send(f"xong r nè 😇\n{link}")
+            audio = sink.audio_data
+            if not audio:
+                await channel.send("record xong nhưng k có audio nào 💀")
+                return
+                
+            with open(filename, "wb") as f:
+                for user_id, data in audio.items():
+                    f.write(data.file.read())
+            
+            # Kiểm tra file có dữ liệu không
+            if os.path.getsize(filename) == 0:
+                await channel.send("file record trống rỗng 💀")
+                return
+            
+            try:
+                link = await upload_to_catbox(filename)
+                await channel.send(f"xong r nè 😇\n{link}")
+            except Exception as e:
+                await channel.send(f"upload lỗi: `{e}` 💔")
         except Exception as e:
-            await ctx.channel.send(f"upload lỗi: `{e}` 💔")
+            await channel.send(f"lỗi xử lý record: `{e}` 💀")
         finally:
+            # Cleanup
             if os.path.exists(filename):
-                os.remove(filename)
+                try:
+                    os.remove(filename)
+                except:
+                    pass
             if ctx.guild.id in recordings:
-                del recordings[ctx.guild.id]
+                rec = recordings.pop(ctx.guild.id, None)
+                if rec and rec.get("voice"):
+                    try:
+                        await rec["voice"].disconnect()
+                    except:
+                        pass
 
-    voice.start_recording(
-        sink,
-        finished_callback,
-        ctx.channel
-    )
-
+    try:
+        voice.start_recording(
+            sink,
+            finished_callback,
+            ctx.channel  # Truyền channel để callback biết gửi tin vào đâu
+        )
+    except Exception as e:
+        if ctx.guild.id in recordings:
+            del recordings[ctx.guild.id]
+        await voice.disconnect()
+        return await ctx.respond(f"start recording lỗi: `{e}` 💔")
+    
     await ctx.respond("bắt đầu record r 🔥")
 
     # auto stop sau 45p
     async def auto_stop():
         await asyncio.sleep(2700)
         if ctx.guild.id in recordings:
-            voice.stop_recording()
+            try:
+                rec = recordings[ctx.guild.id]
+                if rec.get("voice"):
+                    rec["voice"].stop_recording()
+            except Exception as e:
+                print(f"Lỗi auto_stop record: {e}")
+    
     bot.loop.create_task(auto_stop())
+
 
 # ===== /stop =====
 @bot.slash_command(name="stop", description="dừng ghi âm")
 async def stop(ctx: discord.ApplicationContext):
     if ctx.guild.id not in recordings:
         return await ctx.respond("có record đâu mà stop 💀", ephemeral=True)
-    voice = recordings[ctx.guild.id]["voice"]
-    voice.stop_recording()
-    await voice.disconnect()
+    
+    await ctx.defer()
+    
+    rec = recordings.get(ctx.guild.id)
+    if not rec:
+        return await ctx.respond("record data lỗi r 💀")
+    
+    voice = rec.get("voice")
+    
+    if not voice:
+        # Cleanup nếu data lỗi
+        recordings.pop(ctx.guild.id, None)
+        return await ctx.respond("voice client lỗi, đã dọn dẹp 🥀")
+    
+    try:
+        # Stop recording (callback sẽ tự cleanup)
+        voice.stop_recording()
+    except Exception as e:
+        # Nếu stop fail thì force disconnect + cleanup
+        print(f"Lỗi stop_recording: {e}")
+        try:
+            await voice.disconnect()
+        except:
+            pass
+        recordings.pop(ctx.guild.id, None)
+        
+        # Xóa file tạm nếu có
+        tmp_file = rec.get("file", "")
+        if tmp_file and os.path.exists(tmp_file):
+            try:
+                os.remove(tmp_file)
+            except:
+                pass
+        
+        return await ctx.respond("đã force stop record 🥀")
+    
     await ctx.respond("đã stop record 🥀")
 
 # ===== /model =====
@@ -600,6 +683,146 @@ async def switch_model(ctx: discord.ApplicationContext,
     except Exception as e:
         await ctx.respond(f"Lỗi đổi model r bradar: {str(e)[:50]} 💀")
 
+# ===== /update_log =====
+@bot.slash_command(name="update_log", description="Nhật ký update")
+async def update_log(ctx: discord.ApplicationContext):
+    # Danh sách các phiên bản (mỗi page 3 version)
+    versions = [
+        {
+            "name": "v22.0.0 - New Command & Bug fix",
+            "desc": "• Thêm lại lệnh `/update_log`\n• Thêm lệnh `/record` để ghi âm trong call\n• Thêm lệnh `/stop` để dừng ghi âm\n• Fix lỗi bot ko phải hồi nhưng vẫn join"
+        },
+        {
+            "name": "v21.9.8b - Bug fix",
+            "desc": "• sửa 1 số lỗi logic gây hỏng code\n• sửa 1 số logic của lệnh `/setting`"
+        },
+        {
+            "name": "v21.9.8 - Setting",
+            "desc": "• Thêm một số tính năng quyền năng cho owner/mod\n• Bao gồm gửi thông báo, golden hour forcing, set quiz_model,... (im lazy showing)"
+        },
+        {
+            "name": "v21.9.74 - Model Quiz",
+            "desc": "• Thêm lại option `Model_quiz` cho lệnh `/quiz`"
+        },
+        {
+            "name": "v21.9.73b - Bug fix",
+            "desc": "• Sửa 1 lỗi nhỏ"
+        },
+        {
+            "name": "v21.9.73 - Setting",
+            "desc": "• Thêm tính năng `backup` để giữ điểm cho dễ"
+        },
+        {
+            "name": "v21.9.72 - Fixing",
+            "desc": "• Fix lỗi, bot sẽ ko phải hồi thay vì phản hồi biến update"
+        },
+        {
+            "name": "v21.9.71 - Setting",
+            "desc": "• Thêm lệnh `/setting` cho bot\n• Thêm 1 số Items mới vào `/summer_gacha`"
+        },
+        {
+            "name": "v21.9.7 - Logs update",
+            "desc": "• Thêm tính năng phân trang cho `/update_log`\n• ko có gì khác"
+        },
+        {
+            "name": "v21.9.6 - Rarity & Items",
+            "desc": "• Thêm `Transcendent` rarity.\n• Thêm Items mới vào gacha\n• Thêm cơ chế tích điểm theo ngày mới"
+        },
+        {
+            "name": "v21.9.5 - Changing",
+            "desc": "• Thêm /summer_gacha (thay daily_bonus)\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory"
+        },
+        {
+            "name": "v21.9.1 - Summer Boost",
+            "desc": "• Thêm /daily_bonus, /summer_quote, /summer_fact, /summer_predict\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory (đã lỗi thời)"
+        },
+        {
+            "name": "v21.6.0 - Summon",
+            "desc": "• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history"
+        },
+        {
+            "name": "v21.5.0 - Event",
+            "desc": "• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix"
+        },
+        {
+            "name": "v20.9.2 - Sum",
+            "desc": "• `/sum` command được thêm vào"
+        },
+        {
+            "name": "v20.8.0 - Model",
+            "desc": "• Thêm tính năng tự chọn model vào quiz"
+        },
+        {
+            "name": "older version",
+            "desc": "• Các phiên bản cũ hơn ko có thông tin chi tiết"
+        },
+    ]
+
+    # Chia page (3 version/page)
+    pages = [versions[i:i+3] for i in range(0, len(versions), 3)]
+    total_pages = len(pages)
+    current_page = 0
+
+    def get_embed(page_idx):
+        embed = discord.Embed(
+            title="GenA-bot Update Log 🗒️",
+            description=f"*Trang {page_idx + 1}/{total_pages}*",
+            color=0x9b59b6
+        )
+        for v in pages[page_idx]:
+            embed.add_field(name=v["name"], value=v["desc"], inline=False)
+        embed.set_footer(text="Updated 05/05/2026")
+        return embed
+
+    # View với nút điều hướng
+    class UpdateLogView(discord.ui.View):
+        def __init__(self):
+            super().__init__(timeout=120)
+            self.current_page = 0
+            self.update_buttons()
+
+        def update_buttons(self):
+            # Xoá hết nút cũ
+            self.clear_items()
+            # Nút Previous
+            prev_btn = discord.ui.Button(
+                emoji="◀️", 
+                style=discord.ButtonStyle.primary if self.current_page > 0 else discord.ButtonStyle.secondary,
+                disabled=(self.current_page == 0)
+            )
+            prev_btn.callback = self.prev_callback
+            self.add_item(prev_btn)
+            # Nút chỉ số trang (không bấm được)
+            page_btn = discord.ui.Button(
+                label=f"{self.current_page + 1}/{total_pages}",
+                style=discord.ButtonStyle.secondary,
+                disabled=True
+            )
+            self.add_item(page_btn)
+            # Nút Next
+            next_btn = discord.ui.Button(
+                emoji="▶️",
+                style=discord.ButtonStyle.primary if self.current_page < total_pages - 1 else discord.ButtonStyle.secondary,
+                disabled=(self.current_page >= total_pages - 1)
+            )
+            next_btn.callback = self.next_callback
+            self.add_item(next_btn)
+
+        async def prev_callback(self, btn_interaction: discord.Interaction):
+            if self.current_page > 0:
+                self.current_page -= 1
+                self.update_buttons()
+                await btn_interaction.response.edit_message(embed=get_embed(self.current_page), view=self)
+
+        async def next_callback(self, btn_interaction: discord.Interaction):
+            if self.current_page < total_pages - 1:
+                self.current_page += 1
+                self.update_buttons()
+                await btn_interaction.response.edit_message(embed=get_embed(self.current_page), view=self)
+
+    view = UpdateLogView()
+    await ctx.respond(embed=get_embed(0), view=view)
+    
 # ===== /bot_info =====
 @bot.slash_command(name="bot_info", description="Status bot xịn hơn tí")
 async def bot_info(ctx: discord.ApplicationContext):
