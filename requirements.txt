@@ -1,7 +1,9 @@
 discord.py
 groq
-ollama
 aiohttp
 python-dotenv
 flask
 pytz
+discord-ext-voice-receive
+requests
+PyNaCl
