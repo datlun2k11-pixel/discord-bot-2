@@ -4,6 +4,5 @@ aiohttp
 python-dotenv
 flask
 pytz
-discord-ext-voice-receive==0.1.3
 requests
 PyNaCl
