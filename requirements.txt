@@ -4,6 +4,6 @@ aiohttp
 python-dotenv
 flask
 pytz
-discord-ext-voice-receive
+git+https://github.com/khazhyk/discord-ext-voice-receive.git
 requests
 PyNaCl
