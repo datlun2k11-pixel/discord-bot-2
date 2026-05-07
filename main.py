@@ -514,98 +514,125 @@ async def upload_to_catbox(file_path):
         async with session.post(url, data=data) as resp:
             return await resp.text()
 
-@bot.slash_command(name="record", description="Ghi âm kênh voice")
-async def record(ctx):
-    await ctx.defer(ephemeral=True)
-
+# ===== /record =====
+@bot.slash_command(name="record", description="ghi âm voice")
+async def record(ctx: discord.ApplicationContext):
+    # 1. Check sơ bộ, respond ngay nếu lỗi (không cần defer)
     if not ctx.author.voice:
-        return await ctx.followup.send("m phải vào voice đã 💀", ephemeral=True)
-
+        return await ctx.respond("m phải vào voice đã 💀", ephemeral=True)
     if ctx.guild.id in recordings:
-        return await ctx.followup.send("đang record r mà 🥀", ephemeral=True)
+        return await ctx.respond("đang record r mà 🥀", ephemeral=True)
 
-    voice_channel = ctx.author.voice.channel
-    voice_client = ctx.guild.voice_client
+    vc_channel = ctx.author.voice.channel
 
-    if not voice_client:
-        voice_client = await voice_channel.connect()
-    elif voice_client.channel != voice_channel:
-        await voice_client.move_to(voice_channel)
+    # 2. Defer ngay lập tức để chống timeout 3s
+    await ctx.defer()
 
+    voice = None
+    try:
+        # 3. Lấy voice client hiện có hoặc connect mới
+        voice = ctx.guild.voice_client
+        if voice is None:
+            # Connect với timeout 10 giây, tránh treo vô hạn
+            voice = await asyncio.wait_for(
+                vc_channel.connect(),
+                timeout=10.0
+            )
+        elif voice.channel != vc_channel:
+            await voice.move_to(vc_channel)
+
+        # 4. Kiểm tra voice đã sẵn sàng chưa
+        if not voice or not voice.is_connected():
+            raise Exception("Không thể kết nối voice")
+
+    except asyncio.TimeoutError:
+        return await ctx.respond("connect voice quá 10s, thử lại đi 🥀")
+    except Exception as e:
+        return await ctx.respond(f"lỗi voice: `{str(e)[:80]}` 💔")
+
+    # 5. Chuẩn bị ghi âm
     filename = f"record_{ctx.guild.id}_{int(time.time())}.mp3"
-    sink = discord.sinks.MP3Sink()
-
+    sink = MP3Sink()
     recordings[ctx.guild.id] = {
-        "voice": voice_client,
-        "filename": filename,
-        "text_channel": ctx.channel,
+        "voice": voice,
+        "file": filename,
+        "channel": ctx.channel
     }
 
-    async def finished_callback(sink, text_channel, *args):
+    # 6. Callback khi record xong
+    async def finished_callback(sink, channel, *args):
+        await asyncio.sleep(0.5)
         try:
-            with open(filename, "wb") as out:
-                for audio_data in sink.audio_data.values():
-                    out.write(audio_data.file.read())
-                    audio_data.file.close()
-
+            if not sink.audio_data:
+                await channel.send("record xong nhưng không có audio 💀")
+                return
+            with open(filename, "wb") as f:
+                for uid, data in sink.audio_data.items():
+                    f.write(data.file.read())
+            if os.path.getsize(filename) == 0:
+                await channel.send("file rỗng 💀")
+                return
             link = await upload_to_catbox(filename)
-            await text_channel.send(f"xong r nè 😇\n{link}")
-
+            await channel.send(f"xong r nè 😇\n{link}")
         except Exception as e:
-            await text_channel.send(f"upload lỗi: `{e}` 💔")
-
+            await channel.send(f"lỗi: `{str(e)[:80]}` 💀")
         finally:
             if os.path.exists(filename):
                 os.remove(filename)
-            recordings.pop(ctx.guild.id, None)
+            if ctx.guild.id in recordings:
+                rec = recordings.pop(ctx.guild.id)
+                if rec["voice"] and rec["voice"].is_connected():
+                    await rec["voice"].disconnect()
+
+    # 7. Bắt đầu ghi âm (có thể throw lỗi)
+    try:
+        voice.start_recording(sink, finished_callback, ctx.channel)
+    except Exception as e:
+        if ctx.guild.id in recordings:
+            del recordings[ctx.guild.id]
+        await voice.disconnect()
+        return await ctx.respond(f"start recording lỗi: `{str(e)[:80]}` 💔")
+
+    # 8. Phản hồi thành công
+    await ctx.respond("bắt đầu record r 🔥\n*gõ /stop để dừng*")
+
+    # Auto-stop sau 45 phút
+    async def auto_stop():
+        await asyncio.sleep(2700)
+        if ctx.guild.id in recordings:
+            v = recordings[ctx.guild.id]["voice"]
+            if v.is_recording():
+                v.stop_recording()
+                await ctx.channel.send("⏰ Auto stop sau 45p")
+
+    bot.loop.create_task(auto_stop())
+
+
+# ===== /stop =====
+@bot.slash_command(name="stop", description="dừng ghi âm")
+async def stop(ctx: discord.ApplicationContext):
+    if ctx.guild.id not in recordings:
+        return await ctx.respond("có record đâu mà stop 💀", ephemeral=True)
+
+    await ctx.defer()
+    rec = recordings[ctx.guild.id]
+    voice = rec.get("voice")
+
+    if not voice or not voice.is_connected():
+        recordings.pop(ctx.guild.id, None)
+        return await ctx.respond("bot đã out voice, dọn dẹp r 🥀")
+
+    if not voice.is_recording():
+        recordings.pop(ctx.guild.id, None)
+        return await ctx.respond("đang ko record, thôi hủy 🥀")
 
     try:
-        voice_client.start_recording(sink, finished_callback, ctx.channel)
+        voice.stop_recording()
+        await ctx.respond("đã stop record 🥀")
     except Exception as e:
         recordings.pop(ctx.guild.id, None)
-        return await ctx.followup.send(f"start record lỗi: `{e}`", ephemeral=True)
-
-    async def auto_stop(guild_id: int):
-        await asyncio.sleep(2700)  # 45p
-        session = recordings.get(guild_id)
-        if not session:
-            return
-
-        vc = session["voice"]
-        if vc and vc.is_connected():
-            try:
-                vc.stop_recording()
-                await asyncio.sleep(0.5)
-                await vc.disconnect()
-            except:
-                pass
-
-    asyncio.create_task(auto_stop(ctx.guild.id))
-
-    await ctx.followup.send("bắt đầu record r 🔥", ephemeral=True)
-
-
-@bot.slash_command(name="stop", description="Dừng ghi âm")
-async def stop(ctx):
-    await ctx.defer(ephemeral=True)
-
-    session = recordings.get(ctx.guild.id)
-    voice_client = ctx.guild.voice_client or (session["voice"] if session else None)
-
-    if not voice_client:
-        return await ctx.followup.send("bot đang có record đâu mà stop 💀", ephemeral=True)
-
-    try:
-        voice_client.stop_recording()
-        await asyncio.sleep(0.5)
-    except:
-        pass
-
-    if voice_client.is_connected():
-        await voice_client.disconnect()
-
-    recordings.pop(ctx.guild.id, None)
-    await ctx.followup.send("đã stop record 🥀", ephemeral=True)
+        await voice.disconnect()
+        await ctx.respond(f"force stop: `{str(e)[:50]}`")
 
 # ===== /model =====
 model_choices = [
