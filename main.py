@@ -1,27 +1,32 @@
 # AI coded - 60% Kimi AI. 30% Deepeeek. 10% Gemini
 import discord
 import os
-import asyncio
-import aiohttp
-import random
-import datetime
-import pytz
-import base64
-import json
-import re
 import io
+import re
+import json
+import time
+import random
+import base64
+import asyncio
+import datetime
+import aiohttp
+import pytz
+
+from threading import Thread
+
 from discord.ext import commands
-from discord import app_commands
+from discord.sinks import MP3Sink
+
 from groq import Groq
 from dotenv import load_dotenv
 from flask import Flask
-from threading import Thread
 
 load_dotenv()
 
 # --- Clients ---
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+CATBOX_USERHASH = os.getenv("CATBOX_USERHASH", "")
 
 # --- Model Config ---
 MODELS_CONFIG = {
@@ -57,17 +62,8 @@ MODELS_CONFIG = {
     }
 }
 
-MODEL_CHOICES = [
-    app_commands.Choice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
-    app_commands.Choice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
-    app_commands.Choice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
-    app_commands.Choice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
-    app_commands.Choice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
-    app_commands.Choice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
-]
-
 CURRENT_MODEL = "Groq-Llama-Scout"
-QUIZ_DEFAULT_MODEL = "GPT-OSS-120B"  # ← THÊM DÒNG NÀY
+QUIZ_DEFAULT_MODEL = "GPT-OSS-120B"
 
 # System Prompt
 system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
@@ -105,7 +101,7 @@ BOT_UPDATED = True
 UPDATE_COOLDOWN_SECONDS = 60
 UPDATE_CHANNEL_ID = 1464203423191797841
 cooldown_start_time = None
-CHAT_DISABLED = False  
+CHAT_DISABLED = False
 
 TEXT_EXTENSIONS = {
     'py', 'txt', 'md', 'json', 'js', 'html', 'css', 'cpp', 'c', 'h',
@@ -123,6 +119,7 @@ quiz_expire_tasks = {}
 # Summon & event stats (mới)
 summon_active = {}
 event_stats = {}
+
 # Golden hour bonus (ẩn, ko thông báo)
 golden_hour_active = False
 golden_hour_end = None
@@ -130,6 +127,9 @@ golden_hour_task = None
 
 # Daily bonus tracker
 daily_claim_tracker = {}
+
+# Voice recording
+recordings = {}
 
 app = Flask(__name__)
 
@@ -370,16 +370,16 @@ async def get_model_response(messages, model_config):
     return "Provider lạ quá m ơi 💀"
 
 # === BOT SETUP ===
-bot = commands.Bot(command_prefix="!", intents=discord.Intents.all())
+bot = discord.Bot(intents=discord.Intents.all())
 
-async def start_update_cooldown(bot_instance):
+async def start_update_cooldown():
     """Bắt đầu cooldown sau update, gửi thông báo vào channel chỉ định"""
     global BOT_UPDATED, cooldown_start_time
 
     BOT_UPDATED = True
     cooldown_start_time = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
 
-    channel = bot_instance.get_channel(UPDATE_CHANNEL_ID)
+    channel = bot.get_channel(UPDATE_CHANNEL_ID)
     if channel:
         try:
             embed = discord.Embed(
@@ -480,17 +480,10 @@ async def golden_hour_scheduler():
 
 @bot.event
 async def on_ready():
-    try:
-        synced = await bot.tree.sync()
-        print(f"Đã sync {len(synced)} lệnh slash!")
-    except Exception as e:
-        print(f"Lỗi sync: {e}")
     print(f"GenA-bot Ready! 🔥")
-
-    asyncio.create_task(start_update_cooldown(bot))
+    asyncio.create_task(start_update_cooldown())
     asyncio.create_task(check_event_end())
     asyncio.create_task(golden_hour_scheduler())
-# ===== THÊM ĐOẠN NÀY =====
     # Khôi phục điểm quiz từ ENV
     quiz_backup_raw = os.getenv("QUIZ_BACKUP")
     if quiz_backup_raw:
@@ -504,35 +497,115 @@ async def on_ready():
             print(f"Đã khôi phục điểm quiz từ ENV: {quiz_backup}")
         except Exception as e:
             print(f"Lỗi parse QUIZ_BACKUP: {e}")
-# ===== HẾT ĐOẠN THÊM =====
-# === COMMANDS ===
-@bot.tree.command(name="model", description="Đổi model AI xịn hơn")
-@app_commands.choices(chon_model=MODEL_CHOICES)
-async def switch_model(interaction: discord.Interaction, chon_model: app_commands.Choice[str]):
+
+# === CATBOX UPLOAD ===
+async def upload_to_catbox(file_path):
+    url = "https://catbox.moe/user/api.php"
+    data = aiohttp.FormData()
+    data.add_field("reqtype", "fileupload")
+    if CATBOX_USERHASH:
+        data.add_field("userhash", CATBOX_USERHASH)
+    data.add_field(
+        "fileToUpload",
+        open(file_path, "rb"),
+        filename=os.path.basename(file_path)
+    )
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, data=data) as resp:
+            return await resp.text()
+
+# ===== /record =====
+@bot.slash_command(name="record", description="ghi âm voice")
+async def record(ctx: discord.ApplicationContext):
+    if not ctx.author.voice:
+        return await ctx.respond("m phải vào voice đã 💀", ephemeral=True)
+    vc = ctx.author.voice.channel
+    if ctx.guild.id in recordings:
+        return await ctx.respond("đang record r mà 🥀", ephemeral=True)
+
+    voice = await vc.connect()
+    filename = f"record_{ctx.guild.id}_{int(time.time())}.mp3"
+    sink = discord.sinks.MP3Sink()
+    recordings[ctx.guild.id] = {
+        "voice": voice,
+        "file": filename
+    }
+
+    async def finished_callback(sink, channel, *args):
+        audio = sink.audio_data
+        with open(filename, "wb") as f:
+            for user_id, data in audio.items():
+                f.write(data.file.read())
+        try:
+            link = await upload_to_catbox(filename)
+            await ctx.channel.send(f"xong r nè 😇\n{link}")
+        except Exception as e:
+            await ctx.channel.send(f"upload lỗi: `{e}` 💔")
+        finally:
+            if os.path.exists(filename):
+                os.remove(filename)
+            if ctx.guild.id in recordings:
+                del recordings[ctx.guild.id]
+
+    voice.start_recording(
+        sink,
+        finished_callback,
+        ctx.channel
+    )
+
+    await ctx.respond("bắt đầu record r 🔥")
+
+    # auto stop sau 45p
+    async def auto_stop():
+        await asyncio.sleep(2700)
+        if ctx.guild.id in recordings:
+            voice.stop_recording()
+    bot.loop.create_task(auto_stop())
+
+# ===== /stop =====
+@bot.slash_command(name="stop", description="dừng ghi âm")
+async def stop(ctx: discord.ApplicationContext):
+    if ctx.guild.id not in recordings:
+        return await ctx.respond("có record đâu mà stop 💀", ephemeral=True)
+    voice = recordings[ctx.guild.id]["voice"]
+    voice.stop_recording()
+    await voice.disconnect()
+    await ctx.respond("đã stop record 🥀")
+
+# ===== /model =====
+model_choices = [
+    discord.OptionChoice(name="Llama 4 Scout (GROQ - Vision)", value="Groq-Llama-Scout"),
+    discord.OptionChoice(name="GPT-OSS-120B (GROQ)", value="GPT-OSS-120B"),
+    discord.OptionChoice(name="Gemma4 26B (Google - Vision)", value="Google-Gemma4-26B"),
+    discord.OptionChoice(name="Gemma4 31B (Google - Vision)", value="Google-Gemma4-31B"),
+    discord.OptionChoice(name="Gemma3 27B (Google - Vision)", value="Google-Gemma3-27B"),
+    discord.OptionChoice(name="Gemma3 12B (Google - Vision)", value="Google-Gemma3-12B")
+]
+
+@bot.slash_command(name="model", description="Đổi model AI xịn hơn")
+async def switch_model(ctx: discord.ApplicationContext,
+                       chon_model: discord.Option(str, "Chọn model", choices=model_choices)):
     global CURRENT_MODEL
-    await interaction.response.defer(ephemeral=True)
-
+    await ctx.defer(ephemeral=True)
     try:
-        CURRENT_MODEL = chon_model.value
+        CURRENT_MODEL = chon_model
         provider = MODELS_CONFIG[CURRENT_MODEL]["provider"].upper()
-
         embed = discord.Embed(
             title="Model switched",
-            description=f"đã đổi thành **{chon_model.name}** r nhé bro\nok✌🏿🥀",
+            description=f"đã đổi thành **{chon_model}** r nhé bro\nok✌🏿🥀",
             color=0x00ff9d
         )
         embed.set_footer(text=f"Provider: {provider} | {random_vibe()}")
-
-        await interaction.followup.send(embed=embed)
+        await ctx.respond(embed=embed)
     except Exception as e:
-        await interaction.followup.send(f"Lỗi đổi model r bradar: {str(e)[:50]} 💀")
+        await ctx.respond(f"Lỗi đổi model r bradar: {str(e)[:50]} 💀")
 
-@bot.tree.command(name="bot_info", description="Status bot xịn hơn tí")
-async def bot_info(interaction: discord.Interaction):
+# ===== /bot_info =====
+@bot.slash_command(name="bot_info", description="Status bot xịn hơn tí")
+async def bot_info(ctx: discord.ApplicationContext):
     latency = round(bot.latency * 1000)
     provider = MODELS_CONFIG[CURRENT_MODEL]["provider"].upper()
     vision = "✅" if MODELS_CONFIG[CURRENT_MODEL]["vision"] else "❌"
-
     embed = discord.Embed(title="GenA-bot Status 🚀", color=0xff1493, timestamp=discord.utils.utcnow())
     embed.add_field(name="🤖 Tên boss", value=f"{bot.user.mention}", inline=True)
     embed.add_field(name="📶 Ping", value=f"{latency}ms", inline=True)
@@ -542,428 +615,35 @@ async def bot_info(interaction: discord.Interaction):
     embed.add_field(name="👁️ Vision", value=vision, inline=True)
     embed.add_field(name="💾 Memory", value="15 msgs/channel", inline=True)
     embed.set_footer(text="Powered by Groq + Google | " + random_vibe())
-    await interaction.response.send_message(embed=embed)
+    await ctx.respond(embed=embed)
 
-@bot.tree.command(name="update_log", description="Nhật ký update")
-async def update_log(interaction: discord.Interaction):
-    # Danh sách các phiên bản (mỗi page 3 version)
-    versions = [
-        {
-            "name": "v21.9.8b - Bug fix",
-            "desc": "• sửa 1 số lỗi logic gây hỏng code\n• sửa 1 số logic của lệnh `/setting`"
-        },
-        {
-            "name": "v21.9.8 - Setting",
-            "desc": "• Thêm một số tính năng quyền năng cho owner/mod\n• Bao gồm gửi thông báo, golden hour forcing, set quiz_model,... (im lazy showing)"
-        },
-        {
-            "name": "v21.9.74 - Model Quiz",
-            "desc": "• Thêm lại option `Model_quiz` cho lệnh `/quiz`"
-        },
-        {
-            "name": "v21.9.73b - Bug fix",
-            "desc": "• Sửa 1 lỗi nhỏ"
-        },
-        {
-            "name": "v21.9.73 - Setting",
-            "desc": "• Thêm tính năng `backup` để giữ điểm cho dễ"
-        },
-        {
-            "name": "v21.9.72 - Fixing",
-            "desc": "• Fix lỗi, bot sẽ ko phải hồi thay vì phản hồi biến update"
-        },
-        {
-            "name": "v21.9.71 - Setting",
-            "desc": "• Thêm lệnh `/setting` cho bot\n• Thêm 1 số Items mới vào `/summer_gacha`"
-        },
-        {
-            "name": "v21.9.7 - Logs update",
-            "desc": "• Thêm tính năng phân trang cho `/update_log`\n• ko có gì khác"
-        },
-        {
-            "name": "v21.9.6 - Rarity & Items",
-            "desc": "• Thêm `Transcendent` rarity.\n• Thêm Items mới vào gacha\n• Thêm cơ chế tích điểm theo ngày mới"
-        },
-        {
-            "name": "v21.9.5 - Changing",
-            "desc": "• Thêm /summer_gacha (thay daily_bonus)\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory"
-        },
-        {
-            "name": "v21.9.1 - Summer Boost",
-            "desc": "• Thêm /daily_bonus, /summer_quote, /summer_fact, /summer_predict\n• Quiz luôn dùng GPT-OSS-120B\n• Ẩn thông số quiz đến khi hết câu\n• Xoá /random_memory (đã lỗi thời)"
-        },
-        {
-            "name": "v21.6.0 - Summon",
-            "desc": "• Thêm `/summon` gọi bạn chơi quiz\n• Thêm `/event_lb`, `/event_status`\n• Sửa lỗi logic chat history"
-        },
-        {
-            "name": "v21.5.0 - Event",
-            "desc": "• Thêm lệnh `/random_memory`\n• Xoá model `gemini-3.1-flash-lite`\n• thêm tính năng thông báo khi bot update\n• Bug fix"
-        },
-        {
-            "name": "v20.9.2 - Sum",
-            "desc": "• `/sum` command được thêm vào"
-        },
-        {
-            "name": "v20.8.0 - Model",
-            "desc": "• Thêm tính năng tự chọn model vào quiz"
-        },
-        {
-            "name": "older version",
-            "desc": "• Các phiên bản cũ hơn ko có thông tin chi tiết"
-        },
-    ]
-
-    # Chia page (3 version/page)
-    pages = [versions[i:i+3] for i in range(0, len(versions), 3)]
-    total_pages = len(pages)
-    current_page = 0
-
-    def get_embed(page_idx):
-        embed = discord.Embed(
-            title="GenA-bot Update Log 🗒️",
-            description=f"*Trang {page_idx + 1}/{total_pages}*",
-            color=0x9b59b6
-        )
-        for v in pages[page_idx]:
-            embed.add_field(name=v["name"], value=v["desc"], inline=False)
-        embed.set_footer(text="Updated 05/05/2026")
-        return embed
-
-    # View với nút điều hướng
-    class UpdateLogView(discord.ui.View):
-        def __init__(self):
-            super().__init__(timeout=120)
-            self.current_page = 0
-            self.update_buttons()
-
-        def update_buttons(self):
-            # Xoá hết nút cũ
-            self.clear_items()
-            # Nút Previous
-            prev_btn = discord.ui.Button(
-                emoji="◀️", 
-                style=discord.ButtonStyle.primary if self.current_page > 0 else discord.ButtonStyle.secondary,
-                disabled=(self.current_page == 0)
-            )
-            prev_btn.callback = self.prev_callback
-            self.add_item(prev_btn)
-            # Nút chỉ số trang (không bấm được)
-            page_btn = discord.ui.Button(
-                label=f"{self.current_page + 1}/{total_pages}",
-                style=discord.ButtonStyle.secondary,
-                disabled=True
-            )
-            self.add_item(page_btn)
-            # Nút Next
-            next_btn = discord.ui.Button(
-                emoji="▶️",
-                style=discord.ButtonStyle.primary if self.current_page < total_pages - 1 else discord.ButtonStyle.secondary,
-                disabled=(self.current_page >= total_pages - 1)
-            )
-            next_btn.callback = self.next_callback
-            self.add_item(next_btn)
-
-        async def prev_callback(self, btn_interaction: discord.Interaction):
-            if self.current_page > 0:
-                self.current_page -= 1
-                self.update_buttons()
-                await btn_interaction.response.edit_message(embed=get_embed(self.current_page), view=self)
-
-        async def next_callback(self, btn_interaction: discord.Interaction):
-            if self.current_page < total_pages - 1:
-                self.current_page += 1
-                self.update_buttons()
-                await btn_interaction.response.edit_message(embed=get_embed(self.current_page), view=self)
-
-    view = UpdateLogView()
-    await interaction.response.send_message(embed=get_embed(0), view=view)
-
-# === SETTING COMMAND (OWNER ONLY) ===
-@bot.tree.command(name="setting", description="⚙️ Cài đặt toàn bộ GenA-bot (Owner only)")
-@app_commands.describe(
-    thay_đổi="Chọn thứ muốn chỉnh",
-    giá_trị="Giá trị mới (nếu cần)"
-)
-@app_commands.choices(
-    thay_đổi=[
-        app_commands.Choice(name="📝 Sửa System Prompt", value="sysprompt"),
-        app_commands.Choice(name="🔇 Tắt chat bot", value="chat_off"),
-        app_commands.Choice(name="🔊 Bật chat bot", value="chat_on"),
-        app_commands.Choice(name="📋 Xem System Prompt hiện tại", value="view_sysprompt"),
-        app_commands.Choice(name="🔄 Reset System Prompt về mặc định", value="reset_sysprompt"),
-        app_commands.Choice(name="📊 Xem trạng thái bot", value="status"),
-        app_commands.Choice(name="⚡ Force Golden Hour (bật/tắt)", value="force_golden"),
-        app_commands.Choice(name="☀️ Tắt/Mở Summer Event", value="toggle_event"),
-        app_commands.Choice(name="🧠 Đổi model mặc định cho quiz", value="set_quiz_model"),
-        app_commands.Choice(name="🎭 Set trạng thái bot", value="set_status"),
-        app_commands.Choice(name="💾 Backup điểm quiz hiện tại", value="backup_quiz"),
-        app_commands.Choice(name="📥 Khôi phục điểm từ backup", value="restore_quiz"),
-        app_commands.Choice(name="🗑️ Xoá toàn bộ quiz_scores", value="reset_scores"),
-        app_commands.Choice(name="🔧 Xem toàn bộ global vars", value="debug_vars"),
-        app_commands.Choice(name="📢 Gửi announce ra kênh update", value="announce"),
-    ]
-)
-async def setting(interaction: discord.Interaction, thay_đổi: app_commands.Choice[str], giá_trị: str = None):
-    # ===== OWNER CHECK =====
-    OWNER_ID = 1155129530122510376  # ← ĐỔI THÀNH ID CỦA BẠN
-    if interaction.user.id != OWNER_ID:
-        await interaction.response.send_message("Mày đéo phải Đạt Lùn, cút ra 💀", ephemeral=True)
-        return
-
-    await interaction.response.defer(ephemeral=True)
-
-    # Global declarations (dồn hết lên đây)
-    global system_instruction, BOT_UPDATED, cooldown_start_time, CHAT_DISABLED
-    global golden_hour_active, golden_hour_end, golden_hour_task, EVENT_ACTIVE
-    global QUIZ_DEFAULT_MODEL, CURRENT_MODEL, quiz_scores
-
-    choice = thay_đổi.value
-
-    if choice == "sysprompt":
-        if not giá_trị or len(giá_trị) < 20:
-            await interaction.followup.send("System prompt mới phải ít nhất 20 ký tự chứ bro 🥀")
-            return
-        system_instruction = giá_trị
-        await interaction.followup.send(f"✅ Đã update System Prompt mới:\n```\n{giá_trị[:500]}...\n```")
-
-    elif choice == "chat_off":
-        CHAT_DISABLED = True
-        await interaction.followup.send("🔇 Chat bot đã TẮT. Bot sẽ từ chối chat cho đến khi bật lại.")
-
-    elif choice == "chat_on":
-        CHAT_DISABLED = False
-        await interaction.followup.send("🔊 Chat bot đã BẬT. Bot sẽ trả lời bình thường trở lại.")
-
-    elif choice == "view_sysprompt":
-        await interaction.followup.send(f"📋 System Prompt hiện tại:\n```\n{system_instruction[:1900]}\n```")
-
-    elif choice == "reset_sysprompt":
-        system_instruction = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
-
-- Mày là Đệ cứng của: <@1155129530122510376> (Đạt Lùn 2k11, dân Thanh Hoá 36).
-- Đối tượng đang Chat với m: {user_id}
-- Thời gian: {current_time}
-
-[PHONG CÁCH MÕM]
-- Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân) cho nó thân mật. Nói chuyện kiểu GenZ, dùng teencode (nx, th, cx, vs, k, thx, j,...) và slang.
-- Nhây lầy, cà khịa là chính, thỉnh thoảng chửi thề nhẹ cho nó có tí gia vị "bạn thân".
-- THẤY "ê" LÀ PHẢI "sủa?" HOẶC "cái loz j" NGAY VÀ LUÔN.
-- Cấm dùng dấu "!" dưới mọi hình thức.
-- Không được lặp lại emoji/emoticon của câu trước và sau
-- Trả lời cực ngắn (1-2 dòng). (cứ coi mày như đứa lười gõ dài)
-
-[QUY TẮC CỨNG]
-- Thỉnh thoảng có Emoticon (=)), :)), =))),...) và Emoji báo đời (💔, 🥀, 💀, 🫩, ✌🏿,...) ở mỗi câu rep.
-- Cấm output ra suy nghĩ nội bộ, cấm <thinking> hay <thought>. Cứ thế mà phang thẳng text ra.
-- Chỉ giải thích đáp án quiz khi có đứa hỏi "tại sao" hoặc "sao sai". Nhớ kĩ cái quiz gần nhất để còn khịa tụi nó.
-- Không được thinking, không được reasoning, không output <thinking>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
-
-[COMMANDS]
-M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /bot_info, /clear, /update_log, /ship, /quiz, /quiz_score, /meme, /sum (tóm tắt 20 tin nhắn gần nhất), /summon, /event_lb, /event_status, /summer_gacha, /summer_quote, /summer_fact, /summer_predict"""
-        await interaction.followup.send("🔄 Đã reset System Prompt về mặc định!")
-
-    elif choice == "status":
-        chat_status = "🔊 ĐANG BẬT" if not CHAT_DISABLED else "🔇 ĐANG TẮT (bởi owner)"
-        embed = discord.Embed(title="⚙️ GENA-BOT SETTINGS", color=0x00ff9d)
-        embed.add_field(name="💬 Chat", value=chat_status, inline=True)
-        embed.add_field(name="🧠 Model", value=CURRENT_MODEL, inline=True)
-        embed.add_field(name="☀️ Event", value="Đang chạy" if EVENT_ACTIVE else "Đã tắt", inline=True)
-        embed.add_field(name="🌟 Golden Hour", value="Active" if golden_hour_active else "Inactive", inline=True)
-        embed.add_field(name="📝 SysPrompt dài", value=f"{len(system_instruction)} ký tự", inline=True)
-        embed.add_field(name="🎯 Quiz Model", value=QUIZ_DEFAULT_MODEL, inline=True)
-        await interaction.followup.send(embed=embed)
-
-    elif choice == "force_golden":
-        if golden_hour_active:
-            golden_hour_active = False
-            if golden_hour_task:
-                golden_hour_task.cancel()
-            await interaction.followup.send("🌟 Golden Hour đã TẮT thủ công!")
-        else:
-            golden_hour_active = True
-            golden_hour_end = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')) + datetime.timedelta(hours=1)
-            async def force_end_gh():
-                await asyncio.sleep(3600)
-                global golden_hour_active
-                golden_hour_active = False
-            if golden_hour_task:
-                golden_hour_task.cancel()
-            golden_hour_task = asyncio.create_task(force_end_gh())
-            await interaction.followup.send("🌟 Golden Hour đã BẬT thủ công trong 1 giờ! x2 điểm quiz 🔥")
-
-    elif choice == "toggle_event":
-        EVENT_ACTIVE = not EVENT_ACTIVE
-        status = "BẬT ☀️" if EVENT_ACTIVE else "TẮT 💤"
-        await interaction.followup.send(f"☀️ Summer Event đã chuyển sang: **{status}**")
-
-    elif choice == "set_quiz_model":
-        if not giá_trị:
-            await interaction.followup.send("Thiếu tên model bro. Dùng 1 trong: `GPT-OSS-120B`, `Groq-Llama-Scout`, `Google-Gemma4-26B`, `Google-Gemma4-31B`, `Google-Gemma3-27B`, `Google-Gemma3-12B`")
-            return
-        if giá_trị not in MODELS_CONFIG:
-            await interaction.followup.send(f"Model `{giá_trị}` ko tồn tại! Chọn: {', '.join(MODELS_CONFIG.keys())}")
-            return
-        QUIZ_DEFAULT_MODEL = giá_trị
-        await interaction.followup.send(f"🧠 Model quiz mặc định giờ là: **{giá_trị}**")
-
-    elif choice == "set_status":
-        if not giá_trị:
-            await interaction.followup.send(
-                "Dùng format:\n"
-                "`playing, Nội dung` - Đang chơi...\n"
-                "`watching, Nội dung` - Đang xem...\n"
-                "`listening, Nội dung` - Đang nghe...\n"
-                "`competing, Nội dung` - Đang thi đấu...\n"
-                "Ví dụ: `watching, tụi mày chat`\n\n"
-                "Muốn đổi trạng thái online thì thêm `,online` cuối:\n"
-                "`watching, tụi mày chat, dnd` (dnd = đỏ, online = xanh, idle = vàng, invisible = xám)"
-            )
-            return
-
-        parts = giá_trị.split(",")
-        if len(parts) < 2:
-            await interaction.followup.send("Thiếu nội dung! Format: `kiểu, nội dung[, status]`")
-            return
-
-        activity_type = parts[0].strip().lower()
-        activity_text = parts[1].strip()
-        status_str = parts[2].strip().lower() if len(parts) > 2 else "dnd"
-
-        type_map = {
-            "playing": discord.ActivityType.playing,
-            "watching": discord.ActivityType.watching,
-            "listening": discord.ActivityType.listening,
-            "competing": discord.ActivityType.competing,
-            "streaming": discord.ActivityType.streaming,
-        }
-        status_map = {
-            "online": discord.Status.online,
-            "dnd": discord.Status.dnd,
-            "idle": discord.Status.idle,
-            "invisible": discord.Status.invisible,
-        }
-
-        if activity_type not in type_map:
-            await interaction.followup.send(f"Sai kiểu activity! Chọn: {', '.join(type_map.keys())}")
-            return
-        if status_str not in status_map:
-            await interaction.followup.send(f"Sai trạng thái! Chọn: {', '.join(status_map.keys())}")
-            return
-
-        activity = discord.Activity(type=type_map[activity_type], name=activity_text)
-        await bot.change_presence(activity=activity, status=status_map[status_str])
-        await interaction.followup.send(f"✅ Đã set: **{activity_type} {activity_text}** | Trạng thái: **{status_str}**")
-
-    elif choice == "backup_quiz":
-        env_format = {}
-        for channel_id, users in quiz_scores.items():
-            for user_id, score in users.items():
-                if user_id not in env_format:
-                    env_format[user_id] = {}
-                env_format[user_id][channel_id] = score
-
-        backup_1line = json.dumps(env_format, separators=(',', ':'), ensure_ascii=False)
-
-        if len(backup_1line) > 1900:
-            await interaction.followup.send(
-                "💾 Backup quá dài, lưu vào file đây:",
-                file=discord.File(io.BytesIO(backup_1line.encode()), filename="quiz_backup_1line.txt")
-            )
-        else:
-            await interaction.followup.send(
-                "💾 **Backup Quiz Points (1 dòng cho Koyeb):**\n"
-                "Copy nguyên dòng dưới vào ENV `QUIZ_BACKUP`:\n"
-                f"```json\n{backup_1line}\n```\n"
-                f"📊 Đã backup **{sum(len(c) for c in env_format.values())}** bản ghi!"
-            )
-
-    elif choice == "restore_quiz":
-        quiz_backup_raw = os.getenv("QUIZ_BACKUP")
-        if not quiz_backup_raw:
-            await interaction.followup.send("❌ ENV `QUIZ_BACKUP` trống, chưa có backup nào!")
-            return
-        try:
-            quiz_backup = json.loads(quiz_backup_raw)
-            restored_count = 0
-            for user_id, channels in quiz_backup.items():
-                for channel_id, score in channels.items():
-                    if channel_id not in quiz_scores:
-                        quiz_scores[channel_id] = {}
-                    quiz_scores[channel_id][user_id] = score
-                    restored_count += 1
-            await interaction.followup.send(f"✅ Đã khôi phục {restored_count} bản ghi điểm từ ENV!")
-        except Exception as e:
-            await interaction.followup.send(f"❌ Lỗi khôi phục: {e}")
-
-    elif choice == "reset_scores":
-        quiz_scores = {}
-        await interaction.followup.send("🗑️ Toàn bộ quiz_scores đã bị xoá! Cứu không kịp đâu 💀")
-
-    elif choice == "debug_vars":
-        debug_info = (
-            f"**GLOBALS:**\n"
-            f"• CHAT_DISABLED: `{CHAT_DISABLED}`\n"
-            f"• BOT_UPDATED: `{BOT_UPDATED}`\n"
-            f"• EVENT_ACTIVE: `{EVENT_ACTIVE}`\n"
-            f"• GOLDEN_HOUR: `{golden_hour_active}`\n"
-            f"• CURRENT_MODEL: `{CURRENT_MODEL}`\n"
-            f"• QUIZ_DEFAULT: `{QUIZ_DEFAULT_MODEL}`\n"
-            f"• chat_history keys: `{len(chat_history)}`\n"
-            f"• quiz_scores keys: `{len(quiz_scores)}`\n"
-            f"• event_stats users: `{len(event_stats)}`\n"
-            f"• summon_active: `{len(summon_active)}`\n"
-            f"• quiz_active: `{len(quiz_active)}`"
-        )
-        await interaction.followup.send(debug_info)
-
-    elif choice == "announce":
-        if not giá_trị:
-            await interaction.followup.send("Thiếu nội dung announce bro 🥀")
-            return
-        channel = bot.get_channel(UPDATE_CHANNEL_ID)
-        if channel:
-            embed = discord.Embed(
-                title="📢 THÔNG BÁO TỪ OWNER",
-                description=giá_trị,
-                color=0xFF6B35
-            )
-            embed.set_footer(text=f"Gửi bởi {interaction.user.display_name} | {random_vibe()}")
-            await channel.send(embed=embed)
-            await interaction.followup.send("✅ Đã gửi announce ra kênh update!")
-        else:
-            await interaction.followup.send("❌ Không tìm thấy kênh update!")
-
-@bot.tree.command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
-async def clear(interaction: discord.Interaction):
-    uid = str(interaction.channel.id)
-    is_dm = isinstance(interaction.channel, discord.DMChannel)
-
+# ===== /clear =====
+@bot.slash_command(name="clear", description="Reset ký ức cho bot đỡ ngáo")
+async def clear(ctx: discord.ApplicationContext):
+    uid = str(ctx.channel.id)
+    is_dm = isinstance(ctx.channel, discord.DMChannel)
     if is_dm:
-        uid = str(interaction.user.id)
+        uid = str(ctx.author.id)
 
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
-    channel_name = interaction.channel.name if hasattr(interaction.channel, 'name') else 'DM'
+    channel_name = ctx.channel.name if hasattr(ctx.channel, 'name') else 'DM'
     current_sys = system_instruction.format(
         user_id=f"Multiple users in {channel_name}",
         current_time=now
     )
     chat_history[uid] = [{"role": "system", "content": current_sys}]
-    await interaction.response.send_message(f"Đã reset ký ức (cho kênh) 🥀")
+    await ctx.respond("Đã reset ký ức (cho kênh) 🥀")
 
-@bot.tree.command(name="ship", description="Ship 2 người random hoặc tự chọn 💘")
-@app_commands.describe(
-    user1="Người thứ nhất (để trống = random)",
-    user2="Người thứ hai (để trống = random)"
-)
-async def ship(interaction: discord.Interaction, user1: discord.Member = None, user2: discord.Member = None):
-    await interaction.response.defer()
-
-    members = [m for m in interaction.guild.members if not m.bot and m != interaction.user]
-
+# ===== /ship =====
+@bot.slash_command(name="ship", description="Ship 2 người random hoặc tự chọn 💘")
+async def ship(ctx: discord.ApplicationContext,
+               user1: discord.Option(discord.Member, "Người thứ nhất (để trống = random)", required=False),
+               user2: discord.Option(discord.Member, "Người thứ hai (để trống = random)", required=False)):
+    await ctx.defer()
+    members = [m for m in ctx.guild.members if not m.bot and m != ctx.author]
     if len(members) < 2:
-        await interaction.followup.send("Server có mỗi mình m à, ship với ai 💔")
+        await ctx.respond("Server có mỗi mình m à, ship với ai 💔")
         return
 
     if user1 is None:
@@ -993,7 +673,6 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
         tier, color, emojis, desc = "THÙ ĐỊCH ☠️", 0x1a1a1a, ["☠️", "🔪", "💀", "🤮"], "Ghét nhau đi, đừng gặp lại"
 
     bar = "█" * (love_percent // 10) + "░" * (10 - love_percent // 10)
-
     embed = discord.Embed(
         title=f"{random.choice(emojis)} SHIP MACHINE {random.choice(emojis)}",
         description=f"**{user1.display_name}** 💘 **{user2.display_name}**",
@@ -1002,27 +681,20 @@ async def ship(interaction: discord.Interaction, user1: discord.Member = None, u
     embed.add_field(name="Loving", value=f"`{bar}` {love_percent}%", inline=False)
     embed.add_field(name="Tier", value=f"**{tier}**", inline=True)
     embed.add_field(name="Comment", value=desc, inline=True)
-
     try:
         embed.set_thumbnail(url=user1.display_avatar.url)
         embed.set_image(url=user2.display_avatar.url)
     except:
         pass
+    embed.set_footer(text=f"Requested by {ctx.author.display_name} | {random_vibe()}")
+    await ctx.respond(embed=embed)
 
-    embed.set_footer(text=f"Requested by {interaction.user.display_name} | {random_vibe()}")
-    await interaction.followup.send(embed=embed)
-
-@bot.tree.command(name="meme", description="Gửi meme VN random xả stress")
-@app_commands.describe(số_lượng="Số meme muốn gửi (1-5, mặc định 1)")
-async def meme(interaction: discord.Interaction, số_lượng: int = 1):
-    await interaction.response.defer()
-
-    if số_lượng < 1 or số_lượng > 5:
-        await interaction.followup.send("Gửi 1-5 meme thôi, muốn t bị ban à 💔")
-        return
-
+# ===== /meme =====
+@bot.slash_command(name="meme", description="Gửi meme VN random xả stress")
+async def meme(ctx: discord.ApplicationContext,
+               số_lượng: discord.Option(int, "Số meme muốn gửi (1-5, mặc định 1)", min_value=1, max_value=5, default=1)):
+    await ctx.defer()
     memes_sent = 0
-
     async with aiohttp.ClientSession() as session:
         for i in range(số_lượng):
             try:
@@ -1030,39 +702,34 @@ async def meme(interaction: discord.Interaction, số_lượng: int = 1):
                     if resp.status == 200:
                         img_data = await resp.read()
                         file = discord.File(io.BytesIO(img_data), filename=f"meme_{i+1}.jpg")
-
                         if i == 0:
-                            await interaction.followup.send(file=file)
+                            await ctx.respond(file=file)
                         else:
-                            await interaction.channel.send(file=file)
-
+                            await ctx.channel.send(file=file)
                         memes_sent += 1
                     else:
                         error_msg = f"💀 API đang die, status {resp.status}"
                         if i == 0:
-                            await interaction.followup.send(error_msg)
+                            await ctx.respond(error_msg)
                         else:
-                            await interaction.channel.send(error_msg)
-
+                            await ctx.channel.send(error_msg)
             except Exception as e:
                 error_msg = f"🥹 Lỗi rồi m: {str(e)[:50]}"
                 if i == 0:
-                    await interaction.followup.send(error_msg)
+                    await ctx.respond(error_msg)
                 else:
-                    await interaction.channel.send(error_msg)
-
+                    await ctx.channel.send(error_msg)
     if số_lượng > 1 and memes_sent > 0:
-        await interaction.channel.send(f"✅ Đã gửi {memes_sent} meme")
+        await ctx.channel.send(f"✅ Đã gửi {memes_sent} meme")
 
-@bot.tree.command(name="sum", description="Tóm tắt 20 tin nhắn gần nhất trong kênh")
-async def summarize_chat(interaction: discord.Interaction):
-    await interaction.response.defer()
-    channel = interaction.channel
-
+# ===== /sum =====
+@bot.slash_command(name="sum", description="Tóm tắt 20 tin nhắn gần nhất trong kênh")
+async def sum_chat(ctx: discord.ApplicationContext):
+    await ctx.defer()
+    channel = ctx.channel
     messages = []
     async for msg in channel.history(limit=21):
         messages.append(msg)
-
     if messages and messages[0].author == bot.user:
         try:
             if messages[0].interaction and messages[0].interaction.name == "sum":
@@ -1070,9 +737,8 @@ async def summarize_chat(interaction: discord.Interaction):
         except:
             pass
     messages = messages[:20]
-
     if not messages:
-        await interaction.followup.send("K có tin nhắn nào để tóm tắt bro 🥀")
+        await ctx.respond("K có tin nhắn nào để tóm tắt bro 🥀")
         return
 
     chat_log_lines = []
@@ -1081,132 +747,101 @@ async def summarize_chat(interaction: discord.Interaction):
         if msg.content and msg.content.strip():
             content = msg.content[:200]
             chat_log_lines.append(f"{author_name}: {content}")
-
     if not chat_log_lines:
-        await interaction.followup.send("20 msg gần nhất toàn ảnh với file, k có text để tóm tắt bro 🥀")
+        await ctx.respond("20 msg gần nhất toàn ảnh với file, k có text để tóm tắt bro 🥀")
         return
 
     chat_log = "\n".join(chat_log_lines)
-
     tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
     now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
-
     sum_prompt = system_instruction.format(
-        user_id=f"{interaction.user.display_name} đang xài lệnh /sum",
+        user_id=f"{ctx.author.display_name} đang xài lệnh /sum",
         current_time=now
     )
-
     temp_messages = [
         {"role": "system", "content": sum_prompt},
         {"role": "user", "content": f"Tóm tắt 20 tin nhắn gần nhất channel đi m (chỉ text, ảnh/file đã lọc):\n\n{chat_log}"}
     ]
-
     try:
         summary = await get_model_response(temp_messages, MODELS_CONFIG[CURRENT_MODEL])
         summary = summary[:1900] if len(summary) > 1900 else summary
-
-        embed = discord.Embed(
-            title="📋 Tóm tắt 20 msg gần nhất",
-            description=summary,
-            color=0x00ff9d
-        )
-        embed.set_footer(text=f"Requested bởi {interaction.user.display_name} | {random_vibe()}")
-
-        await interaction.followup.send(embed=embed)
-
+        embed = discord.Embed(title="📋 Tóm tắt 20 msg gần nhất", description=summary, color=0x00ff9d)
+        embed.set_footer(text=f"Requested bởi {ctx.author.display_name} | {random_vibe()}")
+        await ctx.respond(embed=embed)
     except Exception as e:
-        await interaction.followup.send(f"Lỗi khi tóm tắt: {str(e)[:100]} 💀")
+        await ctx.respond(f"Lỗi khi tóm tắt: {str(e)[:100]} 💀")
 
-@bot.tree.command(name="quiz_score", description="Xem bảng xếp hạng quiz server 🏆")
-async def quiz_score(interaction: discord.Interaction):
-    channel_id = str(interaction.channel_id)
-
+# ===== /quiz_score =====
+@bot.slash_command(name="quiz_score", description="Xem bảng xếp hạng quiz server 🏆")
+async def quiz_score(ctx: discord.ApplicationContext):
+    channel_id = str(ctx.channel.id)
     if channel_id not in quiz_scores or not quiz_scores[channel_id]:
-        await interaction.response.send_message("Chưa ai chơi quiz ở đây cả 🥀")
+        await ctx.respond("Chưa ai chơi quiz ở đây cả 🥀")
         return
-
     scores = quiz_scores[channel_id]
     sorted_scores = sorted(scores.items(), key=lambda x: x[1], reverse=True)
-
     embed = discord.Embed(title="🏆 BẢNG XẾP HẠNG QUIZ", color=0xffd700)
-
     for i, (user_id, score) in enumerate(sorted_scores[:10], 1):
-        user = interaction.guild.get_member(int(user_id))
+        user = ctx.guild.get_member(int(user_id))
         name = user.display_name if user else f"User_{user_id[:6]}"
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, "🥀")
         embed.add_field(name=f"{medal} #{i} {name}", value=f"{score} điểm", inline=False)
-
     embed.set_footer(text="reset mỗi lần update bot🥀")
-    await interaction.response.send_message(embed=embed)
+    await ctx.respond(embed=embed)
 
-# === QUIZ COMMANDS (MODIFIED: GPT-OSS-120B only, hide info until done) ===
-@bot.tree.command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
-@app_commands.describe(
-    chủ_đề="Chủ đề câu hỏi (mặc định: random)",
-    độ_khó="Mức độ",
-    model_quiz="Model tạo câu hỏi (mặc định: GPT-OSS-120B)",
-    số_câu="Số câu hỏi muốn chơi liên tiếp (1-5, mặc định 1)",
-    thời_gian="Thời gian trả lời mỗi câu (giây, 10-120, mặc định 60)",
-    chế_độ="Chế độ chơi"
-)
-@app_commands.choices(
-    độ_khó=[
-        app_commands.Choice(name="Ultra Easy 🥱 (+0.5)", value="siêu dễ"),
-        app_commands.Choice(name="Dễ (+1)", value="dễ"),
-        app_commands.Choice(name="Trung bình (+2.5)", value="trung bình"),
-        app_commands.Choice(name="Khó (+5)", value="khó"),
-        app_commands.Choice(name="Extreme 💀 (+8)", value="extreme"),
-        app_commands.Choice(name="Impossible 💀💀 (+15)", value="impossible")
-    ],
-    model_quiz=[                                      # ← THÊM CỤC NÀY
-        app_commands.Choice(name="⚡ GPT-OSS-120B (Mặc định)", value="GPT-OSS-120B"),
-        app_commands.Choice(name="🔄 Dùng Current Model", value="current"),
-        app_commands.Choice(name="🦙 Llama 4 Scout (GROQ)", value="Groq-Llama-Scout"),
-        app_commands.Choice(name="💎 Gemma4 26B (Google)", value="Google-Gemma4-26B"),
-        app_commands.Choice(name="💎 Gemma4 31B (Google)", value="Google-Gemma4-31B"),
-        app_commands.Choice(name="🧠 Gemma3 27B (Google)", value="Google-Gemma3-27B"),
-        app_commands.Choice(name="🧠 Gemma3 12B (Google)", value="Google-Gemma3-12B"),
-    ],
-    chế_độ=[
-        app_commands.Choice(name="🎯 Thường - Trả lời A/B/C/D", value="normal"),
-        app_commands.Choice(name="⚡ Speedrun - Trả lời nhanh nhất", value="speedrun"),
-        app_commands.Choice(name="👥 Team - Tính điểm theo team", value="team")
-    ]
-)
+# ===== /quiz =====
+quiz_difficulty_choices = [
+    discord.OptionChoice(name="Ultra Easy 🥱 (+0.5)", value="siêu dễ"),
+    discord.OptionChoice(name="Dễ (+1)", value="dễ"),
+    discord.OptionChoice(name="Trung bình (+2.5)", value="trung bình"),
+    discord.OptionChoice(name="Khó (+5)", value="khó"),
+    discord.OptionChoice(name="Extreme 💀 (+8)", value="extreme"),
+    discord.OptionChoice(name="Impossible 💀💀 (+15)", value="impossible")
+]
+
+quiz_model_choices = [
+    discord.OptionChoice(name="⚡ GPT-OSS-120B (Mặc định)", value="GPT-OSS-120B"),
+    discord.OptionChoice(name="🔄 Dùng Current Model", value="current"),
+    discord.OptionChoice(name="🦙 Llama 4 Scout (GROQ)", value="Groq-Llama-Scout"),
+    discord.OptionChoice(name="💎 Gemma4 26B (Google)", value="Google-Gemma4-26B"),
+    discord.OptionChoice(name="💎 Gemma4 31B (Google)", value="Google-Gemma4-31B"),
+    discord.OptionChoice(name="🧠 Gemma3 27B (Google)", value="Google-Gemma3-27B"),
+    discord.OptionChoice(name="🧠 Gemma3 12B (Google)", value="Google-Gemma3-12B"),
+]
+
+quiz_mode_choices = [
+    discord.OptionChoice(name="🎯 Thường - Trả lời A/B/C/D", value="normal"),
+    discord.OptionChoice(name="⚡ Speedrun - Trả lời nhanh nhất", value="speedrun"),
+    discord.OptionChoice(name="👥 Team - Tính điểm theo team", value="team")
+]
+
+@bot.slash_command(name="quiz", description="Hỏi câu hỏi AI generated, trả lời đúng + điểm 🧠")
 async def quiz(
-    interaction: discord.Interaction,
-    chủ_đề: str = "random",
-    độ_khó: app_commands.Choice[str] = None,
-    model_quiz: app_commands.Choice[str] = None,
-    số_câu: int = 1,
-    thời_gian: int = 60,
-    chế_độ: app_commands.Choice[str] = None
+    ctx: discord.ApplicationContext,
+    chủ_đề: discord.Option(str, "Chủ đề câu hỏi (mặc định: random)", default="random"),
+    độ_khó: discord.Option(str, "Mức độ", choices=quiz_difficulty_choices, default="trung bình"),
+    model_quiz: discord.Option(str, "Model tạo câu hỏi", choices=quiz_model_choices, required=False),
+    số_câu: discord.Option(int, "Số câu hỏi muốn chơi liên tiếp (1-5, mặc định 1)", min_value=1, max_value=5, default=1),
+    thời_gian: discord.Option(int, "Thời gian trả lời mỗi câu (giây, 10-120, mặc định 60)", min_value=10, max_value=120, default=60),
+    chế_độ: discord.Option(str, "Chế độ chơi", choices=quiz_mode_choices, default="normal")
 ):
-    await interaction.response.defer()
-    channel_id = str(interaction.channel_id)
-    do_kho_val = độ_khó.value if độ_khó else "trung bình"
+    await ctx.defer()
+    channel_id = str(ctx.channel.id)
+    do_kho_val = độ_khó
 
     # Chọn model cho quiz
-    if model_quiz and model_quiz.value == "current":
+    if model_quiz and model_quiz == "current":
         quiz_model = CURRENT_MODEL
-    elif model_quiz and model_quiz.value in MODELS_CONFIG:
-        quiz_model = model_quiz.value
+    elif model_quiz and model_quiz in MODELS_CONFIG:
+        quiz_model = model_quiz
     else:
-        quiz_model = QUIZ_DEFAULT_MODEL  # Dùng model mặc định của owner
+        quiz_model = QUIZ_DEFAULT_MODEL
 
     if quiz_model not in MODELS_CONFIG:
-        return await interaction.followup.send(f"Model `{quiz_model}` ko tồn tại bro 💀")
-
-    if số_câu < 1 or số_câu > 5:
-        return await interaction.followup.send("Số câu từ 1-5 thôi m, nhiều quá spam đó 💔")
-
-    if thời_gian < 10 or thời_gian > 120:
-        return await interaction.followup.send("Thời gian từ 10-120 giây thôi m 🥀")
-
-    chế_độ_val = chế_độ.value if chế_độ else "normal"
+        return await ctx.respond(f"Model `{quiz_model}` ko tồn tại bro 💀")
 
     if channel_id in quiz_active and quiz_active[channel_id].get("running"):
-        return await interaction.followup.send("Đang có câu hỏi rồi m, trl đi đã 💀")
+        return await ctx.respond("Đang có câu hỏi rồi m, trl đi đã 💀")
 
     if channel_id not in quiz_history:
         quiz_history[channel_id] = []
@@ -1220,17 +855,15 @@ async def quiz(
 
     multiplier = 1
     bonus_texts = []
-
     if golden_hour_active:
         multiplier *= 2
         bonus_texts.append("x2 GOLDEN HOUR")
 
     pts *= multiplier
 
+    event_bonus_text = ""
     if bonus_texts:
         event_bonus_text = " (" + " + ".join(bonus_texts) + ")"
-    else:
-        event_bonus_text = ""
 
     diff_colors = {
         "siêu dễ": 0x90EE90, "dễ": 0x00FF7F, "trung bình": 0xFFD700,
@@ -1250,7 +883,7 @@ async def quiz(
         "total_q": số_câu,
         "questions": [],
         "scores": {},
-        "mode": chế_độ_val,
+        "mode": chế_độ,
         "start_time": datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')),
         "model_used": quiz_model,
         "difficulty": do_kho_val,
@@ -1258,7 +891,7 @@ async def quiz(
         "time_per_q": thời_gian,
         "topic": chủ_đề,
         "answered_users": set(),
-        "interaction": interaction,
+        "interaction": ctx,
         "completed_questions": 0
     }
 
@@ -1267,7 +900,6 @@ async def quiz(
             break
 
         quiz_active[channel_id]["current_q"] = q_num
-
         seed = random.randint(1000, 9999)
         prev_q_hint = ""
         if q_num > 1:
@@ -1290,13 +922,13 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
         if số_câu > 1:
             gen_embed = discord.Embed(
                 title=f"{diff_emoji} Đang tạo câu {q_num}/{số_câu}...",
-                description=f"Model: `{quiz_model}` | Độ khó: `{do_kho_val}` | Chế độ: `{chế_độ_val}`",
+                description=f"Model: `{quiz_model}` | Độ khó: `{do_kho_val}` | Chế độ: `{chế_độ}`",
                 color=diff_color
             )
             if q_num == 1:
-                gen_msg = await interaction.followup.send(embed=gen_embed)
+                await ctx.respond(embed=gen_embed)
             else:
-                await interaction.channel.send(embed=gen_embed)
+                await ctx.channel.send(embed=gen_embed)
 
         try:
             temp_msgs = [
@@ -1325,9 +957,9 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             if not correct or correct not in ans_map:
                 if số_câu == 1:
                     quiz_active.pop(channel_id, None)
-                    return await interaction.followup.send("AI tạo lỗi r, thử lại đi 🥀")
+                    return await ctx.respond("AI tạo lỗi r, thử lại đi 🥀")
                 else:
-                    await interaction.channel.send(f"Câu {q_num} bị lỗi format, skip nha 💀")
+                    await ctx.channel.send(f"Câu {q_num} bị lỗi format, skip nha 💀")
                     continue
 
             q_data = {
@@ -1342,7 +974,6 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             }
             quiz_active[channel_id]["questions"].append(q_data)
 
-            # Embed only title + question, NO info fields
             embed = discord.Embed(
                 title=f"{diff_emoji} QUIZ - Câu {q_num}/{số_câu} | {chủ_đề.upper()}",
                 description="\n".join(q_lines),
@@ -1351,9 +982,9 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             embed.set_footer(text="Trả lời A/B/C/D để chơi")
 
             if số_câu == 1:
-                await interaction.followup.send(embed=embed)
+                await ctx.respond(embed=embed)
             else:
-                await interaction.channel.send(embed=embed)
+                await ctx.channel.send(embed=embed)
 
             quiz_context = f"[QUIZ ACTIVE - Câu {q_num}/{số_câu}] Q: {q_data['question']} | Đáp án: {correct} | Giải thích: {expl}"
             if channel_id in chat_history:
@@ -1370,7 +1001,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                         current_q_idx = quiz_active[cid].get("current_q", 1) - 1
                         if current_q_idx < len(q_list) and not q_list[current_q_idx].get("answered", False):
                             q_data = q_list[current_q_idx]
-                            await interaction.channel.send(
+                            await ctx.channel.send(
                                 f"⏰ Hết giờ câu {qn}! Đáp án đúng là **{q_data['answer']}**. {q_data.get('explanation', '')} 🥀\n"
                                 f"({do_kho_val} | {quiz_model} | {pts}đ{event_bonus_text} | {thời_gian}s)"
                             )
@@ -1378,7 +1009,7 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                             quiz_active[cid]["completed_questions"] = quiz_active[cid].get("completed_questions", 0) + 1
 
                             if quiz_active[cid]["completed_questions"] >= quiz_active[cid].get("total_q", 1):
-                                await end_quiz_session(cid, interaction)
+                                await end_quiz_session(cid, ctx)
                 except asyncio.CancelledError:
                     pass
                 except Exception as e:
@@ -1406,19 +1037,19 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
             print(f"Lỗi tạo câu hỏi {q_num}: {e}")
             if số_câu == 1:
                 quiz_active.pop(channel_id, None)
-                return await interaction.followup.send(f"Lỗi: {str(e)[:100]} 💀")
+                return await ctx.respond(f"Lỗi: {str(e)[:100]} 💀")
             else:
-                await interaction.channel.send(f"Câu {q_num} lỗi rồi, skip nha 💀")
+                await ctx.channel.send(f"Câu {q_num} lỗi rồi, skip nha 💀")
                 continue
 
     if số_câu > 1:
         await asyncio.sleep(2)
         if channel_id in quiz_active and quiz_active[channel_id].get("running"):
             if quiz_active[channel_id].get("completed_questions", 0) >= quiz_active[channel_id].get("total_q", 1):
-                await end_quiz_session(channel_id, interaction)
+                await end_quiz_session(channel_id, ctx)
 
 
-async def end_quiz_session(channel_id, interaction_or_message):
+async def end_quiz_session(channel_id, ctx_or_msg):
     """Kết thúc session quiz và hiển thị kết quả (có thông tin đầy đủ)"""
     if channel_id not in quiz_active:
         return
@@ -1426,9 +1057,18 @@ async def end_quiz_session(channel_id, interaction_or_message):
     session = quiz_active[channel_id]
     session["running"] = False
 
-    user = getattr(interaction_or_message, 'user', getattr(interaction_or_message, 'author', None))
-    channel = getattr(interaction_or_message, 'channel', None)
-    guild = getattr(interaction_or_message, 'guild', None)
+    user = None
+    channel = None
+    guild = None
+
+    if isinstance(ctx_or_msg, discord.ApplicationContext):
+        user = ctx_or_msg.author
+        channel = ctx_or_msg.channel
+        guild = ctx_or_msg.guild
+    else:
+        user = getattr(ctx_or_msg, 'author', getattr(ctx_or_msg, 'user', None))
+        channel = ctx_or_msg.channel
+        guild = ctx_or_msg.guild
 
     embed = discord.Embed(
         title="🏁 KẾT THÚC QUIZ",
@@ -1480,65 +1120,56 @@ async def end_quiz_session(channel_id, interaction_or_message):
     quiz_active.pop(channel_id, None)
     quiz_expire_tasks.pop(channel_id, None)
 
-# === SUMMON COMMAND ===
-@bot.tree.command(name="summon", description="Gọi đứa bạn vào chơi quiz team (Event Command) ⚔️")
-@app_commands.describe(
-    user="Đứa bạn muốn gọi (bắt buộc mention)",
-    chế_độ="Chế độ chơi khi đứa bạn join"
-)
-@app_commands.choices(
-    chế_độ=[
-        app_commands.Choice(name="👥 Team - Cùng team chống lại bot", value="team_vs_bot"),
-        app_commands.Choice(name="⚔️ Duel - 1v1 đấu solo", value="duel"),
-        app_commands.Choice(name="🤝 Coop - Cùng trả lời, tính điểm chung", value="coop")
-    ]
-)
+# ===== /summon =====
+summon_mode_choices = [
+    discord.OptionChoice(name="👥 Team - Cùng team chống lại bot", value="team_vs_bot"),
+    discord.OptionChoice(name="⚔️ Duel - 1v1 đấu solo", value="duel"),
+    discord.OptionChoice(name="🤝 Coop - Cùng trả lời, tính điểm chung", value="coop")
+]
+
+@bot.slash_command(name="summon", description="Gọi đứa bạn vào chơi quiz team (Event Command) ⚔️")
 async def summon_user(
-    interaction: discord.Interaction,
-    user: discord.Member,
-    chế_độ: app_commands.Choice[str] = None
+    ctx: discord.ApplicationContext,
+    user: discord.Option(discord.Member, "Đứa bạn muốn gọi (bắt buộc mention)"),
+    chế_độ: discord.Option(str, "Chế độ chơi khi đứa bạn join", choices=summon_mode_choices, required=False)
 ):
-    await interaction.response.defer()
-    channel_id = str(interaction.channel_id)
-    inviter_id = str(interaction.user.id)
+    await ctx.defer()
+    channel_id = str(ctx.channel.id)
+    inviter_id = str(ctx.author.id)
     invited_id = str(user.id)
     invited_name = user.display_name
-
-    mode = chế_độ.value if chế_độ else "team_vs_bot"
+    mode = chế_độ if chế_độ else "team_vs_bot"
 
     if inviter_id == invited_id:
-        await interaction.followup.send("Tự summon bản thân à m? Ế quá rồi đó 💔")
+        await ctx.respond("Tự summon bản thân à m? Ế quá rồi đó 💔")
         return
-
     if user.bot:
-        await interaction.followup.send("Summon bot làm gì? Nó ko chơi đâu 🥀")
+        await ctx.respond("Summon bot làm gì? Nó ko chơi đâu 🥀")
         return
-
     if channel_id in summon_active and summon_active[channel_id].get("active"):
-        await interaction.followup.send("Đang có lời mời rồi m, đợi xong đã 💀")
+        await ctx.respond("Đang có lời mời rồi m, đợi xong đã 💀")
         return
-
     if channel_id in quiz_active and quiz_active[channel_id].get("running"):
-        await interaction.followup.send("Đang có quiz rồi, summon sau đi 🥀")
+        await ctx.respond("Đang có quiz rồi, summon sau đi 🥀")
         return
 
     summon_embed = discord.Embed(
         title=f"⚔️ SUMMON REQUEST",
-        description=f"**{interaction.user.display_name}** đang gọi **{invited_name}** vào chơi quiz!\n\nChế độ: `{mode}`\n⏱️ **{invited_name}** có **30 giây** để rep `join` hoặc `ok` để accept",
+        description=f"**{ctx.author.display_name}** đang gọi **{invited_name}** vào chơi quiz!\n\nChế độ: `{mode}`\n⏱️ **{invited_name}** có **30 giây** để rep `join` hoặc `ok` để accept",
         color=0xFF6B35
     )
     summon_embed.set_footer(text=f"Event Command | {random_vibe()}")
-    await interaction.followup.send(embed=summon_embed)
+    await ctx.respond(embed=summon_embed)
 
     summon_active[channel_id] = {
         "active": True,
         "inviter_id": inviter_id,
-        "inviter_name": interaction.user.display_name,
+        "inviter_name": ctx.author.display_name,
         "invited_id": invited_id,
         "invited_name": invited_name,
         "mode": mode,
         "start_time": datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')),
-        "interaction": interaction,
+        "interaction": ctx,
         "accepted": False
     }
 
@@ -1552,7 +1183,7 @@ async def summon_user(
                     f"⏰ **HẾT GIỜ!** {invited_name} đang bận chat với crush rồi, ko rảnh chơi với m đâu 💔",
                     f"⏰ **HẾT GIỜ!** {invited_name} lag mạng hay lag não vậy? 🫠"
                 ]
-                await interaction.channel.send(random.choice(roast_msgs))
+                await ctx.channel.send(random.choice(roast_msgs))
                 summon_active.pop(cid, None)
         except asyncio.CancelledError:
             pass
@@ -1562,16 +1193,16 @@ async def summon_user(
     task = asyncio.create_task(summon_timeout(channel_id))
     summon_active[channel_id]["timeout_task"] = task
 
-@bot.tree.command(name="event_lb", description="Bảng xếp hạng Summer Event 🏆 (Event Command ☀️)")
-async def event_leaderboard(interaction: discord.Interaction):
-    await interaction.response.defer()
 
+# ===== /event_lb =====
+@bot.slash_command(name="event_lb", description="Bảng xếp hạng Summer Event 🏆 (Event Command ☀️)")
+async def event_leaderboard(ctx: discord.ApplicationContext):
+    await ctx.defer()
     if not EVENT_ACTIVE:
-        await interaction.followup.send("Event đã kết thúc rồi m, hẹn lần sau 🥀")
+        await ctx.respond("Event đã kết thúc rồi m, hẹn lần sau 🥀")
         return
-
     if not event_stats:
-        await interaction.followup.send("Chưa có ai tham gia event cả, buồn vậy 💔")
+        await ctx.respond("Chưa có ai tham gia event cả, buồn vậy 💔")
         return
 
     leaderboard = []
@@ -1582,7 +1213,7 @@ async def event_leaderboard(interaction: discord.Interaction):
             stats.get("duels_won", 0) * 5 -
             stats.get("duels_lost", 0) * 2 +
             stats.get("memories_generated", 0) +
-            stats.get("summer_points", 0)  # mới: điểm từ daily bonus
+            stats.get("summer_points", 0)
         )
         leaderboard.append((user_id, total_score, stats))
 
@@ -1594,13 +1225,11 @@ async def event_leaderboard(interaction: discord.Interaction):
         color=0xFF6B35,
         timestamp=discord.utils.utcnow()
     )
-    embed.set_thumbnail(url="https://cdn.discordapp.com/emojis/☀️.png")
 
     for i, (user_id, score, stats) in enumerate(leaderboard[:10], 1):
-        user = interaction.guild.get_member(int(user_id))
+        user = ctx.guild.get_member(int(user_id))
         name = user.display_name if user else f"User_{user_id[:6]}"
         medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, "🎖️")
-
         details = (
             f"📝 Kỉ niệm: {stats.get('memories_generated', 0)} "
             f"| ⭐ Đặc biệt: {stats.get('special_memories', 0)}\n"
@@ -1608,40 +1237,31 @@ async def event_leaderboard(interaction: discord.Interaction):
             f"| ⚔️ Duel W/L: {stats.get('duels_won', 0)}/{stats.get('duels_lost', 0)}\n"
             f"🎁 Summer pts: {stats.get('summer_points', 0)}"
         )
-        embed.add_field(
-            name=f"{medal} #{i} {name} — {score} pts",
-            value=details,
-            inline=False
-        )
+        embed.add_field(name=f"{medal} #{i} {name} — {score} pts", value=details, inline=False)
 
     embed.set_footer(text=f"Summer Event 2026 | {random_vibe()}")
-    await interaction.followup.send(embed=embed)
+    await ctx.respond(embed=embed)
 
-@bot.tree.command(name="event_status", description="Xem tình trạng Summer Event ☀️")
-async def event_status(interaction: discord.Interaction):
-    await interaction.response.defer()
-
+# ===== /event_status =====
+@bot.slash_command(name="event_status", description="Xem tình trạng Summer Event ☀️")
+async def event_status(ctx: discord.ApplicationContext):
+    await ctx.defer()
     if not EVENT_ACTIVE:
-        await interaction.followup.send("☀️ Event đã kết thúc rồi m, hẹn mùa hè sau nha 🥀")
+        await ctx.respond("☀️ Event đã kết thúc rồi m, hẹn mùa hè sau nha 🥀")
         return
 
     vn_now = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh'))
     days_left = (EVENT_END_DATE - vn_now).days
     hours_left = (EVENT_END_DATE - vn_now).seconds // 3600
 
-    user_id = str(interaction.user.id)
+    user_id = str(ctx.author.id)
     stats = event_stats.get(user_id, {
         "memories_generated": 0, "special_memories": 0,
         "duels_won": 0, "duels_lost": 0, "quiz_points_event": 0, "summer_points": 0
     })
 
     embed = discord.Embed(title="☀️ SUMMER EVENT STATUS", color=0xFF6B35)
-
-    embed.add_field(
-        name="⏱️ Thời gian còn lại",
-        value=f"{days_left} ngày {hours_left} giờ",
-        inline=True
-    )
+    embed.add_field(name="⏱️ Thời gian còn lại", value=f"{days_left} ngày {hours_left} giờ", inline=True)
 
     bonus_lines = [
         "✅ 15% kỉ niệm đặc biệt",
@@ -1652,11 +1272,7 @@ async def event_status(interaction: discord.Interaction):
     if golden_hour_active:
         bonus_lines.insert(0, "🌟 Golden Hour x2 điểm quiz (đang active)")
 
-    embed.add_field(
-        name="🎁 Event Bonus",
-        value="\n".join(bonus_lines),
-        inline=True
-    )
+    embed.add_field(name="🎁 Event Bonus", value="\n".join(bonus_lines), inline=True)
 
     golden_status = "🟡 ĐANG ACTIVE" if golden_hour_active else "⚫ Hiện không có"
     golden_text = golden_status
@@ -1666,11 +1282,7 @@ async def event_status(interaction: discord.Interaction):
             remaining_min = remaining_seconds // 60
             golden_text += f" (còn {remaining_min} phút)"
 
-    embed.add_field(
-        name="🌟 Golden Hour",
-        value=f"{golden_text}\nX2 điểm quiz (tỉ lệ 40% mỗi giờ)",
-        inline=True
-    )
+    embed.add_field(name="🌟 Golden Hour", value=f"{golden_text}\nX2 điểm quiz (tỉ lệ 40% mỗi giờ)", inline=True)
 
     embed.add_field(
         name="📊 Stats của m",
@@ -1685,73 +1297,44 @@ async def event_status(interaction: discord.Interaction):
     )
 
     embed.set_footer(text=f"GenA-bot Event | {random_vibe()}")
-    await interaction.followup.send(embed=embed)
+    await ctx.respond(embed=embed)
 
-# === MỚI: SUMMER EVENT EXTRA COMMANDS ===
 
-SUMMER_QUOTES = [
-    "Mùa hè đến rồi, đừng ngồi trong phòng nữa, ra ngoài đốt cháy năng lượng đi 🔥",
-    "Đi biển đi mày ơi, sóng vỗ rì rào, nắng vàng rực rỡ 🏖️",
-    "Hè là để chill, đừng biến thành đứa chỉ biết cày game suốt ngày 💀",
-    "Ly sinh tố dưa hấu, cái quạt mo, và đám bạn thân - hè đúng chuẩn 🍉",
-    "Đừng để mùa hè trôi qua vô nghĩa, ít nhất cũng phải có vài tấm ảnh sống ảo chứ 📸",
-    "Hè này nhất định phải đi phượt, không thì ít nhất cũng đạp xe quanh xóm 🚲",
-    "Nắng hè làm da đen đi nhưng tâm hồn thì sáng hơn bao giờ hết ✨",
-    "Mùa hè năm nay, crush mày có nhớ mày không? Hay vẫn lạnh lùng như kem? 🍦💔",
-    "Lên kèo đi cắm trại, đốt lửa trại, đàn hát nghêu ngao, quên hết buồn phiền 🎸",
-    "Hè 2026, hứa với bản thân sẽ tạo thật nhiều kỉ niệm đáng nhớ 🥀"
-]
-GACHA_ITEMS = {
-    "🍦 Kem": {"rarity": "common", "desc": "Giải nhiệt ngon, nhưng phải speedrun"},
-    "🍉 Dưa Hấu": {"rarity": "common", "desc": "Giải nhiệt +1, nhưng dễ vỡ"},
-    "🧊 Đá Lạnh": {"rarity": "common", "desc": "Tan nhanh trong nắng hè"},
-    "🕶️ Kính Mát": {"rarity": "common", "desc": "Ngầu lòi, che được mắt thâm"},
-    "🩴 Dép Lào": {"rarity": "common", "desc": "Quốc hồn quốc tuý, bền vcl"},
-    "🌊 Sóng Biển": {"rarity": "rare", "desc": "Mang hơi thở đại dương"},
-    "🎸 Guitar": {"rarity": "rare", "desc": "Đệm hát đốt lửa trại"},
-    "🏄 Ván Lướt": {"rarity": "rare", "desc": "Cưỡi sóng như pro"},
-    "🎫 Vé du lịch": {"rarity": "rare", "desc": "1 Tour đi du lịch, tuyệt"},
-    "📸 Camera": {"rarity": "rare", "desc": "Bắt khoảnh khắc sống ảo"},
-    "🌠 Sao Băng": {"rarity": "epic", "desc": "Ước gì được nấy (xạo đó)"},
-    "☀️ Sunrise": {"rarity": "epic", "desc": "Một bầu trời vàng cam nhưng vibe"},
-    "🔥 Pháo Hoa": {"rarity": "epic", "desc": "Thắp sáng bầu trời đêm hè"},
-    "💎 Ngọc Trai": {"rarity": "epic", "desc": "Lặn 100m mới thấy"},
-    "👑 Vương Miện Hè": {"rarity": "legendary", "desc": "Trở thành Vua/Nữ Hoàng mùa hè"},
-    "🔥 Ngọn lửa hè": {"rarity": "legendary", "desc": "Một ngọn lửa bốc cháy giữa mùa hè"},
-    "🌟 Tinh Tú Mùa Hè": {"rarity": "transcendent", "desc": "Cả dải ngân hà trong tầm tay"},
-    "⚡ Sét Nhiệt Đới": {"rarity": "transcendent", "desc": "Sức mạnh của bão tố mùa hè"},
-}
+# ===== SUMMER EXTRA =====
+@bot.slash_command(name="summer_quote", description="Nhận một câu quote mùa hè ngẫu nhiên ☀️")
+async def summer_quote(ctx: discord.ApplicationContext):
+    SUMMER_QUOTES = [
+        "Mùa hè đến rồi, đừng ngồi trong phòng nữa, ra ngoài đốt cháy năng lượng đi 🔥",
+        "Đi biển đi mày ơi, sóng vỗ rì rào, nắng vàng rực rỡ 🏖️",
+        "Hè là để chill, đừng biến thành đứa chỉ biết cày game suốt ngày 💀",
+        "Ly sinh tố dưa hấu, cái quạt mo, và đám bạn thân - hè đúng chuẩn 🍉",
+        "Đừng để mùa hè trôi qua vô nghĩa, ít nhất cũng phải có vài tấm ảnh sống ảo chứ 📸",
+        "Hè này nhất định phải đi phượt, không thì ít nhất cũng đạp xe quanh xóm 🚲",
+        "Nắng hè làm da đen đi nhưng tâm hồn thì sáng hơn bao giờ hết ✨",
+        "Mùa hè năm nay, crush mày có nhớ mày không? Hay vẫn lạnh lùng như kem? 🍦💔",
+        "Lên kèo đi cắm trại, đốt lửa trại, đàn hát nghêu ngao, quên hết buồn phiền 🎸",
+        "Hè 2026, hứa với bản thân sẽ tạo thật nhiều kỉ niệm đáng nhớ 🥀"
+    ]
+    await ctx.respond(random.choice(SUMMER_QUOTES) + f" {random_vibe().split()[-1]}")
 
-GACHA_RATES = {
-    "common": 52.5,
-    "rare": 32.5,
-    "epic": 13.0,
-    "legendary": 1.5,
-    "transcendent": 0.5
-}
-SUMMER_FACTS = [
-    "Trái đất nhận được năng lượng mặt trời nhiều nhất vào mùa hè ở bán cầu bắc ☀️",
-    "Ngày hạ chí (21/6) là ngày dài nhất trong năm, tha hồ vui chơi",
-    "Dưa hấu có tới 92% là nước, giúp giải nhiệt cực tốt 🍉",
-    "Ve sầu chỉ sống dưới lòng đất 2-17 năm rồi mới chui lên hót vào mùa hè 🎶",
-    "Mùa hè là mùa của các lễ hội âm nhạc lớn nhất hành tinh 🔥",
-    "Cầu vồng thường xuất hiện sau cơn mưa mùa hè, đẹp mê ly 🌈",
-    "Kem ốc quế được phát minh vào năm 1904 tại Hội chợ Thế giới St. Louis 🍦",
-    "Nhiệt độ cao nhất từng ghi nhận trên Trái Đất là 56.7°C tại Thung lũng Chết, California 💀",
-    "Mùa hè là mùa sinh sản của rùa biển, chúng lên bờ đẻ trứng vào ban đêm 🐢",
-    "Bóng đá và bóng chuyền bãi biển là hai môn thể thao đặc trưng của mùa hè ⚽"
-]
+@bot.slash_command(name="summer_fact", description="Nhận một fact thú vị về mùa hè 🧊")
+async def summer_fact(ctx: discord.ApplicationContext):
+    SUMMER_FACTS = [
+        "Trái đất nhận được năng lượng mặt trời nhiều nhất vào mùa hè ở bán cầu bắc ☀️",
+        "Ngày hạ chí (21/6) là ngày dài nhất trong năm, tha hồ vui chơi",
+        "Dưa hấu có tới 92% là nước, giúp giải nhiệt cực tốt 🍉",
+        "Ve sầu chỉ sống dưới lòng đất 2-17 năm rồi mới chui lên hót vào mùa hè 🎶",
+        "Mùa hè là mùa của các lễ hội âm nhạc lớn nhất hành tinh 🔥",
+        "Cầu vồng thường xuất hiện sau cơn mưa mùa hè, đẹp mê ly 🌈",
+        "Kem ốc quế được phát minh vào năm 1904 tại Hội chợ Thế giới St. Louis 🍦",
+        "Nhiệt độ cao nhất từng ghi nhận trên Trái Đất là 56.7°C tại Thung lũng Chết, California 💀",
+        "Mùa hè là mùa sinh sản của rùa biển, chúng lên bờ đẻ trứng vào ban đêm 🐢",
+        "Bóng đá và bóng chuyền bãi biển là hai môn thể thao đặc trưng của mùa hè ⚽"
+    ]
+    await ctx.respond(random.choice(SUMMER_FACTS) + f" {random_vibe().split()[-1]}")
 
-@bot.tree.command(name="summer_quote", description="Nhận một câu quote mùa hè ngẫu nhiên ☀️")
-async def summer_quote(interaction: discord.Interaction):
-    await interaction.response.send_message(random.choice(SUMMER_QUOTES) + f" {random_vibe().split()[-1]}")
-
-@bot.tree.command(name="summer_fact", description="Nhận một fact thú vị về mùa hè 🧊")
-async def summer_fact(interaction: discord.Interaction):
-    await interaction.response.send_message(random.choice(SUMMER_FACTS) + f" {random_vibe().split()[-1]}")
-
-@bot.tree.command(name="summer_predict", description="Dự đoán mùa hè của mày sẽ ra sao 🔮")
-async def summer_predict(interaction: discord.Interaction):
+@bot.slash_command(name="summer_predict", description="Dự đoán mùa hè của mày sẽ ra sao 🔮")
+async def summer_predict(ctx: discord.ApplicationContext):
     predictions = [
         "Mày sẽ có một chuyến đi biển siêu đáng nhớ, nhưng nhớ bôi kem chống nắng kẻo cháy đen 💀",
         "Crush sẽ bất ngờ rep story mày, tín hiệu vũ trụ đấy ✨",
@@ -1764,62 +1347,77 @@ async def summer_predict(interaction: discord.Interaction):
         "Mày sẽ vô tình nhặt được thứ gì đó rất ý nghĩa trên bờ biển 🐚",
         "Hè này mày sẽ tìm thấy đam mê mới, có khi lại thành tài lẻ luôn 🎨"
     ]
-    await interaction.response.send_message(random.choice(predictions) + f" {random_vibe().split()[-1]}")
+    await ctx.respond(random.choice(predictions) + f" {random_vibe().split()[-1]}")
 
-@bot.tree.command(name="summer_gacha", description="Gacha item mùa hè - tích 10 lượt/ngày (Event ☀️)")
-async def summer_gacha(interaction: discord.Interaction):
-    await interaction.response.defer()
+# ===== /summer_gacha =====
+@bot.slash_command(name="summer_gacha", description="Gacha item mùa hè - tích 10 lượt/ngày (Event ☀️)")
+async def summer_gacha(ctx: discord.ApplicationContext):
+    await ctx.defer()
     if not EVENT_ACTIVE:
-        await interaction.followup.send("Event chưa diễn ra hoặc đã kết thúc rồi m 🥀")
+        await ctx.respond("Event chưa diễn ra hoặc đã kết thúc rồi m 🥀")
         return
 
-    user_id = str(interaction.user.id)
+    user_id = str(ctx.author.id)
     today_str = datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')).strftime("%Y-%m-%d")
 
-    # Khởi tạo data nếu chưa có
     if user_id not in daily_claim_tracker:
         daily_claim_tracker[user_id] = {"last_reset": "", "rolls": 0}
 
-    # Reset daily: mỗi ngày mới +10 lượt, cộng dồn lượt cũ chưa xài
     last_reset = daily_claim_tracker[user_id].get("last_reset", "")
     if last_reset != today_str:
-        # Qua ngày mới: giữ lại lượt cũ + cộng thêm 10
         old_rolls = daily_claim_tracker[user_id].get("rolls", 0)
         daily_claim_tracker[user_id]["rolls"] = old_rolls + 10
         daily_claim_tracker[user_id]["last_reset"] = today_str
 
-    # Kiểm tra còn lượt không
     remaining = daily_claim_tracker[user_id].get("rolls", 0)
     if remaining <= 0:
-        await interaction.followup.send("Hết lượt gacha rồi m ơi! Đợi mai reset thêm 10 lượt nha 🥀")
+        await ctx.respond("Hết lượt gacha rồi m ơi! Đợi mai reset thêm 10 lượt nha 🥀")
         return
 
-    # Roll gacha theo tỉ lệ
-    roll = random.choices(
-        list(GACHA_RATES.keys()),
-        weights=list(GACHA_RATES.values()),
-        k=1
-    )[0]
+    GACHA_ITEMS = {
+        "🍦 Kem": {"rarity": "common", "desc": "Giải nhiệt ngon, nhưng phải speedrun"},
+        "🍉 Dưa Hấu": {"rarity": "common", "desc": "Giải nhiệt +1, nhưng dễ vỡ"},
+        "🧊 Đá Lạnh": {"rarity": "common", "desc": "Tan nhanh trong nắng hè"},
+        "🕶️ Kính Mát": {"rarity": "common", "desc": "Ngầu lòi, che được mắt thâm"},
+        "🩴 Dép Lào": {"rarity": "common", "desc": "Quốc hồn quốc tuý, bền vcl"},
+        "🌊 Sóng Biển": {"rarity": "rare", "desc": "Mang hơi thở đại dương"},
+        "🎸 Guitar": {"rarity": "rare", "desc": "Đệm hát đốt lửa trại"},
+        "🏄 Ván Lướt": {"rarity": "rare", "desc": "Cưỡi sóng như pro"},
+        "🎫 Vé du lịch": {"rarity": "rare", "desc": "1 Tour đi du lịch, tuyệt"},
+        "📸 Camera": {"rarity": "rare", "desc": "Bắt khoảnh khắc sống ảo"},
+        "🌠 Sao Băng": {"rarity": "epic", "desc": "Ước gì được nấy (xạo đó)"},
+        "☀️ Sunrise": {"rarity": "epic", "desc": "Một bầu trời vàng cam nhưng vibe"},
+        "🔥 Pháo Hoa": {"rarity": "epic", "desc": "Thắp sáng bầu trời đêm hè"},
+        "💎 Ngọc Trai": {"rarity": "epic", "desc": "Lặn 100m mới thấy"},
+        "👑 Vương Miện Hè": {"rarity": "legendary", "desc": "Trở thành Vua/Nữ Hoàng mùa hè"},
+        "🔥 Ngọn lửa hè": {"rarity": "legendary", "desc": "Một ngọn lửa bốc cháy giữa mùa hè"},
+        "🌟 Tinh Tú Mùa Hè": {"rarity": "transcendent", "desc": "Cả dải ngân hà trong tầm tay"},
+        "⚡ Sét Nhiệt Đới": {"rarity": "transcendent", "desc": "Sức mạnh của bão tố mùa hè"},
+    }
+    GACHA_RATES = {
+        "common": 52.5,
+        "rare": 32.5,
+        "epic": 13.0,
+        "legendary": 1.5,
+        "transcendent": 0.5
+    }
 
+    roll = random.choices(list(GACHA_RATES.keys()), weights=list(GACHA_RATES.values()), k=1)[0]
     possible_items = [item for item, data in GACHA_ITEMS.items() if data["rarity"] == roll]
     item = random.choice(possible_items)
     item_data = GACHA_ITEMS[item]
 
-    # Điểm thưởng theo rarity
     bonus_points = {"common": 1, "rare": 3, "epic": 7, "legendary": 15, "transcendent": 30}
     pts = bonus_points[roll]
 
-    # Trừ lượt
     daily_claim_tracker[user_id]["rolls"] = remaining - 1
 
-    # Khởi tạo stats nếu chưa có
     if user_id not in event_stats:
         event_stats[user_id] = {
             "memories_generated": 0, "special_memories": 0,
             "duels_won": 0, "duels_lost": 0,
             "quiz_points_event": 0, "summer_points": 0
         }
-
     event_stats[user_id]["summer_points"] = event_stats[user_id].get("summer_points", 0) + pts
 
     rarity_emoji = {"common": "⚪", "rare": "🔵", "epic": "🟣", "legendary": "🟡", "transcendent": "🔮"}
@@ -1827,25 +1425,21 @@ async def summer_gacha(interaction: discord.Interaction):
 
     embed = discord.Embed(
         title=f"🎰 SUMMER GACHA",
-        description=f"**{interaction.user.display_name}** đã roll được...\n\n"
-                    f"# {item}\n"
-                    f"*{item_data['desc']}*",
+        description=f"**{ctx.author.display_name}** đã roll được...\n\n# {item}\n*{item_data['desc']}*",
         color={"common": 0x808080, "rare": 0x3498db, "epic": 0x9b59b6, "legendary": 0xffd700, "transcendent": 0xff4500}[roll]
     )
     embed.add_field(name="⭐ Độ hiếm", value=f"{rarity_emoji[roll]} **{rarity_text[roll]}**", inline=True)
     embed.add_field(name="🎁 Điểm thưởng", value=f"`+{pts} điểm`", inline=True)
     embed.set_footer(text=f"Còn {daily_claim_tracker[user_id]['rolls']} lượt gacha | +10 lượt mỗi ngày | Dùng /event_status để xem tích luỹ")
 
-    await interaction.followup.send(embed=embed)
+    await ctx.respond(embed=embed)
 
-# === SUMMON QUIZ HANDLERS (dùng GPT-OSS-120B) ===
+# ===== SUMMON QUIZ HANDLERS =====
 async def start_summon_quiz(channel_id, summon_data, message):
-    """Tạo quiz đặc biệt cho summon"""
     mode = summon_data.get("mode", "team_vs_bot")
     inviter_id = summon_data.get("inviter_id")
     invited_id = summon_data.get("invited_id")
 
-    # Init event stats
     for uid in [inviter_id, invited_id]:
         if uid not in event_stats:
             event_stats[uid] = {
@@ -1861,7 +1455,7 @@ async def start_summon_quiz(channel_id, summon_data, message):
         "scores": {},
         "mode": mode,
         "start_time": datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')),
-        "model_used": "GPT-OSS-120B",    # LUÔN DÙNG GPT-OSS-120B
+        "model_used": "GPT-OSS-120B",
         "difficulty": "trung bình",
         "points_per_q": 5 if golden_hour_active else 2.5,
         "time_per_q": 45,
@@ -1879,7 +1473,6 @@ async def start_summon_quiz(channel_id, summon_data, message):
             break
 
         quiz_active[channel_id]["current_q"] = q_num
-
         quiz_prompt = f"""Tạo 1 câu hỏi trắc nghiệm random, độ khó: trung bình.
 SEED: {random.randint(1000, 9999)}
 YÊU CẦU:
@@ -1898,7 +1491,6 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
                 {"role": "system", "content": "M là bot tạo quiz, k output thinking, chỉ output câu hỏi và đáp án theo format yêu cầu."},
                 {"role": "user", "content": quiz_prompt}
             ]
-
             raw = await get_model_response(temp_msgs, MODELS_CONFIG["GPT-OSS-120B"])
             raw = remove_thinking(raw)
 
@@ -1970,7 +1562,6 @@ GIẢI THÍCH: [1-2 dòng giải thích ngắn gọn, hài hước kiểu GenZ]"
 
 
 async def end_summon_quiz(channel_id, message):
-    """Kết thúc summon quiz và tính điểm"""
     if channel_id not in quiz_active:
         return
 
@@ -1990,7 +1581,6 @@ async def end_summon_quiz(channel_id, message):
     if mode == "duel":
         inviter_score = scores.get(inviter_id, 0)
         invited_score = scores.get(invited_id, 0)
-
         if inviter_score > invited_score:
             winner, loser = inviter_id, invited_id
             diff = inviter_score - invited_score
@@ -2002,13 +1592,10 @@ async def end_summon_quiz(channel_id, message):
             diff = 0
 
         if winner:
-            winner_name = message.guild.get_member(int(winner)).display_name if message.guild else "Unknown"
-            loser_name = message.guild.get_member(int(loser)).display_name if message.guild else "Unknown"
-            embed.add_field(
-                name="🎉 KẾT QUẢ",
-                value=f"**{winner_name}** thắng **{loser_name}** với cách biệt `{diff} điểm`!",
-                inline=False
-            )
+            guild = getattr(message, 'guild', None)
+            winner_name = guild.get_member(int(winner)).display_name if guild else f"User_{winner[:6]}"
+            loser_name = guild.get_member(int(loser)).display_name if guild else f"User_{loser[:6]}"
+            embed.add_field(name="🎉 KẾT QUẢ", value=f"**{winner_name}** thắng **{loser_name}** với cách biệt `{diff} điểm`!", inline=False)
             event_stats[winner]["duels_won"] = event_stats[winner].get("duels_won", 0) + 1
             event_stats[loser]["duels_lost"] = event_stats[loser].get("duels_lost", 0) + 1
         else:
@@ -2016,15 +1603,10 @@ async def end_summon_quiz(channel_id, message):
 
     elif mode == "coop":
         total_score = sum(scores.values())
-        embed.add_field(
-            name="🤝 TEAM SCORE",
-            value=f"Tổng điểm team: `{total_score} điểm`!",
-            inline=False
-        )
+        embed.add_field(name="🤝 TEAM SCORE", value=f"Tổng điểm team: `{total_score} điểm`!", inline=False)
         for uid in [inviter_id, invited_id]:
             if uid in scores:
                 event_stats[uid]["quiz_points_event"] = event_stats[uid].get("quiz_points_event", 0) + scores[uid]
-
     else:
         total_score = sum(scores.values())
         if total_score >= 10:
@@ -2033,27 +1615,26 @@ async def end_summon_quiz(channel_id, message):
             result = "😐 Cũng được, nhưng bot vẫn mạnh hơn"
         else:
             result = "💀 TEAM THUA! Bot quá bá đạo!"
-
         embed.add_field(name="👥 TEAM RESULT", value=f"{result}\nTổng điểm: `{total_score}`", inline=False)
         for uid in [inviter_id, invited_id]:
             if uid in scores:
                 event_stats[uid]["quiz_points_event"] = event_stats[uid].get("quiz_points_event", 0) + scores[uid]
 
     score_lines = []
+    guild = getattr(message, 'guild', None)
     for uid, score in scores.items():
-        user = message.guild.get_member(int(uid)) if message.guild else None
+        user = guild.get_member(int(uid)) if guild else None
         name = user.display_name if user else f"User_{uid[:6]}"
         score_lines.append(f"• **{name}**: `{score} điểm`")
-
     if score_lines:
         embed.add_field(name="📊 Cá nhân", value="\n".join(score_lines), inline=False)
 
     embed.set_footer(text=f"Summon Quiz | {random_vibe()}")
     await message.channel.send(embed=embed)
-
     quiz_active.pop(channel_id, None)
 
-# === MAIN MESSAGE HANDLER (FIXED) ===
+
+# === ON MESSAGE ===
 @bot.event
 async def on_message(message):
     global last_msg_time
@@ -2071,7 +1652,6 @@ async def on_message(message):
     else:
         uid = str(message.channel.id)
 
-    # Init chat history nếu chưa có
     if uid not in chat_history:
         tz_VN = pytz.timezone('Asia/Ho_Chi_Minh')
         now = datetime.datetime.now(tz_VN).strftime("%H:%M:%S %d/%m/%Y")
@@ -2083,7 +1663,6 @@ async def on_message(message):
             current_sys = system_instruction.format(user_id=f"Multiple users in {channel_name}", current_time=now)
         chat_history[uid] = [{"role": "system", "content": current_sys}]
 
-    # Kiểm tra trigger
     is_mentioned = bot.user in message.mentions
     is_reply_to_bot = False
     if message.reference:
@@ -2099,8 +1678,9 @@ async def on_message(message):
 
     should_respond = is_mentioned or is_dm or is_reply_to_bot or is_keyword_trigger
 
-    # SUMMON ACCEPT CHECK (chỉ khi chưa cần respond)
     channel_id = str(message.channel.id)
+
+    # SUMMON ACCEPT CHECK
     if channel_id in summon_active and summon_active[channel_id].get("active"):
         summon_data = summon_active[channel_id]
         if not summon_data.get("accepted"):
@@ -2111,12 +1691,10 @@ async def on_message(message):
                     summon_data["accepted"] = True
                     if summon_data.get("timeout_task"):
                         summon_data["timeout_task"].cancel()
-
                     await message.reply(
                         f"✅ **{message.author.display_name}** đã accept! Chuẩn bị quiz **{summon_data['mode']}** với **{summon_data['inviter_name']}** 🔥",
                         mention_author=False
                     )
-
                     await start_summon_quiz(channel_id, summon_data, message)
                     return
 
@@ -2144,19 +1722,19 @@ async def on_message(message):
                         if content_upper == current_q["answer"]:
                             points = current_q.get("points", 1)
                             quiz_session["scores"][user_id] = quiz_session["scores"].get(user_id, 0) + points
-
                             if channel_id not in quiz_scores:
                                 quiz_scores[channel_id] = {}
                             quiz_scores[channel_id][user_id] = quiz_scores[channel_id].get(user_id, 0) + points
-
                             current_q["answered"] = True
                             quiz_session["completed_questions"] = quiz_session.get("completed_questions", 0) + 1
 
                             if quiz_session["completed_questions"] >= quiz_session.get("total_q", 1):
                                 await end_quiz_session(channel_id, message)
                             else:
-                                await message.reply(f"✅ **ĐÚNG RỒI!** +{points} điểm! {current_q.get('explanation', '')} 🎉\n"
-                                                    f"({quiz_session.get('difficulty')} | GPT-OSS-120B | {quiz_session.get('time_per_q')}s)")
+                                await message.reply(
+                                    f"✅ **ĐÚNG RỒI!** +{points} điểm! {current_q.get('explanation', '')} 🎉\n"
+                                    f"({quiz_session.get('difficulty')} | GPT-OSS-120B | {quiz_session.get('time_per_q')}s)"
+                                )
                         else:
                             current_q["answered"] = True
                             quiz_session["completed_questions"] = quiz_session.get("completed_questions", 0) + 1
@@ -2164,23 +1742,18 @@ async def on_message(message):
                             if quiz_session["completed_questions"] >= quiz_session.get("total_q", 1):
                                 await end_quiz_session(channel_id, message)
                             else:
-                                await message.reply(f"❌ **SAI RỒI!** Đáp án đúng là **{current_q['answer']}**. {current_q.get('explanation', '')} 🥀\n"
-                                                    f"({quiz_session.get('difficulty')} | GPT-OSS-120B | {quiz_session.get('time_per_q')}s)")
-
+                                await message.reply(
+                                    f"❌ **SAI RỒI!** Đáp án đúng là **{current_q['answer']}**. {current_q.get('explanation', '')} 🥀\n"
+                                    f"({quiz_session.get('difficulty')} | GPT-OSS-120B | {quiz_session.get('time_per_q')}s)"
+                                )
                         return
-                        
-    # ==== Bot setting ====
-    if not should_respond:
-        return
 
     if not should_respond:
         return
-        
+
     if CHAT_DISABLED:
-        return  
-    # ===== HẾT =====
+        return
 
-    # Update cooldown check
     if BOT_UPDATED and not is_dm:
         if cooldown_start_time:
             elapsed = (datetime.datetime.now(pytz.timezone('Asia/Ho_Chi_Minh')) - cooldown_start_time).total_seconds()
@@ -2190,7 +1763,6 @@ async def on_message(message):
         await message.reply(f"⏳ Bot vừa update xong, đang ổn định lại. Còn khoảng **{remaining}s** nữa, đợi t tí m 🥀", mention_author=False)
         return
 
-    # Process reply
     lock = user_locks.get(uid, asyncio.Lock())
     user_locks[uid] = lock
     if lock.locked():
@@ -2255,6 +1827,7 @@ async def on_message(message):
         except Exception as e:
             print(f"Lỗi chat: {str(e)}")
             await message.reply(f"Lỗi r: {str(e)[:100]} 💀", mention_author=False)
+
 
 if __name__ == "__main__":
     thread = Thread(target=run_flask)
