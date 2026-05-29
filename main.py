@@ -143,6 +143,21 @@ async def call_ai(messages, model_name, provider):
     
     return "Lỗi rồi má ơi 🥀"
 
+# ---------- Autocomplete cho model_id ----------
+async def model_id_autocomplete(interaction: discord.Interaction, current: str, provider: str = None) -> list[app_commands.Choice[str]]:
+    """Gợi ý model dựa trên provider và input của user"""
+    choices = []
+    for name, config in MODELS_CONFIG.items():
+        # Lọc theo provider nếu có truyền vào
+        if provider and config["provider"] != provider:
+            continue
+        # Filter theo input user (case-insensitive)
+        if current.lower() in name.lower() or current.lower() in config["id"].lower():
+            choices.append(app_commands.Choice(name=f"{name} ({config['id']})", value=name))
+        if len(choices) >= 25:  # Discord max 25 choices
+            break
+    return choices
+    
 @bot.event
 async def on_ready():
     print(f"{bot.user} đã sẵn sàng!")
@@ -195,17 +210,53 @@ async def on_message(message):
     
     await bot.process_commands(message)
 
-# ---------- Slash Commands ----------
+# ---------- Slash Command /model ----------
 @bot.tree.command(name="model", description="Đổi model AI")
-@app_commands.describe(model_name="Tên model muốn đổi")
-async def model_cmd(interaction: discord.Interaction, model_name: str):
+@app_commands.describe(
+    provider="Chọn provider: groq hoặc google",
+    model_id="Tên model muốn đổi (gõ để search)"
+)
+@app_commands.choices(provider=[
+    app_commands.Choice(name="Groq", value="groq"),
+    app_commands.Choice(name="Google", value="google")
+])
+@app_commands.autocomplete(model_id=model_id_autocomplete)
+async def model_cmd(interaction: discord.Interaction, provider: str = None, model_id: str = None):
     global CURRENT_MODEL
-    if model_name not in MODELS_CONFIG:
-        names = ", ".join(MODELS_CONFIG.keys())
-        await interaction.response.send_message(f"Model {model_name} k có nha m. Có: {names}", ephemeral=True)
+    
+    # Check provider trước
+    if not provider:
+        await interaction.response.send_message("chọn provider rồi đổi bro 🥀", ephemeral=True)
         return
-    CURRENT_MODEL = model_name
-    await interaction.response.send_message(f"Đã đổi sang {model_name} 🫩", ephemeral=False)
+    
+    # Check provider có hợp lệ k
+    valid_providers = ["groq", "google"]
+    if provider.lower() not in valid_providers:
+        await interaction.response.send_message(f"Provider '{provider}' k có nha m. Chọn: {', '.join(valid_providers)} 💀", ephemeral=True)
+        return
+    
+    # Nếu user chọn model_id cụ thể
+    if model_id:
+        if model_id not in MODELS_CONFIG:
+            names = ", ".join([n for n, c in MODELS_CONFIG.items() if c["provider"] == provider.lower()])
+            await interaction.response.send_message(f"Model '{model_id}' k có trong provider {provider}. Có: {names}", ephemeral=True)
+            return
+        # Check model có đúng provider k
+        if MODELS_CONFIG[model_id]["provider"] != provider.lower():
+            await interaction.response.send_message(f"Model '{model_id}' thuộc provider {MODELS_CONFIG[model_id]['provider']}, k phải {provider} 🫩", ephemeral=True)
+            return
+        CURRENT_MODEL = model_id
+        await interaction.response.send_message(f"Đã đổi sang {model_id} (provider: {provider}) ✌🏿", ephemeral=False)
+    else:
+        # Nếu k chọn model_id, show list gợi ý
+        available = [f"{n} ({c['id']})" for n, c in MODELS_CONFIG.items() if c["provider"] == provider.lower()]
+        if not available:
+            await interaction.response.send_message(f"Provider {provider} k có model nào cả bro 💀", ephemeral=True)
+            return
+        embed = discord.Embed(title=f"Models có sẵn cho {provider}", color=0x7289da)
+        embed.description = "\n".join([f"• `{name}`" for name in [n for n, c in MODELS_CONFIG.items() if c["provider"] == provider.lower()]])
+        embed.set_footer(text="Gõ /model provider:xxx model_id:xxx để đổi")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="debug", description="Xem thông tin bot")
 async def debug_cmd(interaction: discord.Interaction):
