@@ -73,8 +73,9 @@ def health():
     return "Bot is running!", 200
 
 def run_flask():
-    # FIX: Đổi port 8080 -> 8000 cho đúng deployment
-    flask_app.run(host='0.0.0.0', port=8000)
+    port = int(os.getenv("PORT", 8000))
+    print(f"Flask đang chạy trên port {port}")
+    flask_app.run(host='0.0.0.0', port=port, debug=False)
 
 # ---------- Discord Bot ----------
 intents = discord.Intents.default()
