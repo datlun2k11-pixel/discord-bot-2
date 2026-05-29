@@ -1,11 +1,12 @@
 # main.py
+# Sửa lại đoạn đầu file thành như này:
 import os
 import asyncio
 from collections import defaultdict, deque
 from datetime import datetime
 import discord
 from discord.ext import commands
-import discord.app_commands  # FIX: Import kiểu này cho chắc
+from discord import app_commands  # <- Import chuẩn nè bro
 import aiohttp
 from flask import Flask
 import threading
