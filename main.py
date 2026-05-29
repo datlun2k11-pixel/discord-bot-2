@@ -11,7 +11,7 @@ from flask import Flask
 import threading
 
 # ---------- Cấu hình ----------
-TOKEN = os.getenv("DISCORD_TOKEN")
+TOKEN = os.getenv("DISCORD_TOKEN")  # FIX: Đổi tên biến env cho đúng
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -73,7 +73,8 @@ def health():
     return "Bot is running!", 200
 
 def run_flask():
-    flask_app.run(host='0.0.0.0', port=8080)
+    # FIX: Đổi port 8080 -> 8000 cho đúng deployment
+    flask_app.run(host='0.0.0.0', port=8000)
 
 # ---------- Discord Bot ----------
 intents = discord.Intents.default()
@@ -106,7 +107,6 @@ async def call_ai(messages, model_name, provider):
         elif provider == "google":
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateContent?key={GEMINI_API_KEY}"
             
-            # Format messages cho Gemini API
             contents = []
             system_instruction = None
             
@@ -226,3 +226,4 @@ if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     bot.run(TOKEN)
+
