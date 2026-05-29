@@ -213,14 +213,15 @@ async def on_message(message):
 @bot.tree.command(name="model", description="Đổi model AI")
 @app_commands.describe(
     provider="Chọn provider: groq hoặc google",
-    model_id="Tên model muốn đổi (gõ để search)"
+    model_id="Tên model có sẵn (gõ để search)",
+    custom_model_id="ID model riêng (ví dụ: openai/gpt-oss-20b). Ưu tiên hơn model_id"
 )
 @app_commands.choices(provider=[
     app_commands.Choice(name="Groq", value="groq"),
     app_commands.Choice(name="Google", value="google")
 ])
 @app_commands.autocomplete(model_id=model_id_autocomplete)
-async def model_cmd(interaction: discord.Interaction, provider: str = None, model_id: str = None):
+async def model_cmd(interaction: discord.Interaction, provider: str = None, model_id: str = None, custom_model_id: str = None):
     global CURRENT_MODEL
 
     if not provider:
@@ -232,24 +233,44 @@ async def model_cmd(interaction: discord.Interaction, provider: str = None, mode
         await interaction.response.send_message(f"Provider '{provider}' k hợp lệ. Chọn groq hoặc google 💀", ephemeral=True)
         return
 
-    if model_id:
+    final_model_name = None
+    final_model_id = None
+
+    # Ưu tiên custom_model_id nếu có
+    if custom_model_id:
+        final_model_name = f"Custom-{custom_model_id}"
+        final_model_id = custom_model_id
+        # Thêm tạm vào config để bot hoạt động (nếu chưa có)
+        if final_model_name not in MODELS_CONFIG:
+            MODELS_CONFIG[final_model_name] = {
+                "id": custom_model_id,
+                "provider": provider,
+                "vision": False # Default false cho custom
+            }
+    elif model_id:
         if model_id not in MODELS_CONFIG:
-            await interaction.response.send_message(f"Model '{model_id}' k có trong list. Thử autocomplete đi bro 🫩", ephemeral=True)
+            await interaction.response.send_message(f"Model '{model_id}' k có trong list. Thử autocomplete hoặc dùng custom_model_id 🫩", ephemeral=True)
             return
         if MODELS_CONFIG[model_id]["provider"] != provider:
             await interaction.response.send_message(f"Model '{model_id}' thuộc {MODELS_CONFIG[model_id]['provider']}, k phải {provider} ☠️", ephemeral=True)
             return
-        CURRENT_MODEL = model_id
-        await interaction.response.send_message(f"Đã đổi sang {model_id} (provider: {provider}) ✌🏿", ephemeral=False)
+        final_model_name = model_id
+        final_model_id = MODELS_CONFIG[model_id]["id"]
     else:
+        # Nếu không chọn gì, show list gợi ý
         available = [f"• `{n}`" for n, c in MODELS_CONFIG.items() if c["provider"] == provider]
         if not available:
             await interaction.response.send_message(f"Provider {provider} rỗng bro 💀", ephemeral=True)
             return
         embed = discord.Embed(title=f"Models có sẵn cho {provider}", color=0x7289da)
         embed.description = "\n".join(available)
-        embed.set_footer(text="Gõ tiếp model_id để chọn cụ thể")
+        embed.set_footer(text="Gõ model_id để chọn hoặc custom_model_id để nhập riêng")
         await interaction.response.send_message(embed=embed, ephemeral=True)
+        return
+
+    # Set model hiện tại
+    CURRENT_MODEL = final_model_name
+    await interaction.response.send_message(f"Đã đổi sang model: `{final_model_id}` (provider: {provider}) ✌🏿", ephemeral=False)
 
 @bot.tree.command(name="debug", description="Xem thông tin bot")
 async def debug_cmd(interaction: discord.Interaction):
