@@ -1,18 +1,17 @@
 # main.py
-# Sửa lại đoạn đầu file thành như này:
 import os
 import asyncio
 from collections import defaultdict, deque
 from datetime import datetime
 import discord
 from discord.ext import commands
-from discord import app_commands  # <- Import chuẩn nè bro
+from discord import app_commands
 import aiohttp
 from flask import Flask
 import threading
 
 # ---------- Cấu hình ----------
-TOKEN = os.getenv("DISCORD_TOKEN")  # FIX: Đổi tên biến env cho đúng
+TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
@@ -60,6 +59,11 @@ SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạ
 - Chỉ giải thích đáp án quiz khi có đứa hỏi "tại sao" hoặc "sao sai". Nhớ kĩ cái quiz gần nhất để còn khịa tụi nó.
 - Không được thinking, không được reasoning, không output <thinking>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
 
+[ĐỊNH DẠNG CHATLOG & TAG]
+- M sẽ thấy tin nhắn lịch sử format: [UserID: <số_id>, Name: <tên_user>]: <nội dung>
+- M được phép tag user bằng cú pháp <@UserID>. Dùng đúng lúc đúng chỗ để cà khịa, nhắc tên hoặc kéo vào drama.
+- Nếu thấy ai tag m, rep trực tiếp và có thể tag ngược lại nó nếu cần.
+
 [COMMANDS]
 M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /debug, /clear"""
 
@@ -75,13 +79,14 @@ def health():
 
 def run_flask():
     port = int(os.getenv("PORT", 8000))
-    print(f"Flask đang chạy trên port {port}")
     flask_app.run(host='0.0.0.0', port=port, debug=False)
 
 # ---------- Discord Bot ----------
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
+# Cho phép bot tag user trong reply (không bị Discord chặn mention tự động)
+allowed_mentions = discord.AllowedMentions(users=True, everyone=False, roles=False)
+bot = commands.Bot(command_prefix='!', intents=intents, allowed_mentions=allowed_mentions)
 
 async def call_ai(messages, model_name, provider):
     """Gọi API AI (Groq hoặc Google)"""
@@ -143,20 +148,6 @@ async def call_ai(messages, model_name, provider):
     
     return "Lỗi rồi má ơi 🥀"
 
-# ---------- Autocomplete cho model_id ----------
-async def model_id_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-    # Lấy giá trị provider đang được chọn trong lúc gõ lệnh
-    provider = getattr(interaction.namespace, 'provider', None)
-    choices = []
-    for name, config in MODELS_CONFIG.items():
-        if provider and config["provider"] != provider.lower():
-            continue
-        if current.lower() in name.lower() or current.lower() in config["id"].lower():
-            choices.append(app_commands.Choice(name=name, value=name))
-        if len(choices) >= 25:
-            break
-    return choices
-    
 @bot.event
 async def on_ready():
     print(f"{bot.user} đã sẵn sàng!")
@@ -183,7 +174,7 @@ async def on_message(message):
     content_lower = message.content.lower()
     if content_lower == "ê" or message.content.startswith("ê "):
         reply = "Sủa? 💀"
-        await message.reply(reply)
+        await message.reply(reply, allowed_mentions=allowed_mentions)
         return
     
     system_text = SYSTEM_PROMPT.format(
@@ -191,25 +182,53 @@ async def on_message(message):
         current_time=datetime.now().strftime("%H:%M %d/%m/%Y")
     )
     
+    # Xây dựng payload tin nhắn cho AI theo format yêu cầu
     messages = [{"role": "system", "content": system_text}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": message.content})
+    for msg in history:
+        if msg["role"] == "user":
+            formatted = f"[UserID: {msg['author_id']}, Name: {msg['author_name']}]: {msg['content']}"
+            messages.append({"role": "user", "content": formatted})
+        else:
+            messages.append({"role": "assistant", "content": msg["content"]})
+            
+    # Tin nhắn hiện tại cũng format luôn
+    current_msg = f"[UserID: {message.author.id}, Name: {message.author.name}]: {message.content}"
+    messages.append({"role": "user", "content": current_msg})
     
     async with message.channel.typing():
         try:
             model_config = MODELS_CONFIG[CURRENT_MODEL]
             reply_text = await call_ai(messages, CURRENT_MODEL, model_config["provider"])
             
-            chat_histories[context_id].append({"role": "user", "content": message.content})
+            # Lưu lịch sử có kèm author info
+            chat_histories[context_id].append({
+                "role": "user",
+                "content": message.content,
+                "author_id": str(message.author.id),
+                "author_name": message.author.name
+            })
             chat_histories[context_id].append({"role": "assistant", "content": reply_text})
             
-            await message.reply(reply_text)
+            await message.reply(reply_text, allowed_mentions=allowed_mentions)
         except Exception as e:
-            await message.reply(f"Lỗi rồi m ơi: {str(e)[:100]} 💀")
+            await message.reply(f"Lỗi rồi m ơi: {str(e)[:100]} 💀", allowed_mentions=allowed_mentions)
     
     await bot.process_commands(message)
 
-# ---------- Slash Command /model ----------
+# ---------- Autocomplete cho model_id ----------
+async def model_id_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+    provider = getattr(interaction.namespace, 'provider', None)
+    choices = []
+    for name, config in MODELS_CONFIG.items():
+        if provider and config["provider"] != provider.lower():
+            continue
+        if current.lower() in name.lower() or current.lower() in config["id"].lower():
+            choices.append(app_commands.Choice(name=name, value=name))
+        if len(choices) >= 25:
+            break
+    return choices
+
+# ---------- Slash Commands ----------
 @bot.tree.command(name="model", description="Đổi model AI")
 @app_commands.describe(
     provider="Chọn provider: groq hoặc google",
@@ -236,16 +255,14 @@ async def model_cmd(interaction: discord.Interaction, provider: str = None, mode
     final_model_name = None
     final_model_id = None
 
-    # Ưu tiên custom_model_id nếu có
     if custom_model_id:
         final_model_name = f"Custom-{custom_model_id}"
         final_model_id = custom_model_id
-        # Thêm tạm vào config để bot hoạt động (nếu chưa có)
         if final_model_name not in MODELS_CONFIG:
             MODELS_CONFIG[final_model_name] = {
                 "id": custom_model_id,
                 "provider": provider,
-                "vision": False # Default false cho custom
+                "vision": False
             }
     elif model_id:
         if model_id not in MODELS_CONFIG:
@@ -257,7 +274,6 @@ async def model_cmd(interaction: discord.Interaction, provider: str = None, mode
         final_model_name = model_id
         final_model_id = MODELS_CONFIG[model_id]["id"]
     else:
-        # Nếu không chọn gì, show list gợi ý
         available = [f"• `{n}`" for n, c in MODELS_CONFIG.items() if c["provider"] == provider]
         if not available:
             await interaction.response.send_message(f"Provider {provider} rỗng bro 💀", ephemeral=True)
@@ -268,7 +284,6 @@ async def model_cmd(interaction: discord.Interaction, provider: str = None, mode
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
 
-    # Set model hiện tại
     CURRENT_MODEL = final_model_name
     await interaction.response.send_message(f"Đã đổi sang model: `{final_model_id}` (provider: {provider}) ✌🏿", ephemeral=False)
 
@@ -293,4 +308,3 @@ if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     bot.run(TOKEN)
-
