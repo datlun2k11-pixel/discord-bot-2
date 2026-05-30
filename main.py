@@ -3,7 +3,8 @@ import os
 import asyncio
 import base64
 from collections import defaultdict, deque
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+import io
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -361,6 +362,64 @@ async def clear_cmd(interaction: discord.Interaction):
         chat_histories[context_id].clear()
     await interaction.response.send_message("Đã clear hết lịch sử r đó, chat lại đi ✌🏿", ephemeral=False)
 
+# ---------- Global Rate Limit ----------
+imagine_limit = {
+    "count": 0,
+    "reset_time": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+}
+
+@bot.tree.command(name="imagine", description="Tạo ảnh bằng Imagen")
+@app_commands.describe(prompt="Mô tả bức ảnh m muốn tạo")
+async def imagine_cmd(interaction: discord.Interaction, prompt: str):
+    now = datetime.now(timezone.utc)
+    if now >= imagine_limit["reset_time"]:
+        imagine_limit["count"] = 0
+        imagine_limit["reset_time"] = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        
+    if imagine_limit["count"] >= 25:
+        await interaction.response.send_message(f"Hết mẹ lượt r bro, mai quay lại đi 💀 (còn 0 request per day)", ephemeral=True)
+        return
+
+    await interaction.response.defer()
+    
+    model_id = "imagen-4.0-generate-001" 
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateImages?key={GEMINI_API_KEY}"
+    payload = {
+        "instances": [{"prompt": prompt}],
+        "parameters": {"sampleCount": 1}
+    }
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, json=payload) as resp:
+                if resp.status != 200:
+                    err = await resp.text()
+                    await interaction.followup.send(f"Lỗi API Imagen: {resp.status} - {err[:100]} 🥀")
+                    return
+                data = await resp.json()
+                
+        if "predictions" not in data or not data["predictions"]:
+            await interaction.followup.send("K tạo đc ảnh, prompt của m tệ v 🫩")
+            return
+            
+        img_b64 = data["predictions"][0].get("bytesBase64Encoded")
+        if not img_b64:
+            await interaction.followup.send("API k trả về ảnh 💀")
+            return
+            
+        img_bytes = base64.b64decode(img_b64)
+        
+        imagine_limit["count"] += 1
+        remaining = 25 - imagine_limit["count"]
+        
+        file = discord.File(io.BytesIO(img_bytes), filename="imagine.png")
+        await interaction.followup.send(
+            file=file, 
+            content=f"Ảnh của m đây <@{interaction.user.id}>, server còn {remaining} request per day 🥀"
+        )
+        
+    except Exception as e:
+        await interaction.followup.send(f"Lỗi r m ơi: {str(e)[:100]} ☠️")
 # ---------- Main ----------
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
