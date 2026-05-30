@@ -1,10 +1,11 @@
-# main.py
 import os
 import asyncio
 import base64
+import re
+import io
+import json
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
-import io
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -16,6 +17,10 @@ import threading
 TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not TOKEN:
+    print("THIẾU DISCORD_TOKEN TRONG ENV! 💀")
+    exit()
 
 MODELS_CONFIG = {
     "Groq-Llama-Scout": {
@@ -92,7 +97,10 @@ def health():
 
 def run_flask():
     port = int(os.getenv("PORT", 8000))
-    flask_app.run(host='0.0.0.0', port=port, debug=False)
+    try:
+        flask_app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        print(f"Lỗi Flask: {e}")
 
 # ---------- Discord Bot ----------
 intents = discord.Intents.default()
@@ -111,19 +119,22 @@ async def process_attachments(attachments, provider):
                     "image_url": {"url": att.url, "detail": "auto"}
                 })
             elif provider == "google":
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(att.url) as resp:
-                        img_data = await resp.read()
-                        b64 = base64.b64encode(img_data).decode('utf-8')
-                        parts.append({
-                            "inline_data": {
-                                "mime_type": att.content_type,
-                                "data": b64
-                            }
-                        })
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(att.url) as resp:
+                            img_data = await resp.read()
+                            b64 = base64.b64encode(img_data).decode('utf-8')
+                            parts.append({
+                                "inline_data": {
+                                    "mime_type": att.content_type,
+                                    "data": b64
+                                }
+                            })
+                except Exception as e:
+                    print(f"Lỗi xử lý ảnh Google: {e}")
     return parts
     
-async def call_ai(messages, model_name, provider):
+async def call_ai(messages, model_name, provider, expect_image_tag=False):
     """Gọi API AI (Groq hoặc Google)"""
     model_config = MODELS_CONFIG[model_name]
     model_id = model_config["id"]
@@ -132,17 +143,25 @@ async def call_ai(messages, model_name, provider):
         if provider == "groq":
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+            
+            final_messages = messages.copy()
+            if expect_image_tag:
+                final_messages.append({
+                    "role": "system", 
+                    "content": "RULE: If the user asks to draw/create an image, you MUST include a tag like [imagine: description in English] in your response. Do not explain the tag, just insert it."
+                })
+
             payload = {
                 "model": model_id,
-                "messages": messages,
+                "messages": final_messages,
                 "temperature": 0.9,
-                "max_tokens": 150
+                "max_tokens": 250
             }
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=payload, headers=headers) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        return f"Lỗi API Groq: {resp.status} - {error_text[:100]} 🥀"
+                        return f"Lỗi API Groq: {resp.status} 🥀"
                     data = await resp.json()
                     return data["choices"][0]["message"]["content"]
         
@@ -154,9 +173,11 @@ async def call_ai(messages, model_name, provider):
             
             for msg in messages:
                 if msg["role"] == "system":
-                    system_instruction = {"parts": [{"text": msg["content"]}]}
+                    sys_text = msg["content"]
+                    if expect_image_tag:
+                        sys_text += "\nRULE: If user wants an image, output tag [imagine: prompt english] inside your text."
+                    system_instruction = {"parts": [{"text": sys_text}]}
                 elif msg["role"] == "user":
-                    # Fix lỗi Google k hiểu list parts
                     if isinstance(msg["content"], list):
                         contents.append({"role": "user", "parts": msg["content"]})
                     else:
@@ -171,7 +192,7 @@ async def call_ai(messages, model_name, provider):
                 "contents": contents,
                 "generationConfig": {
                     "temperature": 0.9,
-                    "maxOutputTokens": 150
+                    "maxOutputTokens": 250
                 }
             }
             if system_instruction:
@@ -181,7 +202,7 @@ async def call_ai(messages, model_name, provider):
                 async with session.post(url, json=payload) as resp:
                     if resp.status != 200:
                         error_text = await resp.text()
-                        return f"Lỗi API Google: {resp.status} - {error_text[:100]} 💀"
+                        return f"Lỗi API Google: {resp.status} 💀"
                     data = await resp.json()
                     return data["candidates"][0]["content"]["parts"][0]["text"]
     
@@ -189,6 +210,29 @@ async def call_ai(messages, model_name, provider):
         return f"Lỗi call_ai: {str(e)[:100]} 🫩"
     
     return "Lỗi rồi má ơi 🥀"
+
+async def process_imagine_tag(text_content):
+    """
+    Tìm tag [imagine: ...] trong text.
+    Trả về: (cleaned_text, image_url, prompt)
+    """
+    pattern = r"\[imagine:\s*(.*?)\]"
+    match = re.search(pattern, text_content, re.DOTALL | re.IGNORECASE)
+    
+    if match:
+        prompt = match.group(1).strip()
+        # Xóa tag khỏi text gốc
+        cleaned_text = re.sub(pattern, "", text_content).strip()
+        # Xóa các khoảng trắng thừa do việc xóa tag để lại
+        cleaned_text = re.sub(r'\n\s*\n', '\n', cleaned_text).strip()
+        
+        from urllib.parse import quote
+        encoded_prompt = quote(prompt)
+        url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true&model=flux"
+        
+        return cleaned_text, url, prompt
+    
+    return text_content, None, None
 
 @bot.event
 async def on_ready():
@@ -230,7 +274,7 @@ async def on_message(message):
     # Xây dựng payload
     messages = [{"role": "system", "content": system_text}]
     
-    # 1. Rebuild history (chỉ lấy text, k tải lại ảnh)
+    # 1. Rebuild history
     for msg in history:
         if msg["role"] == "user":
             tag = " [Đã gửi ảnh]" if msg.get("has_image") else ""
@@ -239,7 +283,7 @@ async def on_message(message):
         else:
             messages.append({"role": "assistant", "content": msg["content"]})
             
-    # 2. Xử lý tin nhắn hiện tại (có ảnh)
+    # 2. Xử lý tin nhắn hiện tại
     image_parts = await process_attachments(message.attachments, model_config["provider"])
     base_text = f"[UserID: {message.author.id}, Name: {message.author.name}]: {message.content}"
     
@@ -253,12 +297,16 @@ async def on_message(message):
         
     messages.append({"role": "user", "content": current_content})
     
-    # 3. Gọi AI và lưu history
+    # 3. Gọi AI và xử lý kết quả
     async with message.channel.typing():
         try:
-            reply_text = await call_ai(messages, CURRENT_MODEL, model_config["provider"])
+            # Bật expect_image_tag=True để AI biết cách trả lời
+            reply_text = await call_ai(messages, CURRENT_MODEL, model_config["provider"], expect_image_tag=True)
             
-            # Lưu history (chỉ lưu text và flag has_image)
+            # Kiểm tra và xử lý tag imagine
+            final_text, img_url, img_prompt = await process_imagine_tag(reply_text)
+            
+            # Lưu history (Lưu text đã clean để tránh AI bị loạn khi đọc lại tag)
             chat_histories[context_id].append({
                 "role": "user",
                 "content": message.content,
@@ -266,9 +314,36 @@ async def on_message(message):
                 "author_name": message.author.name,
                 "has_image": model_config["vision"] and any(att.content_type and att.content_type.startswith('image/') for att in message.attachments)
             })
-            chat_histories[context_id].append({"role": "assistant", "content": reply_text})
             
-            await message.reply(reply_text, allowed_mentions=allowed_mentions)
+            # Lưu response đã clean vào history
+            history_content = final_text if final_text else reply_text
+            if history_content:
+                chat_histories[context_id].append({"role": "assistant", "content": history_content})
+            
+            # Gửi tin nhắn
+            if img_url:
+                try:
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(img_url) as resp:
+                            if resp.status == 200:
+                                img_bytes = await resp.read()
+                                file = discord.File(io.BytesIO(img_bytes), filename="imagine.png")
+                                
+                                # Nếu text rỗng thì chỉ gửi ảnh, k thì gửi cả text + ảnh
+                                content_msg = final_text if final_text else None
+                                
+                                await message.reply(content=content_msg, file=file, allowed_mentions=allowed_mentions)
+                            else:
+                                err_msg = final_text if final_text else "Tạo ảnh lỗi mẹ rồi 💀"
+                                await message.reply(err_msg, allowed_mentions=allowed_mentions)
+                except Exception as e:
+                    err_msg = final_text if final_text else f"Lỗi tải ảnh: {str(e)[:50]} 💀"
+                    await message.reply(err_msg, allowed_mentions=allowed_mentions)
+            else:
+                # K có ảnh -> Gửi text bình thường
+                if final_text:
+                    await message.reply(final_text, allowed_mentions=allowed_mentions)
+                    
         except Exception as e:
             await message.reply(f"Lỗi rồi m ơi: {str(e)[:100]} 💀", allowed_mentions=allowed_mentions)
     
@@ -362,61 +437,6 @@ async def clear_cmd(interaction: discord.Interaction):
         chat_histories[context_id].clear()
     await interaction.response.send_message("Đã clear hết lịch sử r đó, chat lại đi ✌🏿", ephemeral=False)
 
-# ---------- Global Rate Limit ----------
-imagine_limit = {
-    "count": 0,
-    "reset_time": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-}
-
-@bot.tree.command(name="imagine", description="Tạo ảnh bằng Pollinations AI (Free 100%)")
-@app_commands.describe(
-    prompt="Mô tả bức ảnh m muốn tạo",
-    img_model="Chọn model tạo ảnh (mặc định là Flux siêu xịn)"
-)
-@app_commands.choices(img_model=[
-    app_commands.Choice(name="Flux (Siêu nét, hiểu prompt đỉnh)", value="flux"),
-    app_commands.Choice(name="Turbo (Tốc độ bàn thờ)", value="turbo")
-])
-async def imagine_cmd(interaction: discord.Interaction, prompt: str, img_model: app_commands.Choice[str] = None):
-    now = datetime.now(timezone.utc)
-    if now >= imagine_limit["reset_time"]:
-        imagine_limit["count"] = 0
-        imagine_limit["reset_time"] = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-        
-    if imagine_limit["count"] >= 25:
-        await interaction.response.send_message(f"Hết mẹ lượt r bro, mai quay lại đi 💀 (còn 0 request per day)", ephemeral=True)
-        return
-
-    await interaction.response.defer()
-    
-    # Nếu người dùng k chọn model thì mặc định lấy con Flux trùm cuối
-    selected_model = img_model.value if img_model else "flux"
-    
-    from urllib.parse import quote
-    encoded_prompt = quote(prompt)
-    
-    # Nhét param model vào URL
-    url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true&model={selected_model}"
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    await interaction.followup.send(f"Lỗi API Pollinations: {resp.status} 🥀")
-                    return
-                img_bytes = await resp.read()
-                
-        imagine_limit["count"] += 1
-        remaining = 25 - imagine_limit["count"]
-        
-        file = discord.File(io.BytesIO(img_bytes), filename="imagine.png")
-        await interaction.followup.send(
-            file=file, 
-            content=f"Ảnh của m tạo bằng model `{selected_model.upper()}` đây <@{interaction.user.id}>, còn {remaining} req/day 🥀"
-        )
-        
-    except Exception as e:
-        await interaction.followup.send(f"Lỗi r m ơi: {str(e)[:100]} ☠️")
 # ---------- Main ----------
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
