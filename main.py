@@ -382,8 +382,7 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
 
     await interaction.response.defer()
     
-    # Model Imagen 4 Fast theo yêu cầu của m
-    model_id = "imagen-4.0-fast-generate-001" 
+    model_id = "imagen-3.0-generate-002" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateImages?key={GEMINI_API_KEY}"
     payload = {
         "instances": [{"prompt": prompt}],
