@@ -1,6 +1,7 @@
 # main.py
 import os
 import asyncio
+import base64
 from collections import defaultdict, deque
 from datetime import datetime
 import discord
@@ -9,7 +10,6 @@ from discord import app_commands
 import aiohttp
 from flask import Flask
 import threading
-import base64  # THÊM DÒNG NÀY
 
 # ---------- Cấu hình ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -74,6 +74,7 @@ SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạ
 - M sẽ thấy tin nhắn lịch sử format: [UserID: <số_id>, Name: <tên_user>]: <nội dung>
 - M được phép tag user bằng cú pháp <@UserID>. Dùng đúng lúc đúng chỗ để cà khịa, nhắc tên hoặc kéo vào drama.
 - Nếu thấy ai tag m, rep trực tiếp và có thể tag ngược lại nó nếu cần.
+- Nếu user gửi ảnh, hãy mô tả ngắn gọn hoặc cà khịa cái ảnh đó trong câu trả lời.
 
 [COMMANDS]
 M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /debug, /clear"""
@@ -95,7 +96,6 @@ def run_flask():
 # ---------- Discord Bot ----------
 intents = discord.Intents.default()
 intents.message_content = True
-# Cho phép bot tag user trong reply (không bị Discord chặn mention tự động)
 allowed_mentions = discord.AllowedMentions(users=True, everyone=False, roles=False)
 bot = commands.Bot(command_prefix='!', intents=intents, allowed_mentions=allowed_mentions)
 
@@ -105,18 +105,14 @@ async def process_attachments(attachments, provider):
     for att in attachments:
         if att.content_type and att.content_type.startswith('image/'):
             if provider == "groq":
-                # Groq/OpenAI format: dùng image_url
                 parts.append({
                     "type": "image_url",
                     "image_url": {"url": att.url, "detail": "auto"}
                 })
             elif provider == "google":
-                # Gemini format: cần tải ảnh về rồi encode base64 (hoặc dùng file_api)
-                # Cách đơn giản: dùng image_url qua payload khác, hoặc base64
                 async with aiohttp.ClientSession() as session:
                     async with session.get(att.url) as resp:
                         img_data = await resp.read()
-                        import base64
                         b64 = base64.b64encode(img_data).decode('utf-8')
                         parts.append({
                             "inline_data": {
@@ -159,9 +155,16 @@ async def call_ai(messages, model_name, provider):
                 if msg["role"] == "system":
                     system_instruction = {"parts": [{"text": msg["content"]}]}
                 elif msg["role"] == "user":
-                    contents.append({"role": "user", "parts": [{"text": msg["content"]}]})
+                    # Fix lỗi Google k hiểu list parts
+                    if isinstance(msg["content"], list):
+                        contents.append({"role": "user", "parts": msg["content"]})
+                    else:
+                        contents.append({"role": "user", "parts": [{"text": msg["content"]}]})
                 elif msg["role"] == "assistant":
-                    contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
+                    if isinstance(msg["content"], list):
+                        contents.append({"role": "model", "parts": msg["content"]})
+                    else:
+                        contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
             
             payload = {
                 "contents": contents,
@@ -215,77 +218,46 @@ async def on_message(message):
         await message.reply(reply, allowed_mentions=allowed_mentions)
         return
     
+    # Lấy config trước để dùng
+    model_config = MODELS_CONFIG[CURRENT_MODEL]
+
     system_text = SYSTEM_PROMPT.format(
         user_id=f"<@{message.author.id}>",
         current_time=datetime.now().strftime("%H:%M %d/%m/%Y")
     )
     
-    # Xây dựng payload tin nhắn cho AI theo format yêu cầu
+    # Xây dựng payload
     messages = [{"role": "system", "content": system_text}]
-            for msg in history:
+    
+    # 1. Rebuild history (chỉ lấy text, k tải lại ảnh)
+    for msg in history:
         if msg["role"] == "user":
-            # Thêm tag [Ảnh] nếu tin nhắn cũ có ảnh để bot không bị ngu người
             tag = " [Đã gửi ảnh]" if msg.get("has_image") else ""
             formatted = f"[UserID: {msg['author_id']}, Name: {msg['author_name']}]: {msg['content']}{tag}"
             messages.append({"role": "user", "content": formatted})
         else:
             messages.append({"role": "assistant", "content": msg["content"]})
             
-            # Kiểm tra xem có attachments không
-            if msg.get("attachments") and model_config["vision"]:
-                # Tái tạo lại attachments
-                att_parts = []
-                for att in msg["attachments"]:
-                    if model_config["provider"] == "groq":
-                        att_parts.append({
-                            "type": "image_url", 
-                            "image_url": {"url": att["url"], "detail": "auto"}
-                        })
-                    elif model_config["provider"] == "google":
-                        async with aiohttp.ClientSession() as session:
-                            async with session.get(att["url"]) as resp:
-                                img_data = await resp.read()
-                                b64 = base64.b64encode(img_data).decode('utf-8')
-                                att_parts.append({
-                                    "inline_data": {"mime_type": att["type"], "data": b64}
-                                })
-                
-                # Format content với attachments
-                if model_config["provider"] == "groq":
-                    final_content = [{"type": "text", "text": base_text}] + att_parts
-                else:
-                    final_content = [{"text": base_text}] + att_parts
-                messages.append({"role": "user", "content": final_content})
-            else:
-                # Không có attachments
-                messages.append({"role": "user", "content": base_text})
-        else:
-            messages.append({"role": "assistant", "content": msg["content"]})
-            
-    # Tin nhắn hiện tại cũng format luôn
-    # Xử lý attachment nếu có
+    # 2. Xử lý tin nhắn hiện tại (có ảnh)
     image_parts = await process_attachments(message.attachments, model_config["provider"])
-    
-    # Format tin nhắn hiện tại
     base_text = f"[UserID: {message.author.id}, Name: {message.author.name}]: {message.content}"
+    
     if image_parts and model_config["vision"]:
         if model_config["provider"] == "groq":
             current_content = [{"type": "text", "text": base_text}] + image_parts
-        else:  # google
+        else:  
             current_content = [{"text": base_text}] + image_parts
     else:
         current_content = base_text
-    
+        
     messages.append({"role": "user", "content": current_content})
     
+    # 3. Gọi AI và lưu history
     async with message.channel.typing():
         try:
-            model_config = MODELS_CONFIG[CURRENT_MODEL]
             reply_text = await call_ai(messages, CURRENT_MODEL, model_config["provider"])
             
-            # Lưu lịch sử có kèm author info
-                        # Lưu lịch sử có kèm author info và attachments
-                        # Lưu history, bỏ attachments đi cho nhẹ, chỉ lưu flag
+            # Lưu history (chỉ lưu text và flag has_image)
             chat_histories[context_id].append({
                 "role": "user",
                 "content": message.content,
