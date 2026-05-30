@@ -382,11 +382,16 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
 
     await interaction.response.defer()
     
-    model_id = "imagen-3.0-generate-002" 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateImages?key={GEMINI_API_KEY}"
+    # Đổi sang endpoint :predict và cấu trúc payload của Imagen 4
+    model_id = "imagen-4.0-fast-generate-001" 
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:predict?key={GEMINI_API_KEY}"
     payload = {
         "instances": [{"prompt": prompt}],
-        "parameters": {"sampleCount": 1}
+        "parameters": {
+            "sampleCount": 1,
+            "aspectRatio": "1:1",
+            "outputMimeType": "image/png"
+        }
     }
     
     try:
@@ -394,7 +399,7 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
             async with session.post(url, json=payload) as resp:
                 if resp.status != 200:
                     err = await resp.text()
-                    await interaction.followup.send(f"Lỗi API Imagen: {resp.status} - {err[:100]} 🥀")
+                    await interaction.followup.send(f"Lỗi API Imagen 4: {resp.status} - {err[:100]} 🥀")
                     return
                 data = await resp.json()
                 
@@ -402,6 +407,7 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
             await interaction.followup.send("K tạo đc ảnh, prompt của m tệ v 🫩")
             return
             
+        # Parse ảnh từ trường bytesBase64Encoded của Imagen 4
         img_b64 = data["predictions"][0].get("bytesBase64Encoded")
         if not img_b64:
             await interaction.followup.send("API k trả về ảnh 💀")
