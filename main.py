@@ -368,7 +368,7 @@ imagine_limit = {
     "reset_time": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 }
 
-@bot.tree.command(name="imagine", description="Tạo ảnh bằng Imagen")
+@bot.tree.command(name="imagine", description="Tạo ảnh bằng Imagen 4 Fast")
 @app_commands.describe(prompt="Mô tả bức ảnh m muốn tạo")
 async def imagine_cmd(interaction: discord.Interaction, prompt: str):
     now = datetime.now(timezone.utc)
@@ -382,7 +382,8 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
 
     await interaction.response.defer()
     
-    model_id = "imagen-4.0-generate-001" 
+    # Model Imagen 4 Fast theo yêu cầu của m
+    model_id = "imagen-4.0-fast-generate-001" 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:generateImages?key={GEMINI_API_KEY}"
     payload = {
         "instances": [{"prompt": prompt}],
