@@ -368,7 +368,7 @@ imagine_limit = {
     "reset_time": datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 }
 
-@bot.tree.command(name="imagine", description="Tạo ảnh bằng Imagen 4 Fast")
+@bot.tree.command(name="imagine", description="Tạo ảnh bằng Pollinations AI (Free 100%)")
 @app_commands.describe(prompt="Mô tả bức ảnh m muốn tạo")
 async def imagine_cmd(interaction: discord.Interaction, prompt: str):
     now = datetime.now(timezone.utc)
@@ -382,39 +382,22 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
 
     await interaction.response.defer()
     
-    # Đổi sang endpoint :predict và cấu trúc payload của Imagen 4
-    model_id = "imagen-4.0-fast-generate-001" 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_id}:predict?key={GEMINI_API_KEY}"
-    payload = {
-        "instances": [{"prompt": prompt}],
-        "parameters": {
-            "sampleCount": 1,
-            "aspectRatio": "1:1",
-            "outputMimeType": "image/png"
-        }
-    }
+    # Encode cái prompt để nhét vào URL cho đúng định dạng
+    from urllib.parse import quote
+    encoded_prompt = quote(prompt)
+    
+    # URL lấy ảnh trực tiếp từ Pollinations (mặc định dùng model Flux ngon vl)
+    url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true"
     
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload) as resp:
+            async with session.get(url) as resp:
                 if resp.status != 200:
-                    err = await resp.text()
-                    await interaction.followup.send(f"Lỗi API Imagen 4: {resp.status} - {err[:100]} 🥀")
+                    await interaction.followup.send(f"Lỗi API Pollinations: {resp.status} 🥀")
                     return
-                data = await resp.json()
+                # Đọc trực tiếp dữ liệu dạng bytes của ảnh luôn
+                img_bytes = await resp.read()
                 
-        if "predictions" not in data or not data["predictions"]:
-            await interaction.followup.send("K tạo đc ảnh, prompt của m tệ v 🫩")
-            return
-            
-        # Parse ảnh từ trường bytesBase64Encoded của Imagen 4
-        img_b64 = data["predictions"][0].get("bytesBase64Encoded")
-        if not img_b64:
-            await interaction.followup.send("API k trả về ảnh 💀")
-            return
-            
-        img_bytes = base64.b64decode(img_b64)
-        
         imagine_limit["count"] += 1
         remaining = 25 - imagine_limit["count"]
         
@@ -426,6 +409,7 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
         
     except Exception as e:
         await interaction.followup.send(f"Lỗi r m ơi: {str(e)[:100]} ☠️")
+
 # ---------- Main ----------
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
