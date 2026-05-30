@@ -369,8 +369,15 @@ imagine_limit = {
 }
 
 @bot.tree.command(name="imagine", description="Tạo ảnh bằng Pollinations AI (Free 100%)")
-@app_commands.describe(prompt="Mô tả bức ảnh m muốn tạo")
-async def imagine_cmd(interaction: discord.Interaction, prompt: str):
+@app_commands.describe(
+    prompt="Mô tả bức ảnh m muốn tạo",
+    img_model="Chọn model tạo ảnh (mặc định là Flux siêu xịn)"
+)
+@app_commands.choices(img_model=[
+    app_commands.Choice(name="Flux (Siêu nét, hiểu prompt đỉnh)", value="flux"),
+    app_commands.Choice(name="Turbo (Tốc độ bàn thờ)", value="turbo")
+])
+async def imagine_cmd(interaction: discord.Interaction, prompt: str, img_model: app_commands.Choice[str] = None):
     now = datetime.now(timezone.utc)
     if now >= imagine_limit["reset_time"]:
         imagine_limit["count"] = 0
@@ -382,12 +389,14 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
 
     await interaction.response.defer()
     
-    # Encode cái prompt để nhét vào URL cho đúng định dạng
+    # Nếu người dùng k chọn model thì mặc định lấy con Flux trùm cuối
+    selected_model = img_model.value if img_model else "flux"
+    
     from urllib.parse import quote
     encoded_prompt = quote(prompt)
     
-    # URL lấy ảnh trực tiếp từ Pollinations (mặc định dùng model Flux ngon vl)
-    url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true"
+    # Nhét param model vào URL
+    url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true&model={selected_model}"
     
     try:
         async with aiohttp.ClientSession() as session:
@@ -395,7 +404,6 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
                 if resp.status != 200:
                     await interaction.followup.send(f"Lỗi API Pollinations: {resp.status} 🥀")
                     return
-                # Đọc trực tiếp dữ liệu dạng bytes của ảnh luôn
                 img_bytes = await resp.read()
                 
         imagine_limit["count"] += 1
@@ -404,12 +412,11 @@ async def imagine_cmd(interaction: discord.Interaction, prompt: str):
         file = discord.File(io.BytesIO(img_bytes), filename="imagine.png")
         await interaction.followup.send(
             file=file, 
-            content=f"Ảnh của m đây <@{interaction.user.id}>, server còn {remaining} request per day 🥀"
+            content=f"Ảnh của m tạo bằng model `{selected_model.upper()}` đây <@{interaction.user.id}>, còn {remaining} req/day 🥀"
         )
         
     except Exception as e:
         await interaction.followup.send(f"Lỗi r m ơi: {str(e)[:100]} ☠️")
-
 # ---------- Main ----------
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
