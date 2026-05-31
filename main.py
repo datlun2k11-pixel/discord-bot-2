@@ -523,9 +523,9 @@ async def luck_cmd(interaction: discord.Interaction, score: float):
     
     await interaction.response.defer()
     
-    # Random số từ 1 đến score
+    # Random từ 1 đến 30 (chứ k phải đến score nữa)
     import random
-    random_score = random.randint(1, int(score))
+    random_score = random.randint(1, 30)
     
     # Tạo prompt cho AI
     model_config = MODELS_CONFIG[CURRENT_MODEL]
@@ -554,7 +554,7 @@ async def luck_cmd(interaction: discord.Interaction, score: float):
     # Gửi kết quả
     embed = discord.Embed(title="🎲 Kết quả bốc thăm vận mệnh", color=0xff0000 if random_score < score else 0x00ff00)
     embed.add_field(name="📝 Điểm NV1 của m", value=f"**{score}**", inline=True)
-    embed.add_field(name="🎲 Số random", value=f"**{random_score}**", inline=True)
+    embed.add_field(name="🎲 Số random (1-30)", value=f"**{random_score}**", inline=True)
     embed.add_field(name="📊 Kết luận", value="**TRƯỢT** 💀" if random_score < score else "**ĐẬU** 🎉", inline=True)
     embed.add_field(name="💬 AI nhận xét", value=ai_response, inline=False)
     embed.set_footer(text="*Đây chỉ là giải trí nhé, học hành tử tế vào =))))*")
