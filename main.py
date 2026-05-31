@@ -5,13 +5,14 @@ import re
 import io
 import json
 from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 import discord
 from discord.ext import commands
 from discord import app_commands
 import aiohttp
 from flask import Flask
 import threading
+import google.generativeai as genai
 
 # ---------- Cấu hình ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -182,7 +183,7 @@ async def process_attachments(attachments, provider):
     return parts
     
 async def call_ai(messages, model_name, provider, expect_image_tag=False):
-    """Gọi API AI (Groq hoặc Google) - ĐÃ TẮT SAFETY CHO GOOGLE"""
+    """Gọi API AI (Groq hoặc Google)"""
     model_config = MODELS_CONFIG[model_name]
     model_id = model_config["id"]
     
@@ -213,65 +214,66 @@ async def call_ai(messages, model_name, provider, expect_image_tag=False):
                     return data["choices"][0]["message"]["content"]
         
         elif provider == "google":
-            # FIX: Dùng endpoint v1 (không phải v1beta) cho Gemma 4
-            url = f"https://generativelanguage.googleapis.com/v1/models/{model_id}:generateContent?key={GEMINI_API_KEY}"
-            
-            contents = []
-            system_instruction = None
+            # Dùng thư viện chính thức của Google
+            system_msg = None
+            chat_history = []
             
             for msg in messages:
                 if msg["role"] == "system":
-                    sys_text = msg["content"]
+                    system_msg = msg["content"]
                     if expect_image_tag:
-                        sys_text += "\nRULE: If user wants an image, output tag [imagine: prompt english] inside your text."
-                    system_instruction = {"parts": [{"text": sys_text}]}
+                        system_msg += "\nRULE: If user wants an image, output tag [imagine: prompt english] inside your text."
                 elif msg["role"] == "user":
                     if isinstance(msg["content"], list):
-                        contents.append({"role": "user", "parts": msg["content"]})
+                        # Có ảnh
+                        chat_history.append({"role": "user", "parts": msg["content"]})
                     else:
-                        contents.append({"role": "user", "parts": [{"text": msg["content"]}]})
+                        chat_history.append({"role": "user", "parts": [msg["content"]]})
                 elif msg["role"] == "assistant":
                     if isinstance(msg["content"], list):
-                        contents.append({"role": "model", "parts": msg["content"]})
+                        chat_history.append({"role": "model", "parts": msg["content"]})
                     else:
-                        contents.append({"role": "model", "parts": [{"text": msg["content"]}]})
+                        chat_history.append({"role": "model", "parts": [msg["content"]]})
             
-            # FIX: TẮT SAFETY HOÀN TOÀN - thêm safetySettings
-            payload = {
-                "contents": contents,
-                "generationConfig": {
+            # Cấu hình safety - TẮT HOÀN TOÀN
+            safety_settings = [
+                {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+                {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            ]
+            
+            # Khởi tạo model
+            model = genai.GenerativeModel(
+                model_id,
+                system_instruction=system_msg,
+                safety_settings=safety_settings,
+                generation_config={
                     "temperature": 0.9,
-                    "maxOutputTokens": 3500,
-                    # FIX: Ngăn Gemma 4 output thinking
-                    "stopSequences": ["<thinking>", "```thinking", "<thought>"]
-                },
-                # FIX: TẮT SAFETY - đặt thresholds xuống thấp nhất
-                "safetySettings": [
-                    {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-                    {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-                ]
-            }
-            if system_instruction:
-                payload["system_instruction"] = system_instruction
+                    "max_output_tokens": 3500,
+                    "stop_sequences": ["<thinking>", "```thinking", "<thought>"]
+                }
+            )
             
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload) as resp:
-                    if resp.status != 200:
-                        error_text = await resp.text()
-                        print(f"Google API Error: {resp.status} - {error_text}")  # Debug
-                        return f"Lỗi API Google: {resp.status} 💀"
-                    data = await resp.json()
-                    
-                    # FIX: Xử lý trường hợp Gemma 4 trả về mảng parts
-                    parts = data["candidates"][0]["content"]["parts"]
-                    if len(parts) > 1:
-                        # Gemma 4 có thinking mode, lấy phần cuối cùng
-                        return parts[-1]["text"]
-                    return parts[0]["text"]
+            # Lấy tin nhắn cuối cùng để gửi
+            if not chat_history:
+                return "Lỗi: Không có tin nhắn để gửi 💀"
+            
+            last_msg = chat_history[-1]
+            
+            # Gọi async
+            response = await model.generate_content_async(last_msg["parts"])
+            
+            # Xử lý response (Gemma 4 có thể trả về nhiều parts)
+            if response.text:
+                return response.text
+            elif hasattr(response, 'parts') and len(response.parts) > 1:
+                return response.parts[-1].text
+            else:
+                return str(response)
     
     except Exception as e:
+        print(f"Lỗi call_ai chi tiết: {e}")
         return f"Lỗi call_ai: {str(e)[:100]} 🫩"
     
     return "Lỗi rồi má ơi 🥀"
