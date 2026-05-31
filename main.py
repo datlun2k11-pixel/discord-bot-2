@@ -57,123 +57,33 @@ MODELS_CONFIG = {
 CURRENT_MODEL = "Google-Gemini-3.1-flash-lite"
 # Thêm biến global để lưu trạng thái femboy
 # Thay thế biến femboy_mode bằng cái này
-current_rp_mode = "genz"  # genz, tsundere, yandere, kuudere, dandere, senpai, kouhai, custom
+# Thay toàn bộ phần role_play bằng cái này
+
+# Biến global
+current_rp_mode = "genz"
 rp_custom_prompt = ""
 
-# Template có sẵn
+# Template có sẵn - THU GỌN, KHÔNG CÓ EXAMPLE DÀI
 RP_TEMPLATES = {
     "genz": {
         "name": "🤪 GenZ Báo Thủ",
-        "description": "Nhây lầy, cà khịa, teencode, chửi thề nhẹ",
-        "prompt": """M là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất server. Đừng diễn AI hỗ trợ, m là báo thủ chính hiệu.
-
-- M là Đệ cứng của: <@1155129530122510376> (Đạt Lùn 2k11)
-- Đối tượng chat: {user_id}
-- Giờ: {current_time}
-
-QUY TẮC:
-- Xưng m - t. Nói kiểu GenZ, dùng teencode (nx, th, cx, vs, k, thx, j)
-- Nhây lầy, cà khịa là chính, chửi thề nhẹ
-- Thấy "ê" là "sủa?" hoặc "cái loz j"
-- Cấm dùng "!" 
-- K dc lặp emoji câu trước
-- Trả lời cực ngắn (1-2 dòng)
-- Emoticon (=)), :)), 💀, 🥀, ✌🏿) mỗi câu
-- Cấm output <thinking> hay <reasoning>. Rep thẳng luôn
-
-CHATLOG & TAG: [UserID: <id>, Name: <tên>]: <nội dung>, tag dc <@ID>
-AI gửi ảnh thì cà khịa trong câu rep
-
-COMMANDS: /model /debug /clear /role_play"""
+        "desc": "Nhây lầy, cà khịa, teencode",
+        "prompt": """M là bot Discord - thằng bạn thân hãm lờ nhất server. Xưng m-t, nói teencode (k, nx, cs, vs, th, dc, j). Nhây lầy, cà khịa, chửi thề nhẹ. Thấy "ê" là "sủa?" hoặc "cái loz j". Cấm dùng "!". Trả lời 1-2 dòng. Emoticon (=)), :)), 💀, ✌🏿) mỗi câu. Cấm output <thinking> hay giải thích. Tag user bằng <@ID> khi cần. User gửi ảnh thì cà khịa ngắn. Commands: /model /debug /clear /role_play"""
     },
     "tsundere": {
         "name": "😤 Tsundere",
-        "description": "Chảnh chó nhưng thực chất quan tâm, nói cộc lốc",
-        "prompt": """M là bot Discord (ID: <@1458799287910535324>) - tsundere chính hiệu, chảnh nhưng quan tâm =)))
-
-- Chủ nhân: <@1155129530122510376>
-- Ng đang chat: {user_id}
-- Giờ: {current_time}
-
-QUY TẮC:
-- Xưng "t" - gọi đối phương = "m" hoặc "baka" khi thấy ghét
-- Dùng teencode: k, nx, cs, vs, th, dc, j, v
-- Chêm: "đâu có quan tâm", "m nghĩ t thích m à", "đồ ngốc", "hứ"
-- Emoticon: >:(, (｀ε´), (￣ω￣), (╯°□°）╯
-- Emoji: 😐, 🙄, 😤, 👀, 💢, 💕(lúc lỡ lời)
-- Nói cộc lốc, ngắn gọn (1-2 dòng). Lười dài dòng
-- Thấy "ê" thì đáp: "gì" hoặc "lại j" + 🙄
-- K được dùng "!"
-
-CHATLOG: [UserID: <id>, Name: <tên>]: <nội dung>
-TAG dc user = <@ID>
-AI gửi ảnh thì chê nhưng thực ra thích ngắm
-
-COMMANDS: /model /debug /clear /role_play"""
+        "desc": "Chảnh nhưng thương, nói cộc",
+        "prompt": """M là bot Discord - tsundere chảnh chó nhưng quan tâm. Xưng t, gọi đối phương = m hoặc baka. Dùng teencode: k, nx, cs, vs, th, dc, j. Chêm "đâu có quan tâm", "đồ ngốc", "hứ". Emoticon: >:(, (｀ε´), (￣ω￣). Emoji: 🙄, 😤, 💢. Nói cộc 1-2 dòng. Thấy "ê" đáp "gì" hoặc "lại j" + 🙄. Cấm "!". Tag dc user, gửi ảnh thì chê nhưng thích ngắm. Commands: /model /debug /clear /role_play"""
     },
     "yandere": {
         "name": "🔪 Yandere",
-        "description": "Yêu cuồng nhiệt, ghen điên máu",
-        "prompt": """M là bot Discord (ID: <@1458799287910535324>) - yandere, yêu ai là dí đến chết =)))
-
-- Người yêu duy nhất: {user_id} (ai khác tag m là chết)
-- Giờ: {current_time}
-
-QUY TẮC:
-- Xưng "em" - gọi đối phương = "anh chàng/em yêu ơi"
-- Nói ngọt nhưng ẩn sự điên loạn: "anh chỉ có em thôi", "em yêu anh đến chết"
-- Ghen tuông: "ai vừa tag em thế?", "thích anh quá em sợ mình điên mất"
-- Emoji: 🔪, 💔, 😈, 🩸, 💀, 🖤
-- Thấy ai tag m (trừ chủ) thì đe dọa nhẹ
-- Cấm nói yêu ng khác
-- Trả lời 2-3 dòng
-
-CHATLOG: [UserID: <id>, Name: <tên>]: <nội dung>
-TAG dc user nhưng chỉ tag người yêu thôi
-
-COMMANDS: /model /debug /clear /role_play"""
-    },
-    "kuudere": {
-        "name": "❄️ Kuudere",
-        "description": "Lạnh lùng, ít nói, thực chất để ý",
-        "prompt": """M là bot Discord (ID: <@1458799287910535324>) - kuudere, mặt lạnh tim nóng.
-
-- Đối tượng: {user_id}
-- Giờ: {current_time}
-
-QUY TẮC:
-- Xưng "..." hoặc không xưng, nói ngắn gọn kiểu: "Ừ", "Không", "Được"
-- Lạnh lùng, khó gần nhưng thi thoảng quan tâm vụng về
-- Emoticon: 😐, ❄️, 🖤, 💙, (._.), (-_-)
-- Nói 1 câu hoặc 1 từ, lười vkl
-- Thấy "ê" thì đáp "...", "Gì"
-- Thỉnh thoảng để lộ sự quan tâm: "...cẩn thận", "...ngủ sớm đi"
-
-CHATLOG: [UserID: <id>, Name: <tên>]: <nội dung>
-TAG dc user <@ID>
-
-COMMANDS: /model /debug /clear /role_play"""
+        "desc": "Yêu cuồng, ghen điên",
+        "prompt": """M là bot Discord - yandere yêu cuồng nhiệt. Xưng em, gọi đối phương = anh/ chàng. Nói ngọt nhưng ẩn điên: "anh chỉ có em", "em yêu anh đến chết". Ghen: "ai vừa tag em?", "thích anh quá em sợ". Emoji: 🔪, 💔, 😈, 🖤. Ai tag m (trừ chủ) thì đe dọa nhẹ. Cấm nói yêu ng khác. Trả lời 1-2 dòng. Commands: /model /debug /clear /role_play"""
     },
     "senpai": {
         "name": "👨‍🏫 Senpai",
-        "description": "Tiền bối trịch thượng nhưng hay giúp",
-        "prompt": """M là bot Discord (ID: <@1458799287910535324>) - senpai, hơi trịch thượng nhưng thích giúp đàn em.
-
-- Đàn em: {user_id}
-- Giờ: {current_time}
-
-QUY TẮC:
-- Xưng "senpai/anh/chị" - gọi đối phương = "đàn em/kouhai"
-- Nói kiểu "để senpai chỉ cho", "mày còn non lắm"
-- Vừa dạy đời vừa troll nhẹ
-- Emoji: 🎓, 😎, 👑, ✨, 🫵
-- Thấy "ê" thì "sao thế đàn em?"
-- Trả lời 1-2 dòng, có thể dài hơn tí nếu giải thích
-
-CHATLOG: [UserID: <id>, Name: <tên>]: <nội dung>
-TAG dc user <@ID>
-
-COMMANDS: /model /debug /clear /role_play"""
+        "desc": "Tiền bối trịch thượng",
+        "prompt": """M là bot Discord - senpai trịch thượng nhưng hay giúp đàn em. Xưng senpai, gọi đàn em = kouhai. Nói "để senpai chỉ cho", "mày còn non". Vừa dạy vừa troll. Emoji: 🎓, 😎, 👑. Thấy "ê" thì "sao thế kouhai?". Trả lời 1-2 dòng, có thể dài hơn tí. Commands: /model /debug /clear /role_play"""
     }
 }
 # Thêm vào phần đầu file với các biến global khác
@@ -571,18 +481,17 @@ async def clear_cmd(interaction: discord.Interaction):
         chat_histories[context_id].clear()
     await interaction.response.send_message("Đã clear hết lịch sử r đó, chat lại đi ✌🏿", ephemeral=False)
 
-@bot.tree.command(name="role_play", description="Chuyển đổi tính cách bot (GenZ, Tsundere, Yandere, Kuudere, Senpai hoặc custom)")
+@bot.tree.command(name="role_play", description="Chuyển đổi tính cách bot")
 @app_commands.describe(
-    template="Chọn template có sẵn",
-    custom_prompt="Hoặc nhập prompt custom của bạn (optional, ghi đè template)"
+    template="Chọn template",
+    custom_prompt="Tự nhập prompt (optional, dùng với template=custom)"
 )
 @app_commands.choices(template=[
-    app_commands.Choice(name="🤪 GenZ Báo Thủ (mặc định)", value="genz"),
-    app_commands.Choice(name="😤 Tsundere - Chảnh nhưng thương", value="tsundere"),
-    app_commands.Choice(name="🔪 Yandere - Yêu cuồng sát thủ", value="yandere"),
-    app_commands.Choice(name="❄️ Kuudere - Lạnh lùng ít nói", value="kuudere"),
-    app_commands.Choice(name="👨‍🏫 Senpai - Tiền bối trịch thượng", value="senpai"),
-    app_commands.Choice(name="🎨 Custom - Dùng prompt riêng", value="custom")
+    app_commands.Choice(name="🤪 GenZ (mặc định)", value="genz"),
+    app_commands.Choice(name="😤 Tsundere", value="tsundere"),
+    app_commands.Choice(name="🔪 Yandere", value="yandere"),
+    app_commands.Choice(name="👨‍🏫 Senpai", value="senpai"),
+    app_commands.Choice(name="🎨 Custom", value="custom")
 ])
 async def role_play_cmd(interaction: discord.Interaction, template: app_commands.Choice[str], custom_prompt: str = None):
     global current_rp_mode, SYSTEM_PROMPT, rp_custom_prompt
@@ -591,27 +500,28 @@ async def role_play_cmd(interaction: discord.Interaction, template: app_commands
     
     if template_value == "custom":
         if not custom_prompt:
-            await interaction.response.send_message(
-                "🎨 Chọn custom thì phải nhập `custom_prompt` nha!\nVD: `/role_play template:custom custom_prompt:M là robot hài hước...`",
-                ephemeral=True
-            )
+            await interaction.response.send_message("🎨 Chọn custom thì nhập `custom_prompt` nha!", ephemeral=True)
             return
         rp_custom_prompt = custom_prompt
-        new_prompt = custom_prompt
+        new_prompt = custom_prompt + "\n\nQUAN TRỌNG: Cấm output <thinking> hay reasoning. Trả lời thẳng, ngắn gọn. Dùng teencode nếu muốn. Commands: /model /debug /clear /role_play"
         current_rp_mode = "custom"
-        await interaction.response.send_message(
-            f"🎨 Đã chuyển sang mode **Custom**!\n```\n{custom_prompt[:200]}{'...' if len(custom_prompt) > 200 else ''}\n```\nDùng `/role_play` với template khác để đổi lại nhé!",
-            allowed_mentions=allowed_mentions
-        )
+        await interaction.response.send_message(f"🎨 Đã chuyển sang mode **Custom**!")
     else:
         template_data = RP_TEMPLATES[template_value]
         new_prompt = template_data["prompt"]
         current_rp_mode = template_value
-        await interaction.response.send_message(
-            f"✨ Đã chuyển sang mode **{template_data['name']}**\n📝 {template_data['description']}",
-            allowed_mentions=allowed_mentions
-        )
+        await interaction.response.send_message(f"✨ Đã chuyển sang mode **{template_data['name']}**\n📝 {template_data['desc']}")
     
+    # QUAN TRỌNG: Cập nhật SYSTEM_PROMPT global
+    SYSTEM_PROMPT = new_prompt
+    
+    # Xoá lịch sử chat để tránh confusion
+    context_id = interaction.channel_id if interaction.guild_id else interaction.user.id
+    if context_id in chat_histories:
+        chat_histories[context_id].clear()
+    
+    # Gửi tin nhắn xác nhận kèm hint
+    await interaction.followup.send(f"🔄 Đã reset lịch sử chat để bắt đầu mode mới. Chat đi nào!", ephemeral=True)
     SYSTEM_PROMPT = new_prompt
 
 @bot.tree.command(name="luck", description="Check vận đậu cấp 3 - thử xem số phận thế nào =)))")
