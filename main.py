@@ -546,6 +546,32 @@ async def role_play_cmd(interaction: discord.Interaction, template: app_commands
     
     await interaction.followup.send(f"🔄 Đã reset lịch sử chat. Bot vẫn đọc được chatlog nhé!", ephemeral=True)
 
+@bot.tree.command(name="test_memory", description="Test xem bot có nhớ chatlog không")
+async def test_memory_cmd(interaction: discord.Interaction):
+    context_id = interaction.channel_id if interaction.guild_id else interaction.user.id
+    history_count = len(chat_histories[context_id])
+    
+    if history_count == 0:
+        await interaction.response.send_message("📭 Chưa có lịch sử chat trong kênh này!", ephemeral=True)
+        return
+    
+    # Lấy 3 tin nhắn gần nhất
+    recent = list(chat_histories[context_id])[-3:]
+    
+    embed = discord.Embed(title="🧠 Kiểm tra trí nhớ", color=0x00ff00)
+    embed.add_field(name="Số tin nhắn đã nhớ", value=str(history_count), inline=True)
+    
+    memory_text = ""
+    for msg in recent:
+        if msg["role"] == "user":
+            memory_text += f"🧑 {msg.get('author_name', 'User')}: {msg['content'][:50]}\n"
+        else:
+            memory_text += f"🤖 Bot: {msg['content'][:50]}\n"
+    
+    embed.add_field(name="📝 3 tin nhắn gần nhất", value=memory_text or "Không có", inline=False)
+    embed.set_footer(text="Nếu bot nhớ đúng nội dung trên thì ổn!")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 # ... (các lệnh /luck, /gacha, /gacha_inventory, /gacha_sell, /gacha_shop giữ nguyên, không thay đổi)
 
 # ---------- Main ----------
