@@ -508,6 +508,58 @@ COMMANDS: /model /debug /clear /femboy"""
         )
     
     SYSTEM_PROMPT = new_prompt
+    
+@bot.tree.command(name="luck", description="Check vận đậu cấp 3 - thử xem số phận thế nào =)))")
+@app_commands.describe(score="Nhập điểm thi nguyện vọng 1 của m (thang 10 hoặc 30 gì cũng đc)")
+async def luck_cmd(interaction: discord.Interaction, score: float):
+    # Check điểm hợp lệ
+    if score <= 0:
+        await interaction.response.send_message("Điểm âm hay =0 là tạch từ trong trứng rồi còn bốc phét gì nx 🙄", ephemeral=False)
+        return
+    
+    if score > 30:
+        await interaction.response.send_message("Điểm tối đa là 30 thôi m, m tưởng thi 100đ à =))))", ephemeral=False)
+        return
+    
+    await interaction.response.defer()
+    
+    # Random số từ 1 đến score
+    import random
+    random_score = random.randint(1, int(score))
+    
+    # Tạo prompt cho AI
+    model_config = MODELS_CONFIG[CURRENT_MODEL]
+    
+    if random_score < score:
+        # Tạch rồi =)))))
+        prompt = f"""Người dùng đạt {score} điểm nguyện vọng 1. Hệ thống random ra {random_score} điểm.
+        Kết quả: TẠCH CẤP 3 - điểm random dưới điểm chuẩn.
+        Hãy roast cực gắt, châm biếm, hài hước kiểu GenZ hoặc tsundere (tuỳ mode hiện tại). 
+        Nói ngắn gọn 1-2 câu, có emoji báo đời. Tuyệt đối an ủi hay động viên gì hết.
+        Chửi thẳng mặt luôn nhưng hài =))))"""
+    else:
+        # Đậu =)))))
+        prompt = f"""Người dùng đạt {score} điểm nguyện vọng 1. Hệ thống random ra {random_score} điểm.
+        Kết quả: ĐẬU CẤP 3 - điểm random cao hơn hoặc bằng điểm chuẩn.
+        Hãy chúc mừng nhưng kiểu chảnh, cà khịa nhẹ, hoặc bất ngờ. 
+        Nói 1-2 câu, có emoji. Không được sến súa quá."""
+    
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": f"Điểm NV1: {score}, random: {random_score}"}
+    ]
+    
+    ai_response = await call_ai(messages, CURRENT_MODEL, model_config["provider"], expect_image_tag=False)
+    
+    # Gửi kết quả
+    embed = discord.Embed(title="🎲 Kết quả bốc thăm vận mệnh", color=0xff0000 if random_score < score else 0x00ff00)
+    embed.add_field(name="📝 Điểm NV1 của m", value=f"**{score}**", inline=True)
+    embed.add_field(name="🎲 Số random", value=f"**{random_score}**", inline=True)
+    embed.add_field(name="📊 Kết luận", value="**TRƯỢT** 💀" if random_score < score else "**ĐẬU** 🎉", inline=True)
+    embed.add_field(name="💬 AI nhận xét", value=ai_response, inline=False)
+    embed.set_footer(text="*Đây chỉ là giải trí nhé, học hành tử tế vào =))))*")
+    
+    await interaction.followup.send(embed=embed)
 # ---------- Main ----------
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
