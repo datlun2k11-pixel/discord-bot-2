@@ -438,16 +438,6 @@ async def clear_cmd(interaction: discord.Interaction):
         chat_histories[context_id].clear()
     await interaction.response.send_message("Đã clear hết lịch sử r đó, chat lại đi ✌🏿", ephemeral=False)
 
-# Thêm biến global để lưu trạng thái femboy
-femboy_mode = False
-
-@bot.tree.command(name="clear", description="Xoá lịch sử chat trong kênh này")
-async def clear_cmd(interaction: discord.Interaction):
-    context_id = interaction.channel_id if interaction.guild_id else interaction.user.id
-    if context_id in chat_histories:
-        chat_histories[context_id].clear()
-    await interaction.response.send_message("Đã clear hết lịch sử r đó, chat lại đi ✌🏿", ephemeral=False)
-
 @bot.tree.command(name="femboy", description="Chuyển đổi giữa mode GenZ và Tsundere cutie")
 async def femboy_cmd(interaction: discord.Interaction):
     global femboy_mode
