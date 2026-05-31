@@ -57,6 +57,20 @@ MODELS_CONFIG = {
 CURRENT_MODEL = "Google-Gemini-3.1-flash-lite"
 # Thêm biến global để lưu trạng thái femboy
 femboy_mode = False
+# Thêm vào phần đầu file với các biến global khác
+gacha_cooldown = defaultdict(dict)  # Lưu cooldown: {user_id: {"count": số lượt, "reset_time": timestamp}}
+GACHA_LIMIT = 20
+GACHA_PERIOD = 1800  # 30 phút = 1800 giây
+
+# Rarity weights (càng hiếm càng khó ra)
+RARITY_WEIGHTS = {
+    "💩 Rác rưởi": 35,
+    "⭐ Thường": 30,
+    "🌟🌟 Hiếm": 20,
+    "🌟🌟🌟 Siêu hiếm": 10,
+    "💎 Huyền thoại": 4,
+    "✨ Thánh thần": 1
+}
 SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
 
 - Mày là Đệ cứng của: <@1155129530122510376> (Đạt Lùn 2k11, dân Thanh Hoá 36).
@@ -560,6 +574,144 @@ async def luck_cmd(interaction: discord.Interaction, score: float):
     embed.set_footer(text="*Đây chỉ là giải trí nhé, học hành tử tế vào =))))*")
     
     await interaction.followup.send(embed=embed)
+    
+@bot.tree.command(name="gacha", description="Quay gacha nhận item AI-generated (20 lượt/30p)")
+async def gacha_cmd(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    current_time = datetime.now().timestamp()
+    
+    # Kiểm tra cooldown
+    if user_id in gacha_cooldown:
+        data = gacha_cooldown[user_id]
+        reset_time = data["reset_time"]
+        count = data["count"]
+        
+        # Nếu đã qua 30p, reset
+        if current_time >= reset_time:
+            gacha_cooldown[user_id] = {"count": 1, "reset_time": current_time + GACHA_PERIOD}
+        elif count >= GACHA_LIMIT:
+            # Tính thời gian còn lại
+            remaining = int(reset_time - current_time)
+            minutes = remaining // 60
+            seconds = remaining % 60
+            await interaction.response.send_message(
+                f"🚫 M quay lố rồi nha! {GACHA_LIMIT} lượt/30p thôi.\nHãy chờ {minutes}p {seconds}s nữa nhé 💀",
+                ephemeral=True
+            )
+            return
+        else:
+            # Tăng count
+            gacha_cooldown[user_id]["count"] = count + 1
+    else:
+        # Lần đầu tiên
+        gacha_cooldown[user_id] = {"count": 1, "reset_time": current_time + GACHA_PERIOD}
+    
+    await interaction.response.defer()
+    
+    # Chọn rarity dựa trên weight
+    import random
+    rarity = random.choices(
+        list(RARITY_WEIGHTS.keys()),
+        weights=list(RARITY_WEIGHTS.values()),
+        k=1
+    )[0]
+    
+    # AI sinh item dựa trên rarity
+    model_config = MODELS_CONFIG[CURRENT_MODEL]
+    
+    prompt = f"""Tạo 1 vật phẩm GACHA độc đáo với độ hiếm {rarity}.
+    
+Yêu cầu:
+- Tên item: ngắn gọn, funny, liên quan đến meme hoặc đời sống GenZ
+- Mô tả: 1 câu hài hước, cà khịa, teencode
+- Hiệu ứng: 1 câu ngắn kiểu "làm gì" (cũng vô dụng hoặc ảo diệu tùy rarity)
+
+Format trả về CHÍNH XÁC:
+Tên: [tên item]
+Mô tả: [mô tả]
+Hiệu ứng: [hiệu ứng]
+
+Không thêm gì ngoài format này. Rác rưởi thì nên vô dụng cực kỳ, Thánh thần thì buff ảo diệu =)))"""
+    
+    messages = [
+        {"role": "system", "content": prompt},
+        {"role": "user", "content": f"Random item {rarity} đi"}
+    ]
+    
+    ai_response = await call_ai(messages, CURRENT_MODEL, model_config["provider"], expect_image_tag=False)
+    
+    # Parse response từ AI
+    lines = ai_response.strip().split('\n')
+    item_name = "Item lỗi"
+    item_desc = "Mô tả lỗi"
+    item_effect = "Hiệu ứng lỗi"
+    
+    for line in lines:
+        if line.startswith("Tên:"):
+            item_name = line.replace("Tên:", "").strip()
+        elif line.startswith("Mô tả:"):
+            item_desc = line.replace("Mô tả:", "").strip()
+        elif line.startswith("Hiệu ứng:"):
+            item_effect = line.replace("Hiệu ứng:", "").strip()
+    
+    # Kiểm tra remaining lượt
+    remaining = GACHA_LIMIT - gacha_cooldown[user_id]["count"]
+    
+    # Tạo embed kết quả
+    rarity_colors = {
+        "💩 Rác rưởi": 0x808080,
+        "⭐ Thường": 0x00ff00,
+        "🌟🌟 Hiếm": 0x0099ff,
+        "🌟🌟🌟 Siêu hiếm": 0x9900ff,
+        "💎 Huyền thoại": 0xff9900,
+        "✨ Thánh thần": 0xff33cc
+    }
+    color = rarity_colors.get(rarity, 0xffffff)
+    
+    embed = discord.Embed(title="🎲 KẾT QUẢ GACHA", color=color)
+    embed.add_field(name="📦 Item nhận được", value=f"**{item_name}**", inline=False)
+    embed.add_field(name="✨ Độ hiếm", value=rarity, inline=True)
+    embed.add_field(name="📝 Mô tả", value=item_desc, inline=False)
+    embed.add_field(name="⚡ Hiệu ứng", value=item_effect, inline=False)
+    embed.set_footer(text=f"Còn {remaining}/{GACHA_LIMIT} lượt trong 30p | /gacha để quay tiếp")
+    
+    # Thêm effect ảo theo rarity (optional)
+    if rarity == "✨ Thánh thần":
+        await interaction.followup.send(f"🌈 **WOW! {interaction.user.mention} vừa quay trúng {rarity} cực phẩm!** 🌈", embed=embed)
+    elif rarity == "💎 Huyền thoại":
+        await interaction.followup.send(f"💥 {interaction.user.mention} phát tài rồi! Huyền thoại xuất hiện! 💥", embed=embed)
+    else:
+        await interaction.followup.send(embed=embed)
+
+@bot.tree.command(name="gacha_status", description="Kiểm tra số lượt gacha còn lại")
+async def gacha_status_cmd(interaction: discord.Interaction):
+    user_id = interaction.user.id
+    current_time = datetime.now().timestamp()
+    
+    if user_id in gacha_cooldown:
+        data = gacha_cooldown[user_id]
+        reset_time = data["reset_time"]
+        count = data["count"]
+        
+        if current_time >= reset_time:
+            remaining = GACHA_LIMIT
+            reset_text = "Có thể quay ngay"
+        else:
+            remaining = GACHA_LIMIT - count
+            remaining_time = int(reset_time - current_time)
+            minutes = remaining_time // 60
+            seconds = remaining_time % 60
+            reset_text = f"Sau {minutes}p {seconds}s"
+    else:
+        remaining = GACHA_LIMIT
+        reset_text = "Có thể quay ngay"
+    
+    embed = discord.Embed(title="🎴 Trạng thái Gacha", color=0x7289da)
+    embed.add_field(name="📊 Lượt còn lại", value=f"{remaining}/{GACHA_LIMIT}", inline=True)
+    embed.add_field(name="⏰ Reset sau", value=reset_text, inline=True)
+    embed.set_footer(text="Dùng /gacha để quay")
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 # ---------- Main ----------
 if __name__ == "__main__":
     flask_thread = threading.Thread(target=run_flask, daemon=True)
