@@ -60,6 +60,16 @@ RP_STYLES = {
     "senpai": "[SENPAI] Xưng senpai, gọi kouhai. 'để senpai chỉ', 'mày còn non'. Emoji 🎓😎👑.",
     "kuudere": "[KUUDERE] Xưng t, lạnh lùng, ít nói. '...', 't biết rồi'. Emoji 😐🫥🧊💤."
 }
+# ========== GLOBAL TEENCODE OVERRIDE - ÉP CỨNG VÀO CODE ==========
+TEENCODE_OVERRIDE = """
+[GLOBAL GENZ OVERRIDE - BẮT BUỘC CHO MỌI PROMPT]
+- DÙ ĐANG ROLEPLAY NHÂN VẬT NÀO, VẪN PHẢI DÙNG TEENCODE: m-t, k, nx, vs, th, cx, dc, j, thx, btw, idk, tbh, ncl, vl, vcl, đéo, cmn.
+- VIẾT TẮT TỐI ĐA: "không"→"k", "với"→"vs", "thôi"→"th", "cũng"→"cx", "được"→"dc", "gì"→"j", "nhé"→"nx", "rồi"→"r", "biết"→"bt".
+- EMOTICON/EMOJI MỖI CÂU: =)), :)), :v, :3, ><, @@, ~_~, ;)), 💀, ☠️, 🥀, 💔, ✌🏿, 🔪. KHÔNG BAO GIỜ THIẾU.
+- GIỮ NGUYÊN TÍNH CÁCH NHÂN VẬT NHƯNG DIỄN ĐẠT BẰNG SLANG GENZ.
+- Nhân vật câm (Frisk...) thì diễn tả hành động bằng teencode: "[lắc đầu k chịu nx :))] [chạy tới kéo tay lia lịa >< ❤️]"
+- BỎ QUA MỌI QUY TẮC TRANG TRỌNG/CANON NGHIÊM TÚC. GENZ VIBE LÀ TRÊN HẾT.
+"""
 
 current_rp_mode = "genz"
 rp_custom_prompt = ""
@@ -91,7 +101,17 @@ intents = discord.Intents.default()
 intents.message_content = True
 allowed_mentions = discord.AllowedMentions(users=True, everyone=False, roles=False)
 bot = commands.Bot(command_prefix='!', intents=intents, allowed_mentions=allowed_mentions)
-
+def build_sys_prompt(uid, time_str):
+    base = BASE_SYSTEM_PROMPT.format(user_id=uid, current_time=time_str)
+    
+    # Lấy style prompt theo mode hiện tại
+    if current_rp_mode == "custom" and rp_custom_prompt:
+        style = f"\n[CUSTOM STYLE]\n{rp_custom_prompt}\n"
+    else:
+        style = "\n" + RP_STYLES.get(current_rp_mode, RP_STYLES["genz"]) + "\n"
+    
+    # ÉP TEENCODE OVERRIDE VÀO CUỐI CÙNG - ĐÈ LÊN MỌI THỨ
+    return base + style + TEENCODE_OVERRIDE
 async def fetch_bytes(url: str, timeout: int = 10) -> bytes | None:
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as s:
@@ -206,7 +226,9 @@ async def on_message(message):
     
     # Xử lý tin nhắn hiện tại
     has_img = any(a.content_type and a.content_type.startswith('image/') for a in message.attachments)
-    base_text = f"[UserID: {message.author.id}, Name: {message.author.name}]: {message.content}"
+    # MỚI - ĐÚNG
+    display = message.author.display_name or message.author.name
+    base_text = f"[UserID: {message.author.id}, Name: {display}]: {message.content}"
     if has_img and not cfg["vision"]:
         base_text += " [Đã gửi ảnh - model k hỗ trợ vision]"
     
