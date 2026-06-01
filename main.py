@@ -17,7 +17,7 @@ import threading
 import google.generativeai as genai
 from PIL import Image
 
-# Logging setup
+# Logging setup.
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
