@@ -188,29 +188,30 @@ async def on_message(message):
         return
 
     ctx_id = message.channel.id if message.guild else message.author.id
-
-    if message.guild and not bot.user.mentioned_in(message):
+    
+    # Check xem có nên reply không
+    should_reply = False
+    if message.guild:
+        should_reply = bot.user.mentioned_in(message)
+    else:
+        should_reply = True  # DM thì luôn reply
+    
+    # Check "ê" trước (chỉ reply nhanh, không gọi AI)
+    if should_reply and message.content.lower().strip() in ["ê", "e"]:
+        await message.reply("Sủa? 💀", allowed_mentions=allowed_mentions)
         await bot.process_commands(message)
         return
-
-    if message.content.lower().strip() in ["ê", "e"]:
-        await message.reply("Sủa? 💀", allowed_mentions=allowed_mentions)
-        return
-
+    
     cfg = MODELS_CONFIG[CURRENT_MODEL]
-    sys_prompt = build_sys_prompt(f"<@{message.author.id}>", datetime.now().strftime("%H:%M %d/%m/%Y"))
-
-    msgs = [{"role": "system", "content": sys_prompt}]
-    for h in chat_histories[ctx_id]:
-        msgs.append({"role": h["role"], "content": h["fmt"]})
-
+    
+    # Xử lý tin nhắn hiện tại
     has_img = any(a.content_type and a.content_type.startswith('image/') for a in message.attachments)
     base_text = f"[UserID: {message.author.id}, Name: {message.author.name}]: {message.content}"
     if has_img and not cfg["vision"]:
         base_text += " [Đã gửi ảnh - model k hỗ trợ vision]"
-
+    
     img_parts = await process_attachments(message.attachments, cfg["provider"]) if cfg["vision"] else []
-
+    
     if img_parts:
         if cfg["provider"] == "groq":
             current_content = [{"type": "text", "text": base_text}] + img_parts
@@ -218,18 +219,35 @@ async def on_message(message):
             current_content = [base_text] + img_parts
     else:
         current_content = base_text
-
-    msgs.append({"role": "user", "content": current_content})
-
+    
+    # LƯU VÀO HISTORY (luôn luôn lưu, kể cả không tag)
     save_fmt = base_text + (" [Đã gửi ảnh]" if has_img else "") if not isinstance(current_content, str) else current_content
-    chat_histories[ctx_id].append({"role": "user", "fmt": save_fmt})
-
+    chat_histories[ctx_id].append({
+        "role": "user", 
+        "fmt": save_fmt,
+        "author_id": str(message.author.id),
+        "author_name": message.author.name
+    })
+    
+    # Nếu không cần reply thì return (chỉ lưu, không gọi AI)
+    if not should_reply:
+        await bot.process_commands(message)
+        return
+    
+    # Build messages để gọi AI (có đầy đủ history)
+    sys_prompt = build_sys_prompt(f"<@{message.author.id}>", datetime.now().strftime("%H:%M %d/%m/%Y"))
+    msgs = [{"role": "system", "content": sys_prompt}]
+    for h in chat_histories[ctx_id]:
+        msgs.append({"role": h["role"], "content": h["fmt"]})
+    
+    # Gọi AI và reply
     async with message.channel.typing():
         reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"], imagine=True)
         final_text, img_url = await parse_imagine(reply)
-
+        
+        # Lưu bot response vào history
         chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or reply})
-
+        
         if img_url:
             img_data = await fetch_bytes(img_url, timeout=15)
             if img_data:
@@ -239,7 +257,7 @@ async def on_message(message):
                 await message.reply(final_text or "Tạo ảnh fail r 💀", allowed_mentions=allowed_mentions)
         else:
             await message.reply(final_text or reply, allowed_mentions=allowed_mentions)
-
+    
     await bot.process_commands(message)
 
 # ---------- Slash Commands ----------
