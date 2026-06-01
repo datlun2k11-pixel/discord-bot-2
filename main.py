@@ -2,6 +2,9 @@ import os
 import asyncio
 import io
 import re
+import json
+import time
+import logging
 from collections import defaultdict, deque
 from datetime import datetime
 from urllib.parse import quote
@@ -9,13 +12,14 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 import aiohttp
-from starlette.applications import Starlette
-from starlette.responses import PlainTextResponse
-from starlette.routing import Route
-import uvicorn
+from flask import Flask
 import threading
 import google.generativeai as genai
 from PIL import Image
+
+# Logging setup
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # ---------- Config ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -24,13 +28,13 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PORT = int(os.getenv("PORT", 8000))
 
 if not TOKEN:
-    print("THIẾU DISCORD_TOKEN TRONG ENV! 💀")
+    logger.error("THIẾU DISCORD_TOKEN TRONG ENV! 💀")
     exit()
 
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# FULL MODELS - KHÔNG CẮT XÉN
+# FULL MODELS
 MODELS_CONFIG = {
     "Groq-Llama-Scout": {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "provider": "groq", "vision": True},
     "GPT-OSS-120B": {"id": "openai/gpt-oss-120b", "provider": "groq", "vision": False},
@@ -60,22 +64,27 @@ RP_STYLES = {
 current_rp_mode = "genz"
 rp_custom_prompt = ""
 
-def build_sys_prompt(uid, time):
-    base = BASE_SYSTEM_PROMPT.format(user_id=uid, current_time=time)
+def build_sys_prompt(uid, time_str):
+    base = BASE_SYSTEM_PROMPT.format(user_id=uid, current_time=time_str)
     if current_rp_mode == "custom" and rp_custom_prompt:
         return base + f"\n[CUSTOM STYLE]\n{rp_custom_prompt}\n"
     return base + "\n" + RP_STYLES.get(current_rp_mode, RP_STYLES["genz"]) + "\n"
 
-# ---------- Memory & Web Server (Starlette for Koyeb) ----------
+# ---------- Memory & Flask ----------
 chat_histories = defaultdict(lambda: deque(maxlen=15))
 
-async def health_check(request):
-    return PlainTextResponse("Bot is running!", status_code=200)
+flask_app = Flask(__name__)
 
-web_app = Starlette(routes=[Route("/", health_check)])
+@flask_app.route('/')
+def health():
+    return "Bot is running!", 200
 
-def run_web():
-    uvicorn.run(web_app, host="0.0.0.0", port=PORT, log_level="warning")
+def run_flask():
+    try:
+        logger.info(f"🌐 Starting Flask on port {PORT}")
+        flask_app.run(host='0.0.0.0', port=PORT, debug=False, use_reloader=False)
+    except Exception as e:
+        logger.error(f"Flask error: {e}")
 
 # ---------- Bot Core ----------
 intents = discord.Intents.default()
@@ -90,7 +99,7 @@ async def fetch_bytes(url: str, timeout: int = 10) -> bytes | None:
                 if r.status == 200 and r.content_type and r.content_type.startswith('image/'):
                     return await r.read()
     except Exception as e:
-        print(f"Fetch bytes error: {e}")
+        logger.error(f"Fetch bytes error: {e}")
     return None
 
 async def process_attachments(atts, provider):
@@ -106,7 +115,7 @@ async def process_attachments(atts, provider):
                 try:
                     parts.append(Image.open(io.BytesIO(data)))
                 except Exception as e:
-                    print(f"Decode img error: {e}")
+                    logger.error(f"Decode img error: {e}")
     return parts
 
 async def call_ai(msgs, model_name, provider, imagine=False):
@@ -152,7 +161,7 @@ async def call_ai(msgs, model_name, provider, imagine=False):
             return resp.text or "Bot bị câm ☠️"
 
     except Exception as e:
-        print(f"Call AI Error: {e}")
+        logger.error(f"Call AI Error: {e}")
         return f"Lỗi AI: {str(e)[:100]} 💀"
 
 async def parse_imagine(text):
@@ -166,12 +175,12 @@ async def parse_imagine(text):
 
 @bot.event
 async def on_ready():
-    print(f"{bot.user} đã sẵn sàng! ✌🏿")
+    logger.info(f"✅ {bot.user} đã sẵn sàng!")
     try:
         synced = await bot.tree.sync()
-        print(f"Synced {len(synced)} commands")
+        logger.info(f"Synced {len(synced)} commands")
     except Exception as e:
-        print(f"Sync lỗi: {e}")
+        logger.error(f"Sync lỗi: {e}")
 
 @bot.event
 async def on_message(message):
@@ -341,5 +350,15 @@ async def test_memory_cmd(interaction):
 
 # ---------- Main ----------
 if __name__ == "__main__":
-    threading.Thread(target=run_web, daemon=True).start()
-    bot.run(TOKEN)
+    logger.info("🚀 Starting Flask web server...")
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+    
+    # Đợi Flask start xong mới chạy bot
+    time.sleep(3)
+    logger.info("🤖 Starting Discord bot...")
+    
+    try:
+        bot.run(TOKEN)
+    except Exception as e:
+        logger.error(f"Bot crashed: {e}")
