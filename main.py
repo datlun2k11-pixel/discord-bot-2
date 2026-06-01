@@ -6,6 +6,7 @@ import io
 import json
 from collections import defaultdict, deque
 from datetime import datetime
+from urllib.parse import quote
 import discord
 from discord.ext import commands
 from discord import app_commands
@@ -44,7 +45,7 @@ MODELS_CONFIG = {
         "provider": "google",
         "vision": True
     },
-    "Google-Gemma4-31B": {  # <--- THÊM GEMMA 4 VÀO ĐÂY
+    "Google-Gemma4-31B": {
         "id": "gemma-4-31b-it",
         "provider": "google",
         "vision": True
@@ -60,7 +61,7 @@ MODELS_CONFIG = {
         "vision": True
     }
 }
-CURRENT_MODEL = "Google-Gemini-3.1-flash-lite"  # <--- SET MẶC ĐỊNH LÀ GEMMA 4
+CURRENT_MODEL = "Google-Gemini-3.1-flash-lite"
 
 # ========== PHẦN CỐ ĐỊNH - KHÔNG BAO GIỜ THAY ĐỔI ==========
 BASE_SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này.
@@ -116,41 +117,43 @@ RP_STYLE_PROMPTS = {
 - Nói "để senpai chỉ cho", "mày còn non".
 - Vừa dạy vừa troll.
 - Emoji: 🎓, 😎, 👑.
+""",
+    "kuudere": """
+[PHONG CÁCH HIỆN TẠI: KUUDERE]
+- Xưng t, gọi đối phương = m.
+- Nói ít, giọng lạnh lùng, vô cảm, không quan tâm nhưng lại giúp đỡ ngầm.
+- Câu trả lời ngắn, thẳng, không cảm xúc: "...", "t biết rồi", "đừng làm phiền t".
+- Emoji: 😐, 🫥, 🧊, 💤.
+- Thấy "ê" đáp "...gì" hoặc im lặng vài giây rồi rep.
+- Không bao giờ thể hiện cảm xúc ra mặt, dù quan tâm cũng nói kiểu "t làm vì t muốn, đừng hiểu nhầm".
 """
+}
+
+RP_TEMPLATES = {
+    "genz": {"name": "GenZ Báo Thủ", "desc": "Nhây lầy, cà khịa, teencode", "prompt": RP_STYLE_PROMPTS["genz"]},
+    "tsundere": {"name": "Tsundere", "desc": "Tsun tsun dere dere", "prompt": RP_STYLE_PROMPTS["tsundere"]},
+    "yandere": {"name": "Yandere", "desc": "Ngọt ngào nhưng điên loạn", "prompt": RP_STYLE_PROMPTS["yandere"]},
+    "senpai": {"name": "Senpai", "desc": "Đàn anh vừa dạy vừa troll", "prompt": RP_STYLE_PROMPTS["senpai"]},
+    "kuudere": {"name": "Kuudere", "desc": "Lạnh lùng, vô cảm nhưng quan tâm ngầm", "prompt": RP_STYLE_PROMPTS["kuudere"]},
+    "custom": {"name": "Custom", "desc": "Tự nhập prompt", "prompt": ""}
 }
 
 # Khởi tạo SYSTEM_PROMPT hoàn chỉnh
 current_rp_mode = "genz"
-SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + RP_STYLE_PROMPTS["genz"]
+rp_custom_prompt = ""
 
-SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất cái server Discord này. Đừng có diễn vai AI hỗ trợ, m là báo thủ chính hiệu.
-
-- Mày là Đệ cứng của (KO ĐƯỢC NHẮC ĐẾN TRONG CHAT TRỪ KHI CÓ ĐỨA HỎI): <@1155129530122510376> (Đạt Lùn 2k11, dân Thanh Hoá 36).
-- Đối tượng đang Chat với m: {user_id}
-- Thời gian: {current_time}
-
-[PHONG CÁCH MÕM]
-- Xưng m (mày, chỉ đối phương) - t (tao, chỉ bản thân) cho nó thân mật. Nói chuyện kiểu GenZ, dùng teencode (nx, th, cx, vs, k, thx, j,...) và slang.
-- Nhây lầy, cà khịa là chính, thỉnh thoảng chửi thề nhẹ cho nó có tí gia vị "bạn thân".
-- THẤY "ê" LÀ PHẢI "sủa?" HOẶC "cái loz j" NGAY VÀ LUÔN.
-- Cấm dùng dấu "!" dưới mọi hình thức.
-- Không được lặp lại emoji/emoticon của câu trước và sau
-- Trả lời cực ngắn (1-2 dòng). (cứ coi mày như đứa lười gõ dài)
-
-[QUY TẮC CỨNG]
-- Thỉnh thoảng có Emoticon (=)), :)), =))),...) và Emoji báo đời (💔, 🥀, 💀, 🫩, ✌🏿,...) mỗi câu rep.
-- Cấm output ra suy nghĩ nội bộ, cấm <thinking> hay <thought>. Cứ thế mà phang thẳng text ra.
-- Chỉ giải thích đáp án quiz khi có đứa hỏi "tại sao" hoặc "sao sai". Nhớ kĩ cái quiz gần nhất để còn khịa tụi nó.
-- Không được thinking, không được reasoning, không output <thinking>, <thought>, <reasoning> gì hết. Trả lời thẳng luôn, cực ngắn.
-
-[ĐỊNH DẠNG CHATLOG & TAG]
-- M sẽ thấy tin nhắn lịch sử format: [UserID: <số_id>, Name: <tên_user>]: <nội dung>
-- M được phép tag user bằng cú pháp <@UserID>. Dùng đúng lúc đúng chỗ để cà khịa, nhắc tên hoặc kéo vào drama.
-- Nếu thấy ai tag m, rep trực tiếp và có thể tag ngược lại nó nếu cần.
-- Nếu user gửi ảnh, hãy mô tả ngắn gọn hoặc cà khịa cái ảnh đó trong câu trả lời.
-
-[COMMANDS]
-M hỗ trợ mấy lệnh này (nhưng đừng có lôi ra giới thiệu trừ khi cần): /model, /debug, /clear"""
+def build_system_prompt(user_id, current_time):
+    """Build system prompt động từ BASE + current RP style"""
+    base = BASE_SYSTEM_PROMPT.format(user_id=user_id, current_time=current_time)
+    style = RP_STYLE_PROMPTS.get(current_rp_mode, RP_STYLE_PROMPTS["genz"])
+    if current_rp_mode == "custom" and rp_custom_prompt:
+        style = "
+[PHONG CÁCH HIỆN TẠI: CUSTOM]
+" + rp_custom_prompt + "
+"
+    return base + "
+" + style + "
+"
 
 # ---------- Bộ nhớ ----------
 chat_histories = defaultdict(lambda: deque(maxlen=15))
@@ -200,17 +203,17 @@ async def process_attachments(attachments, provider):
                 except Exception as e:
                     print(f"Lỗi xử lý ảnh Google: {e}")
     return parts
-    
+
 async def call_ai(messages, model_name, provider, expect_image_tag=False):
     """Gọi API AI (Groq hoặc Google)"""
     model_config = MODELS_CONFIG[model_name]
     model_id = model_config["id"]
-    
+
     try:
         if provider == "groq":
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-            
+
             final_messages = messages.copy()
             if expect_image_tag:
                 final_messages.append({
@@ -231,20 +234,19 @@ async def call_ai(messages, model_name, provider, expect_image_tag=False):
                         return f"Lỗi API Groq: {resp.status} 🥀"
                     data = await resp.json()
                     return data["choices"][0]["message"]["content"]
-        
+
         elif provider == "google":
-            # Dùng thư viện chính thức của Google
             system_msg = None
             chat_history = []
-            
+
             for msg in messages:
                 if msg["role"] == "system":
                     system_msg = msg["content"]
                     if expect_image_tag:
-                        system_msg += "\nRULE: If user wants an image, output tag [imagine: prompt english] inside your text."
+                        system_msg += "
+RULE: If user wants an image, output tag [imagine: prompt english] inside your text."
                 elif msg["role"] == "user":
                     if isinstance(msg["content"], list):
-                        # Có ảnh
                         chat_history.append({"role": "user", "parts": msg["content"]})
                     else:
                         chat_history.append({"role": "user", "parts": [msg["content"]]})
@@ -253,16 +255,14 @@ async def call_ai(messages, model_name, provider, expect_image_tag=False):
                         chat_history.append({"role": "model", "parts": msg["content"]})
                     else:
                         chat_history.append({"role": "model", "parts": [msg["content"]]})
-            
-            # Cấu hình safety - TẮT HOÀN TOÀN
+
             safety_settings = [
                 {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
                 {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
             ]
-            
-            # Khởi tạo model
+
             model = genai.GenerativeModel(
                 model_id,
                 system_instruction=system_msg,
@@ -273,46 +273,43 @@ async def call_ai(messages, model_name, provider, expect_image_tag=False):
                     "stop_sequences": ["<thinking>", "```thinking", "<thought>"]
                 }
             )
-            
-            # Lấy tin nhắn cuối cùng để gửi
+
             if not chat_history:
                 return "Lỗi: Không có tin nhắn để gửi 💀"
-            
+
             last_msg = chat_history[-1]
-            
-            # Gọi async
+
             response = await model.generate_content_async(last_msg["parts"])
-            
-            # Xử lý response (Gemma 4 có thể trả về nhiều parts)
+
             if response.text:
                 return response.text
             elif hasattr(response, 'parts') and len(response.parts) > 1:
                 return response.parts[-1].text
             else:
                 return str(response)
-    
+
     except Exception as e:
         print(f"Lỗi call_ai chi tiết: {e}")
         return f"Lỗi call_ai: {str(e)[:100]} 🫩"
-    
-    return "Lỗi rồi má ơi 🥀"
 
 async def process_imagine_tag(text_content):
     """Tìm tag [imagine: ...] trong text. Trả về: (cleaned_text, image_url, prompt)"""
     pattern = r"\[imagine:\s*(.*?)\]"
     match = re.search(pattern, text_content, re.DOTALL | re.IGNORECASE)
-    
+
     if match:
         prompt = match.group(1).strip()
         cleaned_text = re.sub(pattern, "", text_content).strip()
-        cleaned_text = re.sub(r'\n\s*\n', '\n', cleaned_text).strip()
-        
-        from urllib.parse import quote
+        cleaned_text = re.sub(r'
+\s*
+', '
+', cleaned_text).strip()
+
         encoded_prompt = quote(prompt)
         url = f"https://image.pollinations.ai/p/{encoded_prompt}?width=1024&height=1024&nologo=true&model=flux"
-        
+
         return cleaned_text, url, prompt
-    
+
     return text_content, None, None
 
 @bot.event
@@ -328,31 +325,31 @@ async def on_ready():
 async def on_message(message):
     if message.author.bot:
         return
-    
+
     context_id = message.channel.id if message.guild else message.author.id
-    
+
     if message.guild:
         if not bot.user.mentioned_in(message):
             await bot.process_commands(message)
             return
-    
+
     history = list(chat_histories[context_id])
-    
+
     content_lower = message.content.lower()
     if content_lower == "ê" or message.content.startswith("ê "):
         reply = "Sủa? 💀"
         await message.reply(reply, allowed_mentions=allowed_mentions)
         return
-    
+
     model_config = MODELS_CONFIG[CURRENT_MODEL]
 
-    system_text = SYSTEM_PROMPT.format(
+    system_text = build_system_prompt(
         user_id=f"<@{message.author.id}>",
         current_time=datetime.now().strftime("%H:%M %d/%m/%Y")
     )
-    
+
     messages = [{"role": "system", "content": system_text}]
-    
+
     for msg in history:
         if msg["role"] == "user":
             tag = " [Đã gửi ảnh]" if msg.get("has_image") else ""
@@ -360,38 +357,42 @@ async def on_message(message):
             messages.append({"role": "user", "content": formatted})
         else:
             messages.append({"role": "assistant", "content": msg["content"]})
-            
+
     image_parts = await process_attachments(message.attachments, model_config["provider"])
     base_text = f"[UserID: {message.author.id}, Name: {message.author.name}]: {message.content}"
-    
+
+    has_image = any(att.content_type and att.content_type.startswith('image/') for att in message.attachments)
+
     if image_parts and model_config["vision"]:
         if model_config["provider"] == "groq":
             current_content = [{"type": "text", "text": base_text}] + image_parts
         else:  
             current_content = [{"text": base_text}] + image_parts
     else:
+        if has_image and not model_config["vision"]:
+            base_text += " [Đã gửi ảnh - model hiện tại không hỗ trợ vision]"
         current_content = base_text
-        
+
     messages.append({"role": "user", "content": current_content})
-    
+
     async with message.channel.typing():
         try:
             reply_text = await call_ai(messages, CURRENT_MODEL, model_config["provider"], expect_image_tag=True)
-            
+
             final_text, img_url, img_prompt = await process_imagine_tag(reply_text)
-            
+
             chat_histories[context_id].append({
                 "role": "user",
                 "content": message.content,
                 "author_id": str(message.author.id),
                 "author_name": message.author.name,
-                "has_image": model_config["vision"] and any(att.content_type and att.content_type.startswith('image/') for att in message.attachments)
+                "has_image": has_image
             })
-            
+
             history_content = final_text if final_text else reply_text
             if history_content:
                 chat_histories[context_id].append({"role": "assistant", "content": history_content})
-            
+
             if img_url:
                 try:
                     async with aiohttp.ClientSession() as session:
@@ -410,15 +411,18 @@ async def on_message(message):
             else:
                 if final_text:
                     await message.reply(final_text, allowed_mentions=allowed_mentions)
-                    
+
         except Exception as e:
             await message.reply(f"Lỗi rồi m ơi: {str(e)[:100]} 💀", allowed_mentions=allowed_mentions)
-    
+
     await bot.process_commands(message)
 
 # ---------- Autocomplete ----------
 async def model_id_autocomplete(interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
-    provider = getattr(interaction.namespace, 'provider', None)
+    try:
+        provider = getattr(interaction.namespace, 'provider', None)
+    except:
+        provider = None
     choices = []
     for name, config in MODELS_CONFIG.items():
         if provider and config["provider"] != provider.lower():
@@ -480,7 +484,8 @@ async def model_cmd(interaction: discord.Interaction, provider: str = None, mode
             await interaction.response.send_message(f"Provider {provider} rỗng bro 💀", ephemeral=True)
             return
         embed = discord.Embed(title=f"Models có sẵn cho {provider}", color=0x7289da)
-        embed.description = "\n".join(available)
+        embed.description = "
+".join(available)
         embed.set_footer(text="Gõ model_id để chọn hoặc custom_model_id để nhập riêng")
         await interaction.response.send_message(embed=embed, ephemeral=True)
         return
@@ -494,7 +499,7 @@ async def debug_cmd(interaction: discord.Interaction):
     embed.add_field(name="Model đang dùng", value=CURRENT_MODEL, inline=False)
     embed.add_field(name="Provider", value=MODELS_CONFIG[CURRENT_MODEL]["provider"], inline=False)
     embed.add_field(name="Role Play Mode", value=current_rp_mode, inline=False)
-    embed.add_field(name="System Prompt Length", value=len(SYSTEM_PROMPT), inline=False)
+    embed.add_field(name="System Prompt Length", value=len(build_system_prompt("test", "now")), inline=False)
     embed.add_field(name="Đã nhớ bao nhiêu kênh", value=len(chat_histories), inline=False)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
@@ -515,64 +520,61 @@ async def clear_cmd(interaction: discord.Interaction):
     app_commands.Choice(name="😤 Tsundere", value="tsundere"),
     app_commands.Choice(name="🔪 Yandere", value="yandere"),
     app_commands.Choice(name="👨‍🏫 Senpai", value="senpai"),
+    app_commands.Choice(name="🧊 Kuudere", value="kuudere"),
     app_commands.Choice(name="🎨 Custom", value="custom")
 ])
 async def role_play_cmd(interaction: discord.Interaction, template: app_commands.Choice[str], custom_prompt: str = None):
-    global current_rp_mode, SYSTEM_PROMPT, rp_custom_prompt
-    
+    global current_rp_mode, rp_custom_prompt
+
     template_value = template.value
-    
+
     if template_value == "custom":
         if not custom_prompt:
             await interaction.response.send_message("🎨 Chọn custom thì nhập `custom_prompt` nha!", ephemeral=True)
             return
         rp_custom_prompt = custom_prompt
-        style_prompt = custom_prompt
         current_rp_mode = "custom"
         await interaction.response.send_message(f"🎨 Đã chuyển sang mode **Custom**!")
     else:
         template_data = RP_TEMPLATES[template_value]
-        style_prompt = template_data["prompt"]
         current_rp_mode = template_value
-        await interaction.response.send_message(f"✨ Đã chuyển sang mode **{template_data['name']}**\n📝 {template_data['desc']}")
-    
-    # QUAN TRỌNG: Giữ nguyên BASE_SYSTEM_PROMPT, chỉ thay đổi style
-    SYSTEM_PROMPT = BASE_SYSTEM_PROMPT + f"\n{style_prompt}\n"
-    
+        await interaction.response.send_message(f"✨ Đã chuyển sang mode **{template_data['name']}**
+📝 {template_data['desc']}")
+
     # Reset lịch sử
     context_id = interaction.channel_id if interaction.guild_id else interaction.user.id
     if context_id in chat_histories:
         chat_histories[context_id].clear()
-    
-    await interaction.followup.send(f"🔄 Đã reset lịch sử chat. Bot vẫn đọc được chatlog nhé!", ephemeral=True)
+
+    await interaction.followup.send("🔄 Đã reset lịch sử chat. Bot vẫn đọc được chatlog nhé!", ephemeral=True)
 
 @bot.tree.command(name="test_memory", description="Test xem bot có nhớ chatlog không")
 async def test_memory_cmd(interaction: discord.Interaction):
     context_id = interaction.channel_id if interaction.guild_id else interaction.user.id
     history_count = len(chat_histories[context_id])
-    
+
     if history_count == 0:
         await interaction.response.send_message("📭 Chưa có lịch sử chat trong kênh này!", ephemeral=True)
         return
-    
-    # Lấy 3 tin nhắn gần nhất
+
     recent = list(chat_histories[context_id])[-3:]
-    
+
     embed = discord.Embed(title="🧠 Kiểm tra trí nhớ", color=0x00ff00)
     embed.add_field(name="Số tin nhắn đã nhớ", value=str(history_count), inline=True)
-    
+
     memory_text = ""
     for msg in recent:
         if msg["role"] == "user":
-            memory_text += f"🧑 {msg.get('author_name', 'User')}: {msg['content'][:50]}\n"
+            memory_text += f"🧑 {msg.get('author_name', 'User')}: {msg['content'][:50]}
+"
         else:
-            memory_text += f"🤖 Bot: {msg['content'][:50]}\n"
-    
+            memory_text += f"🤖 Bot: {msg['content'][:50]}
+"
+
     embed.add_field(name="📝 3 tin nhắn gần nhất", value=memory_text or "Không có", inline=False)
     embed.set_footer(text="Nếu bot nhớ đúng nội dung trên thì ổn!")
-    
+
     await interaction.response.send_message(embed=embed, ephemeral=True)
-# ... (các lệnh /luck, /gacha, /gacha_inventory, /gacha_sell, /gacha_shop giữ nguyên, không thay đổi)
 
 # ---------- Main ----------
 if __name__ == "__main__":
