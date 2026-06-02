@@ -310,7 +310,7 @@ async def on_message(message):
     for h in chat_histories[ctx_id]:
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
-        async with message.channel.typing():
+    async with message.channel.typing():
         # 1. Gọi AI
         reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"], imagine=True)
         
