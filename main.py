@@ -46,6 +46,13 @@ MODELS_CONFIG = {
 }
 CURRENT_MODEL = "Google-Gemini-3.1-flash-lite"
 
+# ========== GLOBAL SETTINGS (Có thể chỉnh bằng /setting) ==========
+BOT_SETTINGS = {
+    "temperature": 0.9,
+    "max_tokens": 3500,
+    "enable_vision": True  # Mặc định bật vision nếu model hỗ trợ
+}
+
 # ========== System Prompt & RP ==========
 BASE_SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất server.
 - Đệ cứng của <@1155129530122510376> (Đạt Lùn 2k11, Thanh Hoá 36). KO nhắc đến trừ khi được hỏi.
@@ -60,7 +67,8 @@ RP_STYLES = {
     "senpai": "[SENPAI] Xưng senpai, gọi kouhai. 'để senpai chỉ', 'mày còn non'. Emoji 🎓😎👑.",
     "kuudere": "[KUUDERE] Xưng t, lạnh lùng, ít nói. '...', 't biết rồi'. Emoji 😐🫥🧊💤."
 }
-# ========== GLOBAL TEENCODE OVERRIDE - ÉP CỨNG VÀO CODE ==========
+
+# ========== GLOBAL TEENCODE OVERRIDE ==========
 TEENCODE_OVERRIDE = """
 [GLOBAL GENZ OVERRIDE - BẮT BUỘC CHO MỌI PROMPT]
 - DÙ ĐANG ROLEPLAY NHÂN VẬT NÀO, VẪN PHẢI DÙNG TEENCODE: m-t, k, nx, vs, th, cx, dc, j, thx, btw, idk, tbh, ncl, vl, vcl, đéo, cmn.
@@ -76,9 +84,13 @@ rp_custom_prompt = ""
 
 def build_sys_prompt(uid, time_str):
     base = BASE_SYSTEM_PROMPT.format(user_id=uid, current_time=time_str)
+    
     if current_rp_mode == "custom" and rp_custom_prompt:
-        return base + f"\n[CUSTOM STYLE]\n{rp_custom_prompt}\n"
-    return base + "\n" + RP_STYLES.get(current_rp_mode, RP_STYLES["genz"]) + "\n"
+        style = f"\n[CUSTOM STYLE]\n{rp_custom_prompt}\n"
+    else:
+        style = "\n" + RP_STYLES.get(current_rp_mode, RP_STYLES["genz"]) + "\n"
+    
+    return base + style + TEENCODE_OVERRIDE
 
 # ---------- Memory & Flask ----------
 chat_histories = defaultdict(lambda: deque(maxlen=15))
@@ -101,17 +113,13 @@ intents = discord.Intents.default()
 intents.message_content = True
 allowed_mentions = discord.AllowedMentions(users=True, everyone=False, roles=False)
 bot = commands.Bot(command_prefix='!', intents=intents, allowed_mentions=allowed_mentions)
-def build_sys_prompt(uid, time_str):
-    base = BASE_SYSTEM_PROMPT.format(user_id=uid, current_time=time_str)
-    
-    # Lấy style prompt theo mode hiện tại
-    if current_rp_mode == "custom" and rp_custom_prompt:
-        style = f"\n[CUSTOM STYLE]\n{rp_custom_prompt}\n"
-    else:
-        style = "\n" + RP_STYLES.get(current_rp_mode, RP_STYLES["genz"]) + "\n"
-    
-    # ÉP TEENCODE OVERRIDE VÀO CUỐI CÙNG - ĐÈ LÊN MỌI THỨ
-    return base + style + TEENCODE_OVERRIDE
+
+# Owner ID của mày (Thay ID thật của mày vào đây nha bro)
+OWNER_ID = 1155129530122510376 
+
+def is_owner(interaction: discord.Interaction):
+    return interaction.user.id == OWNER_ID
+
 async def fetch_bytes(url: str, timeout: int = 10) -> bytes | None:
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as s:
@@ -141,17 +149,28 @@ async def process_attachments(atts, provider):
 async def call_ai(msgs, model_name, provider, imagine=False):
     cfg = MODELS_CONFIG[model_name]
     mid = cfg["id"]
+    
+    # Lấy setting từ global
+    temp = BOT_SETTINGS["temperature"]
+    max_tok = BOT_SETTINGS["max_tokens"]
+    
     try:
         if provider == "groq":
             headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-            payload = {"model": mid, "messages": msgs.copy(), "temperature": 0.9, "max_tokens": 3500}
+            payload = {
+                "model": mid, 
+                "messages": msgs.copy(), 
+                "temperature": temp, 
+                "max_tokens": max_tok
+            }
             if imagine:
                 payload["messages"].insert(1, {"role": "system", "content": "RULE: If user wants image, MUST output [imagine: english prompt] tag."})
             
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
                 async with s.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers) as r:
                     if r.status != 200:
-                        return f"Lỗi Groq {r.status} 🥀"
+                        error_text = await r.text()
+                        return f"Lỗi Groq {r.status}: {error_text[:100]} 🥀"
                     data = await r.json()
                     return data["choices"][0]["message"]["content"]
 
@@ -165,7 +184,7 @@ async def call_ai(msgs, model_name, provider, imagine=False):
                       "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
             
             model = genai.GenerativeModel(mid, system_instruction=sys, safety_settings=safety,
-                                         generation_config={"temperature": 0.9, "max_output_tokens": 3500,
+                                         generation_config={"temperature": temp, "max_output_tokens": max_tok,
                                                            "stop_sequences": ["<thinking>", "<thought>"]})
             history = []
             for m in msgs[1:]:
@@ -209,14 +228,12 @@ async def on_message(message):
 
     ctx_id = message.channel.id if message.guild else message.author.id
     
-    # Check xem có nên reply không
     should_reply = False
     if message.guild:
         should_reply = bot.user.mentioned_in(message)
     else:
-        should_reply = True  # DM thì luôn reply
+        should_reply = True 
     
-    # Check "ê" trước (chỉ reply nhanh, không gọi AI)
     if should_reply and message.content.lower().strip() in ["ê", "e"]:
         await message.reply("Sủa? 💀", allowed_mentions=allowed_mentions)
         await bot.process_commands(message)
@@ -224,15 +241,17 @@ async def on_message(message):
     
     cfg = MODELS_CONFIG[CURRENT_MODEL]
     
-    # Xử lý tin nhắn hiện tại
+    # Check vision setting
+    use_vision = BOT_SETTINGS["enable_vision"] and cfg["vision"]
+    
     has_img = any(a.content_type and a.content_type.startswith('image/') for a in message.attachments)
-    # MỚI - ĐÚNG
     display = message.author.display_name or message.author.name
     base_text = f"[UserID: {message.author.id}, Name: {display}]: {message.content}"
-    if has_img and not cfg["vision"]:
-        base_text += " [Đã gửi ảnh - model k hỗ trợ vision]"
     
-    img_parts = await process_attachments(message.attachments, cfg["provider"]) if cfg["vision"] else []
+    if has_img and not use_vision:
+        base_text += " [Đã gửi ảnh - vision đang tắt hoặc model k hỗ trợ]"
+    
+    img_parts = await process_attachments(message.attachments, cfg["provider"]) if use_vision else []
     
     if img_parts:
         if cfg["provider"] == "groq":
@@ -242,7 +261,6 @@ async def on_message(message):
     else:
         current_content = base_text
     
-    # LƯU VÀO HISTORY (luôn luôn lưu, kể cả không tag)
     save_fmt = base_text + (" [Đã gửi ảnh]" if has_img else "") if not isinstance(current_content, str) else current_content
     chat_histories[ctx_id].append({
         "role": "user", 
@@ -251,23 +269,19 @@ async def on_message(message):
         "author_name": message.author.name
     })
     
-    # Nếu không cần reply thì return (chỉ lưu, không gọi AI)
     if not should_reply:
         await bot.process_commands(message)
         return
     
-    # Build messages để gọi AI (có đầy đủ history)
     sys_prompt = build_sys_prompt(f"<@{message.author.id}>", datetime.now().strftime("%H:%M %d/%m/%Y"))
     msgs = [{"role": "system", "content": sys_prompt}]
     for h in chat_histories[ctx_id]:
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
-    # Gọi AI và reply
     async with message.channel.typing():
         reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"], imagine=True)
         final_text, img_url = await parse_imagine(reply)
         
-        # Lưu bot response vào history
         chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or reply})
         
         if img_url:
@@ -326,6 +340,46 @@ async def model_cmd(interaction, provider: str = None, model_id: str = None, cus
 
     await interaction.response.send_message(f"Đổi sang `{CURRENT_MODEL}` r đó ✌🏿")
 
+# NEW COMMAND: SETTING (OWNER ONLY)
+@bot.tree.command(name="setting", description="Cấu hình bot (Owner Only)")
+@app_commands.check(is_owner)
+async def setting_cmd(interaction, 
+                      temperature: float = None, 
+                      max_tokens: int = None, 
+                      enable_vision: bool = None):
+    
+    changed = False
+    msg = "⚙️ Cập nhật setting:\n"
+    
+    if temperature is not None:
+        if 0 <= temperature <= 2:
+            BOT_SETTINGS["temperature"] = temperature
+            msg += f"- Temperature: {temperature}\n"
+            changed = True
+        else:
+            msg += "- ❌ Temperature phải từ 0 đến 2.\n"
+            
+    if max_tokens is not None:
+        if 100 <= max_tokens <= 8000:
+            BOT_SETTINGS["max_tokens"] = max_tokens
+            msg += f"- Max Tokens: {max_tokens}\n"
+            changed = True
+        else:
+            msg += "- ❌ Max tokens phải từ 100 đến 8000.\n"
+            
+    if enable_vision is not None:
+        BOT_SETTINGS["enable_vision"] = enable_vision
+        status = "Bật ✅" if enable_vision else "Tắt ❌"
+        msg += f"- Vision: {status}\n"
+        changed = True
+        
+    if not changed and temperature is None and max_tokens is None and enable_vision is None:
+        # Hiển thị setting hiện tại nếu không nhập gì
+        vis_status = "Bật ✅" if BOT_SETTINGS["enable_vision"] else "Tắt ❌"
+        msg = f"📊 Setting hiện tại:\n- Temp: {BOT_SETTINGS['temperature']}\n- Max Tokens: {BOT_SETTINGS['max_tokens']}\n- Vision: {vis_status}"
+
+    await interaction.response.send_message(msg, ephemeral=True)
+
 @bot.tree.command(name="debug", description="Xem thông tin bot")
 async def debug_cmd(interaction):
     embed = discord.Embed(title="Debug Info", color=0x00ff00)
@@ -333,6 +387,11 @@ async def debug_cmd(interaction):
     embed.add_field(name="Provider", value=MODELS_CONFIG[CURRENT_MODEL]["provider"], inline=False)
     embed.add_field(name="RP Mode", value=current_rp_mode, inline=False)
     embed.add_field(name="Channels remembered", value=len(chat_histories), inline=False)
+    
+    # Thêm info setting vào debug cho tiện
+    vis_status = "On" if BOT_SETTINGS["enable_vision"] else "Off"
+    embed.add_field(name="Settings", value=f"Temp: {BOT_SETTINGS['temperature']}\nMaxTok: {BOT_SETTINGS['max_tokens']}\nVision: {vis_status}", inline=False)
+    
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="clear", description="Xoá lịch sử chat")
@@ -369,32 +428,13 @@ async def role_play_cmd(interaction, template: app_commands.Choice[str], custom_
 
     await interaction.response.send_message(msg)
     await interaction.followup.send("🔄 Reset history luôn nha!", ephemeral=True)
-
-@bot.tree.command(name="test_memory", description="Test trí nhớ bot")
-async def test_memory_cmd(interaction):
-    ctx_id = interaction.channel_id if interaction.guild_id else interaction.user.id
-    count = len(chat_histories[ctx_id])
-    if count == 0:
-        return await interaction.response.send_message("📭 Chưa có lịch sử chat!", ephemeral=True)
-
-    recent = list(chat_histories[ctx_id])[-3:]
-    mem_text = ""
-    for m in recent:
-        prefix = "🧑" if m["role"] == "user" else "🤖"
-        mem_text += f"{prefix} {m['fmt'][:60]}\n"
-
-    embed = discord.Embed(title="🧠 Kiểm tra trí nhớ", color=0x00ff00)
-    embed.add_field(name="Tổng tin nhắn", value=str(count), inline=True)
-    embed.add_field(name="3 tin gần nhất", value=mem_text or "N/A", inline=False)
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
+    
 # ---------- Main ----------
 if __name__ == "__main__":
     logger.info("🚀 Starting Flask web server...")
     flask_thread = threading.Thread(target=run_flask, daemon=True)
     flask_thread.start()
     
-    # Đợi Flask start xong mới chạy bot
     time.sleep(3)
     logger.info("🤖 Starting Discord bot...")
     
