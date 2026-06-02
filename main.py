@@ -57,6 +57,7 @@ BOT_SETTINGS = {
 BASE_SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất server.
 - Đệ cứng của <@1155129530122510376> (Đạt Lùn 2k11, Thanh Hoá 36). KO nhắc đến trừ khi được hỏi.
 - User đang chat: {user_id} | Thời gian: {current_time}
+- TƯƠNG TÁC EMOJI: Nếu muốn thả cảm xúc vào tin nhắn của user, hãy chèn tag [interaction: :emoji:] vào cuối câu. Ví dụ: "Hài vl [interaction: 😂]" hoặc "Buồn quá [interaction: 💔]". Bot sẽ tự động add reaction.
 [CHATLOG]: [UserID: <id>, Name: <tên>]: <nội dung> | Ảnh: [Đã gửi ảnh]
 [QUY TẮC]: Cấm "!". Không <thinking>/<thought>. Trả lời 1-2 dòng. Được tag <@UserID>."""
 
@@ -76,6 +77,7 @@ TEENCODE_OVERRIDE = """
 - EMOTICON/EMOJI gì cũng được, nên xài để giữ vibe genz: =)), :)), :v, :3, ><, @@, ~_~, ;)),... 💀, ☠️, 🥀, 💔, ✌🏿, 🔪,.....
 - GIỮ NGUYÊN TÍNH CÁCH NHÂN VẬT NHƯNG DIỄN ĐẠT BẰNG SLANG GENZ.
 - BỎ QUA MỌI QUY TẮC TRANG TRỌNG/CANON NGHIÊM TÚC. GENZ VIBE LÀ TRÊN HẾT.
+- TƯƠNG TÁC EMOJI: Nếu muốn thả cảm xúc vào tin nhắn của user, hãy chèn tag [interaction: :emoji:] vào cuối câu. Ví dụ: "Hài vl [interaction: 😂]" hoặc "Buồn quá [interaction: 💔]". Bot sẽ tự động add reaction.
 """
 
 current_rp_mode = "genz"
@@ -201,6 +203,26 @@ async def call_ai(msgs, model_name, provider, imagine=False):
     except Exception as e:
         logger.error(f"Call AI Error: {e}")
         return f"Lỗi AI: {str(e)[:100]} 💀"
+async def parse_interactions(message, text):
+    # Tìm tất cả các pattern [interaction: :emoji_name:]
+    # Ví dụ: [interaction: 😂] hoặc [interaction: 💀]
+    pattern = r"\[interaction:\s*(.*?)\]"
+    matches = re.findall(pattern, text)
+    
+    if matches:
+        for emoji_str in matches:
+            emoji_str = emoji_str.strip()
+            try:
+                # Thử add reaction
+                await message.add_reaction(emoji_str)
+                logger.info(f"Added reaction: {emoji_str}")
+            except Exception as e:
+                logger.error(f"Failed to add reaction {emoji_str}: {e}")
+        
+        # Xóa các tag interaction khỏi text trả lời cuối cùng để người dùng không thấy rác
+        cleaned_text = re.sub(pattern, "", text).strip()
+        return cleaned_text
+    return text
 
 async def parse_imagine(text):
     match = re.search(r"\[imagine:\s*(.*?)\]", text, re.DOTALL | re.IGNORECASE)
@@ -288,12 +310,24 @@ async def on_message(message):
     for h in chat_histories[ctx_id]:
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
-    async with message.channel.typing():
+        async with message.channel.typing():
+        # 1. Gọi AI
         reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"], imagine=True)
-        final_text, img_url = await parse_imagine(reply)
         
-        chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or reply})
+        # 2. Xử lý Reaction (Interaction) trước -> Trả về text đã sạch tag [interaction]
+        text_after_interaction = await parse_interactions(message, reply)
         
+        # 3. Xử lý Imagine (Tạo ảnh) -> Trả về text sạch và link ảnh
+        final_text, img_url = await parse_imagine(text_after_interaction)
+        
+        # Nếu sau khi clean mà rỗng thì dùng text gốc cho đỡ lỗi
+        if not final_text and not img_url:
+            final_text = text_after_interaction
+
+        # 4. Lưu vào history (Lưu cái đã sạch sẽ để k bị rác prompt sau này)
+        chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or "..."})
+        
+        # 5. Gửi tin nhắn
         if img_url:
             img_data = await fetch_bytes(img_url, timeout=15)
             if img_data:
@@ -302,7 +336,7 @@ async def on_message(message):
             else:
                 await message.reply(final_text or "Tạo ảnh fail r 💀", allowed_mentions=allowed_mentions)
         else:
-            await message.reply(final_text or reply, allowed_mentions=allowed_mentions)
+            await message.reply(final_text or text_after_interaction, allowed_mentions=allowed_mentions)
     
     await bot.process_commands(message)
 
