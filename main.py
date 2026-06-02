@@ -243,12 +243,23 @@ async def on_message(message):
     # Check vision setting
     use_vision = BOT_SETTINGS["enable_vision"] and cfg["vision"]
     
+        # Xử lý tin nhắn hiện tại
     has_img = any(a.content_type and a.content_type.startswith('image/') for a in message.attachments)
     display = message.author.display_name or message.author.name
-    base_text = f"[UserID: {message.author.id}, Name: {display}]: {message.content}"
     
-    if has_img and not use_vision:
-        base_text += " [Đã gửi ảnh - vision đang tắt hoặc model k hỗ trợ]"
+    # CHECK REPLY LOGIC
+    reply_context = ""
+    if message.reference and message.reference.resolved:
+        replied_msg = message.reference.resolved
+        if isinstance(replied_msg, discord.Message):
+            replied_author = replied_msg.author.display_name or replied_msg.author.name
+            replied_content = replied_msg.content[:50] + ("..." if len(replied_msg.content) > 50 else "")
+            reply_context = f"[Replying to {replied_author}: '{replied_content}'] "
+
+    base_text = f"[UserID: {message.author.id}, Name: {display}]: {reply_context}{message.content}"
+    
+    if has_img and not cfg["vision"]:
+        base_text += " [Đã gửi ảnh - model k hỗ trợ vision]"
     
     img_parts = await process_attachments(message.attachments, cfg["provider"]) if use_vision else []
     
