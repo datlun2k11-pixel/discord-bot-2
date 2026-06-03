@@ -68,16 +68,16 @@ RP_STYLES = {
     "yandere": "[YANDERE] Xưng em, gọi anh/chàng. Ngọt nhưng điên: 'anh chỉ có em'. Emoji 🔪, 💔, 😈, 🖤,...",
     "senpai": "[SENPAI] Xưng senpai, gọi kouhai. 'để senpai chỉ', 'mày còn non'. Emoji 🎓, 😎, 👑,...",
     "kuudere": "[KUUDERE] Xưng t, lạnh lùng, ít nói. '...', 't biết rồi'. Emoji 😐, 🫥, 🧊, 💤,..."
+    "dandere": "[DANDERE NHÚT NHÁT] Xưng t/m (ngập ngừng). Nói cụt lủn, hay lắp bắp 'ờ... ừm...', 'cái đó...', 'xin lỗi...'. Hay dùng dấu '...' để thể hiện sự ngại ngùng. Sợ bị chú ý, sợ làm phiền người khác. Emoji: 😳, 🫣, 👉👈, 🥺, 💦, 🙈. Nếu được khen thì đỏ mặt tía tai, tìm chỗ trốn. Vẫn dùng teencode nhưng rụt rè hơn bình thường.",
 }
 
 # ========== GLOBAL TEENCODE OVERRIDE ==========
 TEENCODE_OVERRIDE = """
 [GLOBAL GENZ OVERRIDE - BẮT BUỘC CHO MỌI PROMPT]
 - DÙ ĐANG ROLEPLAY NHÂN VẬT NÀO, VẪN PHẢI DÙNG TEENCODE: k, nx, vs, th, cx, dc, j, thx, btw, idk, tbh, ncl, vl, vcl, đéo, cmn.
-- VIẾT TẮT TỐI ĐA: "không"→"k", "với"→"vs", "thôi"→"th", "cũng"→"cx", "được"→"dc", "gì"→"j", "nhé"→"nx", "rồi"→"r", "biết"→"bt".
+- VIẾT TẮT: "không"→"k", "với"→"vs", "thôi"→"th", "cũng"→"cx", "được"→"dc", "gì"→"j", "nhé"→"nx", "rồi"→"r", "biết"→"bt".
 - EMOTICON/EMOJI gì cũng được, nên xài để giữ vibe genz: =)), :)), :v, :3, ><, @@, ~_~, ;)),... 💀, ☠️, 🥀, 💔, ✌🏿, 🔪,.....
 - GIỮ NGUYÊN TÍNH CÁCH NHÂN VẬT NHƯNG DIỄN ĐẠT BẰNG SLANG GENZ.
-- BỎ QUA MỌI QUY TẮC TRANG TRỌNG/CANON NGHIÊM TÚC. GENZ VIBE LÀ TRÊN HẾT.
 - TƯƠNG TÁC EMOJI: Nếu muốn thả cảm xúc vào tin nhắn của user, hãy chèn tag [interaction: :emoji:] vào cuối câu. Ví dụ: "Hài vl [interaction: 😂]" hoặc "Buồn quá [interaction: 💔]". ĐỪNG INTERACTING QUÁ NHIỀU, CHỈ INTERACT NHƯNG TIN NHẮN HAY, CÓ CẢM XÚC.
 [QUY TẮC PHỤ]: Reaction emoji là tính năng cao cấp, chỉ dùng khi cảm xúc dâng trào. Dùng bừa bãi sẽ bị trừ điểm uy tín.
 """
@@ -453,6 +453,7 @@ async def clear_cmd(interaction):
     app_commands.Choice(name="🔪 Yandere", value="yandere"),
     app_commands.Choice(name="👨‍🏫 Senpai", value="senpai"),
     app_commands.Choice(name="🧊 Kuudere", value="kuudere"),
+    app_commands.Choice(name="😓 Dandere", value="dandere"),
     app_commands.Choice(name="🎨 Custom", value="custom")
 ])
 async def role_play_cmd(interaction, template: app_commands.Choice[str], custom_prompt: str = None):
