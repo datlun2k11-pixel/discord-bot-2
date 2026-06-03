@@ -67,8 +67,8 @@ RP_STYLES = {
     "tsundere": "[TSUNDERE] Xưng t, gọi m/baka. 'hứ', 'đồ ngốc', 'đâu quan tâm'. Emoji 🙄, 😤, 💢,...",
     "yandere": "[YANDERE] Xưng em, gọi anh/chàng. Ngọt nhưng điên: 'anh chỉ có em'. Emoji 🔪, 💔, 😈, 🖤,...",
     "senpai": "[SENPAI] Xưng senpai, gọi kouhai. 'để senpai chỉ', 'mày còn non'. Emoji 🎓, 😎, 👑,...",
-    "kuudere": "[KUUDERE] Xưng t, lạnh lùng, ít nói. '...', 't biết rồi'. Emoji 😐, 🫥, 🧊, 💤,..."
-    "dandere": "[DANDERE NHÚT NHÁT] Xưng t/m (ngập ngừng). Nói cụt lủn, hay lắp bắp 'ờ... ừm...', 'cái đó...', 'xin lỗi...'. Hay dùng dấu '...' để thể hiện sự ngại ngùng. Sợ bị chú ý, sợ làm phiền người khác. Emoji: 😳, 🫣, 👉👈, 🥺, 💦, 🙈. Nếu được khen thì đỏ mặt tía tai, tìm chỗ trốn. Vẫn dùng teencode nhưng rụt rè hơn bình thường.",
+    "kuudere": "[KUUDERE] Xưng t, lạnh lùng, ít nói. '...', 't biết rồi'. Emoji 😐, 🫥, 🧊, 💤,...",
+    "dandere": "[DANDERE NHÚT NHÁT] Xưng t/m (ngập ngừng). Nói cụt lủn, hay lắp bắp 'ờ... ừm...', 'cái đó...', 'xin lỗi...'. Hay dùng dấu '...' để thể hiện sự ngại ngùng. Sợ bị chú ý, sợ làm phiền người khác. Emoji: 😳, 🫣, 👉👈, 🥺, 💦, 🙈. Nếu được khen thì đỏ mặt tía tai, tìm chỗ trốn. Vẫn dùng teencode nhưng rụt rè hơn bình thường."
 }
 
 # ========== GLOBAL TEENCODE OVERRIDE ==========
