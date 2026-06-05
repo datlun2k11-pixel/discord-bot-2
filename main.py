@@ -331,27 +331,27 @@ async def on_message(message):
     for h in chat_histories[ctx_id]:
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
-        async with message.channel.typing():
-    try:
-            # 1. Gọi AI (bỏ chế độ imagine đi cho nhẹ đầu)
+            async with message.channel.typing():
+        try:
+            # 1. Gọi AI
             logger.info(f"🤖 Calling AI with model: {CURRENT_MODEL}")
             reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
             logger.info(f"📝 Raw AI Reply: {reply[:100]}...") 
             
-            # 2. Xử lý Reaction (Interaction) -> Trả về text đã sạch tag [interaction]
+            # 2. Xử lý Reaction
             final_text = await parse_interactions(message, reply)
             
             # 3. Lưu câu trả lời của bot vào history
             chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or "..."})
             
-            # 4. Gửi tin nhắn trả lời bình thường, k vẽ vời j nữa
+            # 4. Gửi tin nhắn trả lời
             await message.reply(final_text, allowed_mentions=allowed_mentions)
                 
         except Exception as e:
             logger.error(f"💥 Critical error in on_message: {e}", exc_info=True)
             await message.reply("Bot bị lỗi rồi bro, thử lại sau nha ☠️", allowed_mentions=allowed_mentions)
     
-    # Luôn process commands ở cuối để đảm bảo các lệnh slash khác hoạt động
+    # Luôn process commands ở cuối
     await bot.process_commands(message)
 
 # ---------- Slash Commands ----------
