@@ -160,7 +160,6 @@ async def generate_image_hf(prompt: str):
     payload = {"inputs": prompt}
 
     try:
-        # Dùng connector ssl=False để test xem có phải do chặn SSL không
         connector = aiohttp.TCPConnector(ssl=False)
         async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60)) as session:
             async with session.post(API_URL, json=payload, headers=headers) as response:
@@ -172,10 +171,6 @@ async def generate_image_hf(prompt: str):
                 else:
                     error_text = await response.text()
                     return None, f"Lỗi HF {response.status}: {error_text[:100]}"
-    except Exception as e:
-        logger.error(f"HF Image Gen Error: {e}")
-        return None, f"Lỗi kết nối: {str(e)}"
-                # ... giữ nguyên phần xử lý bên trong ...
     except Exception as e:
         logger.error(f"HF Image Gen Error: {e}")
         return None, f"Lỗi kết nối: {str(e)}"
