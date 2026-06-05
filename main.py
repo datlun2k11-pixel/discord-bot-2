@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 # ---------- Config ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
+HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PORT = int(os.getenv("PORT", 8000))
@@ -123,6 +124,42 @@ OWNER_ID = 1155129530122510376
 
 def is_owner(interaction: discord.Interaction):
     return interaction.user.id == OWNER_ID
+
+async def generate_image_hf(prompt: str):
+    if not HF_API_TOKEN:
+        logger.error("Thiếu HF_API_TOKEN trong env 💀")
+        return None, "Lỗi config: Thiếu token HF"
+
+    # Dùng model FLUX.1-dev hoặc SDXL tùy thích. Flux đẹp hơn nhưng nặng hơn chút.
+    # Model ID: black-forest-labs/FLUX.1-dev hoặc stabilityai/stable-diffusion-xl-base-1.0
+    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+    
+    headers = {
+        "Authorization": f"Bearer {HF_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "inputs": prompt,
+        # Có thể thêm parameters nếu muốn kiểm soát sâu hơn
+        # "parameters": {"width": 1024, "height": 1024} 
+    }
+
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
+            async with session.post(API_URL, json=payload, headers=headers) as response:
+                if response.status == 200:
+                    # HF trả về binary image trực tiếp
+                    image_bytes = await response.read()
+                    return io.BytesIO(image_bytes), None
+                elif response.status == 503:
+                    return None, "Model đang load trên server HF, thử lại sau nha bro 🥀"
+                else:
+                    error_text = await response.text()
+                    return None, f"Lỗi HF {response.status}: {error_text[:100]}"
+    except Exception as e:
+        logger.error(f"HF Image Gen Error: {e}")
+        return None, f"Lỗi kết nối: {str(e)}"
 
 async def fetch_bytes(url: str, timeout: int = 15) -> bytes | None:
     headers = {
@@ -245,9 +282,9 @@ async def parse_imagine(text):
     match = re.search(r"\[imagine:\s*(.*?)\]", text, re.DOTALL | re.IGNORECASE)
     if match:
         prompt = match.group(1).strip()
+        # Xóa tag [imagine: ...] khỏi text trả lời
         cleaned = re.sub(r"\[imagine:\s*.*?\]", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
-        url = f"https://image.pollinations.ai/p/{quote(prompt)}?width=1024&height=1024&nologo=true&model=flux"
-        return cleaned, url
+        return cleaned, prompt # Trả về prompt thay vì URL
     return text, None
 
 @bot.event
@@ -354,28 +391,32 @@ async def on_message(message):
             # 2. Xử lý Reaction (Interaction) trước -> Trả về text đã sạch tag [interaction]
             text_after_interaction = await parse_interactions(message, reply)
             
-            # 3. Xử lý Imagine (Tạo ảnh) -> Trả về text sạch và link ảnh
-            final_text, img_url = await parse_imagine(text_after_interaction)
+                        # ... (các bước trước đó giữ nguyên) ...
             
-            # Nếu sau khi clean mà rỗng thì dùng text gốc cho đỡ lỗi
-            if not final_text and not img_url:
-                final_text = text_after_interaction
-
-            # 4. Lưu câu trả lời của bot vào history (đã sạch sẽ)
+            # 3. Xử lý Imagine tag -> Lấy prompt thô
+            final_text, imagine_prompt = await parse_imagine(text_after_interaction)
+            
+            # 4. Lưu câu trả lời của bot vào history (đã sạch tag)
             chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or "..."})
             
-            # 5. Gửi tin nhắn trả lời
-            if img_url:
-                logger.info(f"🎨 Generating image from URL: {img_url}")
-                img_data = await fetch_bytes(img_url, timeout=15)
-                if img_data:
-                    file = discord.File(io.BytesIO(img_data), filename="imagine.png")
+            # 5. Gửi tin nhắn trả lời & Tạo ảnh nếu có prompt
+            if imagine_prompt:
+                logger.info(f"🎨 Generating image via HF: {imagine_prompt}")
+                
+                # Gọi hàm gen ảnh mới
+                image_stream, error_msg = await generate_image_hf(imagine_prompt)
+                
+                if image_stream:
+                    # Tạo file discord từ bytes stream
+                    file = discord.File(image_stream, filename="imagine_hf.png")
                     await message.reply(content=final_text or None, file=file, allowed_mentions=allowed_mentions)
-                    logger.info("✅ Image sent successfully.")
+                    logger.info("✅ HF Image sent successfully.")
                 else:
-                    await message.reply(final_text or "Tạo ảnh fail r 💀 (Lỗi tải ảnh)", allowed_mentions=allowed_mentions)
-                    logger.error("❌ Failed to fetch image data.")
+                    # Nếu lỗi thì báo user
+                    await message.reply(final_text or f"Tạo ảnh fail r 💀\nLý do: {error_msg}", allowed_mentions=allowed_mentions)
+                    logger.error(f"❌ HF Image Gen Failed: {error_msg}")
             else:
+                # Không có yêu cầu vẽ ảnh thì trả lời bình thường
                 await message.reply(final_text or text_after_interaction, allowed_mentions=allowed_mentions)
                 
         except Exception as e:
