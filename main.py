@@ -5,6 +5,8 @@ import re
 import json
 import time
 import logging
+import socket
+import aiohttp.resolver
 from collections import defaultdict, deque
 from datetime import datetime
 from urllib.parse import quote
@@ -17,7 +19,7 @@ import threading
 import google.generativeai as genai
 from PIL import Image
 
-# Logging setup.
+aiohttp.resolver.DefaultResolver = lambda: aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
