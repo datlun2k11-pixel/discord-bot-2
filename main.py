@@ -159,7 +159,7 @@ async def generate_image_hf(prompt: str):
     
         payload = {"inputs": prompt}
 
-    try:
+        try:
         connector = aiohttp.TCPConnector(ssl=False)
         async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60)) as session:
             async with session.post(API_URL, json=payload, headers=headers) as response:
