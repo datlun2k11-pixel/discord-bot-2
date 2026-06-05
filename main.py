@@ -331,7 +331,7 @@ async def on_message(message):
     for h in chat_histories[ctx_id]:
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
-            async with message.channel.typing():
+    async with message.channel.typing():
         try:
             # 1. Gọi AI
             logger.info(f"🤖 Calling AI with model: {CURRENT_MODEL}")
