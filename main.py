@@ -147,7 +147,7 @@ async def generate_image_hf(prompt: str):
 
     try:
         async def generate_image_hf(prompt: str):
-    if not HF_API_TOKEN:
+        if not HF_API_TOKEN:
         logger.error("Thiếu HF_API_TOKEN trong env 💀")
         return None, "Lỗi config: Thiếu token HF"
 
