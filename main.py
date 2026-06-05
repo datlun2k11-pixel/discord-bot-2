@@ -332,7 +332,7 @@ async def on_message(message):
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
         async with message.channel.typing():
-        try:
+    try:
             # 1. Gọi AI (bỏ chế độ imagine đi cho nhẹ đầu)
             logger.info(f"🤖 Calling AI with model: {CURRENT_MODEL}")
             reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
