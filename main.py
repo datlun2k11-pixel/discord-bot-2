@@ -146,10 +146,25 @@ async def generate_image_hf(prompt: str):
     }
 
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
+        async def generate_image_hf(prompt: str):
+    if not HF_API_TOKEN:
+        logger.error("Thiếu HF_API_TOKEN trong env 💀")
+        return None, "Lỗi config: Thiếu token HF"
+
+    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+    headers = {
+        "Authorization": f"Bearer {HF_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {"inputs": prompt}
+
+    try:
+        # Dùng connector ssl=False để test xem có phải do chặn SSL không
+        connector = aiohttp.TCPConnector(ssl=False)
+        async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60)) as session:
             async with session.post(API_URL, json=payload, headers=headers) as response:
                 if response.status == 200:
-                    # HF trả về binary image trực tiếp
                     image_bytes = await response.read()
                     return io.BytesIO(image_bytes), None
                 elif response.status == 503:
@@ -157,6 +172,10 @@ async def generate_image_hf(prompt: str):
                 else:
                     error_text = await response.text()
                     return None, f"Lỗi HF {response.status}: {error_text[:100]}"
+    except Exception as e:
+        logger.error(f"HF Image Gen Error: {e}")
+        return None, f"Lỗi kết nối: {str(e)}"
+                # ... giữ nguyên phần xử lý bên trong ...
     except Exception as e:
         logger.error(f"HF Image Gen Error: {e}")
         return None, f"Lỗi kết nối: {str(e)}"
