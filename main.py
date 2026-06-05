@@ -247,32 +247,45 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    # Bỏ qua tin nhắn của bot khác để tránh loop vô tận
     if message.author.bot:
         return
 
     ctx_id = message.channel.id if message.guild else message.author.id
     
+    # Xác định xem bot có nên trả lời không
     should_reply = False
     if message.guild:
+        # Trong server: chỉ trả lời khi được tag
         should_reply = bot.user.mentioned_in(message)
     else:
+        # Trong DM: luôn trả lời
         should_reply = True 
     
+    # Xử lý lệnh đặc biệt "ê" hoặc "e"
     if should_reply and message.content.lower().strip() in ["ê", "e"]:
         await message.reply("Sủa? 💀", allowed_mentions=allowed_mentions)
         await bot.process_commands(message)
         return
+    
+    # Nếu không phải lúc cần trả lời, vẫn phải process commands để các slash command hoạt động
+    if not should_reply:
+        await bot.process_commands(message)
+        return
+
+    # --- BẮT ĐẦU XỬ LÝ TIN NHẮN CHÍNH ---
+    logger.info(f"📨 Processing message from {message.author.name} in channel {ctx_id}")
     
     cfg = MODELS_CONFIG[CURRENT_MODEL]
     
     # Check vision setting
     use_vision = BOT_SETTINGS["enable_vision"] and cfg["vision"]
     
-        # Xử lý tin nhắn hiện tại
+    # Kiểm tra xem tin nhắn có ảnh không
     has_img = any(a.content_type and a.content_type.startswith('image/') for a in message.attachments)
     display = message.author.display_name or message.author.name
     
-    # CHECK REPLY LOGIC
+    # Xử lý context nếu reply một tin nhắn khác
     reply_context = ""
     if message.reference and message.reference.resolved:
         replied_msg = message.reference.resolved
@@ -281,22 +294,27 @@ async def on_message(message):
             replied_content = replied_msg.content[:50] + ("..." if len(replied_msg.content) > 50 else "")
             reply_context = f"[Replying to {replied_author}: '{replied_content}'] "
 
+    # Tạo nội dung text chính để đưa vào history
     base_text = f"[UserID: {message.author.id}, Name: {display}]: {reply_context}{message.content}"
     
+    # Nếu có ảnh nhưng model không hỗ trợ vision thì báo vào text
     if has_img and not cfg["vision"]:
         base_text += " [Đã gửi ảnh - model k hỗ trợ vision]"
     
+    # Xử lý attachment thành parts cho AI (nếu dùng vision)
     img_parts = await process_attachments(message.attachments, cfg["provider"]) if use_vision else []
     
+    # Chuẩn bị content cho AI
     if img_parts:
         if cfg["provider"] == "groq":
             current_content = [{"type": "text", "text": base_text}] + img_parts
-        else:
+        else: # Google
             current_content = [base_text] + img_parts
     else:
         current_content = base_text
     
-    save_fmt = base_text + (" [Đã gửi ảnh]" if has_img else "") if not isinstance(current_content, str) else current_content
+    # Lưu vào history (dùng fmt để lưu định dạng đẹp)
+    save_fmt = base_text + (" [Đã gửi ảnh]" if has_img else "")
     chat_histories[ctx_id].append({
         "role": "user", 
         "fmt": save_fmt,
@@ -304,43 +322,53 @@ async def on_message(message):
         "author_name": message.author.name
     })
     
-    if not should_reply:
-        await bot.process_commands(message)
-        return
-    
+    # Xây dựng system prompt
     sys_prompt = build_sys_prompt(f"<@{message.author.id}>", datetime.now().strftime("%H:%M %d/%m/%Y"))
+    
+    # Chuẩn bị messages list để gửi cho AI
     msgs = [{"role": "system", "content": sys_prompt}]
     for h in chat_histories[ctx_id]:
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
     async with message.channel.typing():
-        # 1. Gọi AI
-        reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"], imagine=True)
-        
-        # 2. Xử lý Reaction (Interaction) trước -> Trả về text đã sạch tag [interaction]
-        text_after_interaction = await parse_interactions(message, reply)
-        
-        # 3. Xử lý Imagine (Tạo ảnh) -> Trả về text sạch và link ảnh
-        final_text, img_url = await parse_imagine(text_after_interaction)
-        
-        # Nếu sau khi clean mà rỗng thì dùng text gốc cho đỡ lỗi
-        if not final_text and not img_url:
-            final_text = text_after_interaction
+        try:
+            # 1. Gọi AI với chế độ imagine=True để ép nó trả về tag [imagine: ...] nếu cần
+            logger.info(f"🤖 Calling AI with model: {CURRENT_MODEL}")
+            reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"], imagine=True)
+            logger.info(f"📝 Raw AI Reply: {reply[:100]}...") # Log 100 ký tự đầu để debug
+            
+            # 2. Xử lý Reaction (Interaction) trước -> Trả về text đã sạch tag [interaction]
+            text_after_interaction = await parse_interactions(message, reply)
+            
+            # 3. Xử lý Imagine (Tạo ảnh) -> Trả về text sạch và link ảnh
+            final_text, img_url = await parse_imagine(text_after_interaction)
+            
+            # Nếu sau khi clean mà rỗng thì dùng text gốc cho đỡ lỗi
+            if not final_text and not img_url:
+                final_text = text_after_interaction
 
-        # 4. Lưu vào history (Lưu cái đã sạch sẽ để k bị rác prompt sau này)
-        chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or "..."})
-        
-        # 5. Gửi tin nhắn
-        if img_url:
-            img_data = await fetch_bytes(img_url, timeout=15)
-            if img_data:
-                file = discord.File(io.BytesIO(img_data), filename="imagine.png")
-                await message.reply(content=final_text or None, file=file, allowed_mentions=allowed_mentions)
+            # 4. Lưu câu trả lời của bot vào history (đã sạch sẽ)
+            chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or "..."})
+            
+            # 5. Gửi tin nhắn trả lời
+            if img_url:
+                logger.info(f"🎨 Generating image from URL: {img_url}")
+                img_data = await fetch_bytes(img_url, timeout=15)
+                if img_data:
+                    file = discord.File(io.BytesIO(img_data), filename="imagine.png")
+                    await message.reply(content=final_text or None, file=file, allowed_mentions=allowed_mentions)
+                    logger.info("✅ Image sent successfully.")
+                else:
+                    await message.reply(final_text or "Tạo ảnh fail r 💀 (Lỗi tải ảnh)", allowed_mentions=allowed_mentions)
+                    logger.error("❌ Failed to fetch image data.")
             else:
-                await message.reply(final_text or "Tạo ảnh fail r 💀", allowed_mentions=allowed_mentions)
-        else:
-            await message.reply(final_text or text_after_interaction, allowed_mentions=allowed_mentions)
+                await message.reply(final_text or text_after_interaction, allowed_mentions=allowed_mentions)
+                
+        except Exception as e:
+            logger.error(f"💥 Critical error in on_message: {e}", exc_info=True)
+            await message.reply("Bot bị lỗi rồi bro, thử lại sau nha ☠️", allowed_mentions=allowed_mentions)
     
+    # Luôn process commands ở cuối để đảm bảo các lệnh slash khác hoạt động
     await bot.process_commands(message)
 
 # ---------- Slash Commands ----------
