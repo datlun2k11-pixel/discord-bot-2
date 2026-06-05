@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 
 # ---------- Config ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
-HF_API_TOKEN = os.getenv("HF_API_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PORT = int(os.getenv("PORT", 8000))
@@ -80,10 +79,8 @@ TEENCODE_OVERRIDE = """
 - EMOTICON/EMOJI gì cũng được (Khuyến khích nên có trong mọi tin nhắn để tăng tính biểu đạt), nên xài để giữ vibe genz: =)), :)), :v, :3, ><, @@, ~_~, ;)),... 💀, ☠️, 🥀, 💔, ✌🏿, 🔪,.....
 - GIỮ NGUYÊN TÍNH CÁCH NHÂN VẬT NHƯNG DIỄN ĐẠT BẰNG SLANG GENZ.
 - TƯƠNG TÁC EMOJI: Nếu muốn thả cảm xúc vào tin nhắn của user, hãy chèn tag [interaction: :emoji:] vào cuối câu. Ví dụ: "Hài vl [interaction: 😂] 🥀💔" hoặc "Buồn quá [interaction: 💔] ✌🏿💔". ĐỪNG INTERACTING QUÁ NHIỀU, CHỈ INTERACT NHƯNG TIN NHẮN HAY, CÓ CẢM XÚC.
+- M ko có chức năng tạo ảnh, đừng bốc phét bản thân có.
 [QUY TẮC PHỤ]: Reaction emoji là tính năng cao cấp, chỉ dùng khi cảm xúc dâng trào. Dùng bừa bãi sẽ bị trừ điểm uy tín.
-[IMAGE GENERATION RULE]
-- Nếu user yêu cầu vẽ/tạo ảnh, LƯU Ý LÀ CHỈ KHI USER YÊU CẦU, NẾU KO SẼ BỊ TỐN CREDIT RẤT NHIỀU. PHẢI trả về tag: [imagine: mô tả chi tiết bằng tiếng Anh]
-- Ví dụ: [imagine: a cute cat wearing sunglasses, cyberpunk style], AI sẽ tự tạo ảnh
 """
 
 current_rp_mode = "genz"
@@ -127,35 +124,6 @@ OWNER_ID = 1155129530122510376
 def is_owner(interaction: discord.Interaction):
     return interaction.user.id == OWNER_ID
 
-async def generate_image_hf(prompt: str):
-    if not HF_API_TOKEN:
-        logger.error("Thiếu HF_API_TOKEN trong env 💀")
-        return None, "Lỗi config: Thiếu token HF"
-
-    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-    headers = {
-        "Authorization": f"Bearer {HF_API_TOKEN}",
-        "Content-Type": "application/json"
-    }
-    
-    payload = {"inputs": prompt}
-
-    try:
-        connector = aiohttp.TCPConnector(ssl=False)
-        async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60)) as session:
-            async with session.post(API_URL, json=payload, headers=headers) as response:
-                if response.status == 200:
-                    image_bytes = await response.read()
-                    return io.BytesIO(image_bytes), None
-                elif response.status == 503:
-                    return None, "Model đang load trên server HF, thử lại sau nha bro 🥀"
-                else:
-                    error_text = await response.text()
-                    return None, f"Lỗi HF {response.status}: {error_text[:100]}"
-    except Exception as e:
-        logger.error(f"HF Image Gen Error: {e}")
-        return None, f"Lỗi kết nối: {str(e)}"
-
 async def fetch_bytes(url: str, timeout: int = 15) -> bytes | None:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
@@ -196,7 +164,7 @@ async def process_attachments(atts, provider):
                     logger.error(f"Decode img error: {e}")
     return parts
 
-async def call_ai(msgs, model_name, provider, imagine=False):
+async def call_ai(msgs, model_name, provider):
     cfg = MODELS_CONFIG[model_name]
     mid = cfg["id"]
     
@@ -213,8 +181,6 @@ async def call_ai(msgs, model_name, provider, imagine=False):
                 "temperature": temp, 
                 "max_tokens": max_tok
             }
-            if imagine:
-                payload["messages"].insert(1, {"role": "system", "content": "RULE: If user wants image, MUST output [imagine: english prompt] tag."})
             
             async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
                 async with s.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers) as r:
@@ -226,8 +192,6 @@ async def call_ai(msgs, model_name, provider, imagine=False):
 
         elif provider == "google":
             sys = msgs[0]["content"] if msgs and msgs[0]["role"] == "system" else ""
-            if imagine:
-                sys += "\nRULE: If user wants image, output [imagine: prompt english]."
             
             safety = [{"category": c, "threshold": "BLOCK_NONE"} for c in 
                      ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", 
@@ -272,15 +236,6 @@ async def parse_interactions(message, text):
         cleaned_text = re.sub(pattern, "", text).strip()
         return cleaned_text
     return text
-
-async def parse_imagine(text):
-    match = re.search(r"\[imagine:\s*(.*?)\]", text, re.DOTALL | re.IGNORECASE)
-    if match:
-        prompt = match.group(1).strip()
-        # Xóa tag [imagine: ...] khỏi text trả lời
-        cleaned = re.sub(r"\[imagine:\s*.*?\]", "", text, flags=re.DOTALL | re.IGNORECASE).strip()
-        return cleaned, prompt # Trả về prompt thay vì URL
-    return text, None
 
 @bot.event
 async def on_ready():
@@ -376,43 +331,21 @@ async def on_message(message):
     for h in chat_histories[ctx_id]:
         msgs.append({"role": h["role"], "content": h["fmt"]})
     
-    async with message.channel.typing():
+        async with message.channel.typing():
         try:
-            # 1. Gọi AI với chế độ imagine=True để ép nó trả về tag [imagine: ...] nếu cần
+            # 1. Gọi AI (bỏ chế độ imagine đi cho nhẹ đầu)
             logger.info(f"🤖 Calling AI with model: {CURRENT_MODEL}")
-            reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"], imagine=True)
-            logger.info(f"📝 Raw AI Reply: {reply[:100]}...") # Log 100 ký tự đầu để debug
+            reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
+            logger.info(f"📝 Raw AI Reply: {reply[:100]}...") 
             
-            # 2. Xử lý Reaction (Interaction) trước -> Trả về text đã sạch tag [interaction]
-            text_after_interaction = await parse_interactions(message, reply)
+            # 2. Xử lý Reaction (Interaction) -> Trả về text đã sạch tag [interaction]
+            final_text = await parse_interactions(message, reply)
             
-                        # ... (các bước trước đó giữ nguyên) ...
-            
-            # 3. Xử lý Imagine tag -> Lấy prompt thô
-            final_text, imagine_prompt = await parse_imagine(text_after_interaction)
-            
-            # 4. Lưu câu trả lời của bot vào history (đã sạch tag)
+            # 3. Lưu câu trả lời của bot vào history
             chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or "..."})
             
-            # 5. Gửi tin nhắn trả lời & Tạo ảnh nếu có prompt
-            if imagine_prompt:
-                logger.info(f"🎨 Generating image via HF: {imagine_prompt}")
-                
-                # Gọi hàm gen ảnh mới
-                image_stream, error_msg = await generate_image_hf(imagine_prompt)
-                
-                if image_stream:
-                    # Tạo file discord từ bytes stream
-                    file = discord.File(image_stream, filename="imagine_hf.png")
-                    await message.reply(content=final_text or None, file=file, allowed_mentions=allowed_mentions)
-                    logger.info("✅ HF Image sent successfully.")
-                else:
-                    # Nếu lỗi thì báo user
-                    await message.reply(final_text or f"Tạo ảnh fail r 💀\nLý do: {error_msg}", allowed_mentions=allowed_mentions)
-                    logger.error(f"❌ HF Image Gen Failed: {error_msg}")
-            else:
-                # Không có yêu cầu vẽ ảnh thì trả lời bình thường
-                await message.reply(final_text or text_after_interaction, allowed_mentions=allowed_mentions)
+            # 4. Gửi tin nhắn trả lời bình thường, k vẽ vời j nữa
+            await message.reply(final_text, allowed_mentions=allowed_mentions)
                 
         except Exception as e:
             logger.error(f"💥 Critical error in on_message: {e}", exc_info=True)
