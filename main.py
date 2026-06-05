@@ -151,13 +151,13 @@ async def generate_image_hf(prompt: str):
                 logger.error("Thiếu HF_API_TOKEN trong env 💀")
                 return None, "Lỗi config: Thiếu token HF"
 
-    API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-    headers = {
+        API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
+        headers = {
         "Authorization": f"Bearer {HF_API_TOKEN}",
         "Content-Type": "application/json"
-    }
+        }
     
-    payload = {"inputs": prompt}
+        payload = {"inputs": prompt}
 
     try:
         connector = aiohttp.TCPConnector(ssl=False)
