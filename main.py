@@ -130,36 +130,15 @@ async def generate_image_hf(prompt: str):
         logger.error("Thiếu HF_API_TOKEN trong env 💀")
         return None, "Lỗi config: Thiếu token HF"
 
-    # Dùng model FLUX.1-dev hoặc SDXL tùy thích. Flux đẹp hơn nhưng nặng hơn chút.
-    # Model ID: black-forest-labs/FLUX.1-dev hoặc stabilityai/stable-diffusion-xl-base-1.0
     API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-    
     headers = {
         "Authorization": f"Bearer {HF_API_TOKEN}",
         "Content-Type": "application/json"
     }
     
-    payload = {
-        "inputs": prompt,
-        # Có thể thêm parameters nếu muốn kiểm soát sâu hơn
-        # "parameters": {"width": 1024, "height": 1024} 
-    }
+    payload = {"inputs": prompt}
 
     try:
-        async def generate_image_hf(prompt: str):
-            if not HF_API_TOKEN:
-                logger.error("Thiếu HF_API_TOKEN trong env 💀")
-                return None, "Lỗi config: Thiếu token HF"
-
-        API_URL = "https://api-inference.huggingface.co/models/black-forest-labs/FLUX.1-dev"
-        headers = {
-        "Authorization": f"Bearer {HF_API_TOKEN}",
-        "Content-Type": "application/json"
-        }
-    
-        payload = {"inputs": prompt}
-
-        try:
         connector = aiohttp.TCPConnector(ssl=False)
         async with aiohttp.ClientSession(connector=connector, timeout=aiohttp.ClientTimeout(total=60)) as session:
             async with session.post(API_URL, json=payload, headers=headers) as response:
