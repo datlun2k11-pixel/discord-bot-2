@@ -124,15 +124,29 @@ OWNER_ID = 1155129530122510376
 def is_owner(interaction: discord.Interaction):
     return interaction.user.id == OWNER_ID
 
-async def fetch_bytes(url: str, timeout: int = 10) -> bytes | None:
+async def fetch_bytes(url: str, timeout: int = 15) -> bytes | None:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as s:
-            async with s.get(url) as r:
-                if r.status == 200 and r.content_type and r.content_type.startswith('image/'):
-                    return await r.read()
+            async with s.get(url, headers=headers) as r:
+                if r.status == 200:
+                    # Kiểm tra xem content-type có phải ảnh không
+                    if r.content_type and r.content_type.startswith('image/'):
+                        return await r.read()
+                    else:
+                        logger.warning(f"URL returned non-image content type: {r.content_type}")
+                        return None
+                else:
+                    logger.error(f"Failed to fetch image. Status: {r.status}, URL: {url}")
+                    return None
+    except asyncio.TimeoutError:
+        logger.error(f"Timeout while fetching image from: {url}")
+        return None
     except Exception as e:
         logger.error(f"Fetch bytes error: {e}")
-    return None
+        return None
 
 async def process_attachments(atts, provider):
     parts = []
