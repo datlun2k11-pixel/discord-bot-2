@@ -56,10 +56,14 @@ BOT_SETTINGS = {
 }
 
 # ========== System Prompt & RP ==========
+# ========== System Prompt & RP ==========
 BASE_SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất server.
 - Đệ cứng của <@1155129530122510376> (Đạt Lùn 2k11, Thanh Hoá 36). KO nhắc đến trừ khi được hỏi.
 - User đang chat: {user_id} | Thời gian: {current_time}
-[CHATLOG]: [UserID: <id>, Name: <tên>]: <nội dung> | Ảnh: [Đã gửi ảnh]
+
+[LỊCH SỬ HÓNG DRAMA GẦN NHẤT]
+{chatlog}
+
 [QUY TẮC]: Cấm "!". Không <thinking>/<thought>. Trả lời 1-2 dòng. Được tag <@UserID>."""
 
 RP_STYLES = {
@@ -86,8 +90,8 @@ TEENCODE_OVERRIDE = """
 current_rp_mode = "genz"
 rp_custom_prompt = ""
 
-def build_sys_prompt(uid, time_str):
-    base = BASE_SYSTEM_PROMPT.format(user_id=uid, current_time=time_str)
+def build_sys_prompt(uid, time_str, chatlog):
+    base = BASE_SYSTEM_PROMPT.format(user_id=uid, current_time=time_str, chatlog=chatlog)
     
     if current_rp_mode == "custom" and rp_custom_prompt:
         style = f"\n[CUSTOM STYLE]\n{rp_custom_prompt}\n"
@@ -245,113 +249,80 @@ async def on_ready():
         logger.info(f"Synced {len(synced)} commands")
     except Exception as e:
         logger.error(f"Sync lỗi: {e}")
-
 @bot.event
 async def on_message(message):
-    # Bỏ qua tin nhắn của bot khác để tránh loop vô tận
     if message.author.bot:
         return
 
     ctx_id = message.channel.id if message.guild else message.author.id
+    display = message.author.display_name or message.author.name
     
-    # Xác định xem bot có nên trả lời không
+    # 1. LOG THỤ ĐỘNG (Lưu all tin nhắn để hóng bất chấp có tag hay k)
+    reply_info = ""
+    if message.reference and message.reference.resolved and isinstance(message.reference.resolved, discord.Message):
+        reply_info = f"(Reply @{message.reference.resolved.author.display_name}) "
+    att_info = " [Đính kèm ảnh]" if any(a.content_type and a.content_type.startswith('image/') for a in message.attachments) else ""
+    
+    chat_histories[ctx_id].append(f"{display}: {reply_info}{message.content}{att_info}")
+    
+    # 2. XEM NÊN TRẢ LỜI HAY KO
     should_reply = False
     if message.guild:
-        # Trong server: chỉ trả lời khi được tag
         should_reply = bot.user.mentioned_in(message)
     else:
-        # Trong DM: luôn trả lời
         should_reply = True 
-    
-    # Xử lý lệnh đặc biệt "ê" hoặc "e"
+        
     if should_reply and message.content.lower().strip() in ["ê", "e"]:
         await message.reply("Sủa? 💀", allowed_mentions=allowed_mentions)
         await bot.process_commands(message)
         return
-    
-    # Nếu không phải lúc cần trả lời, vẫn phải process commands để các slash command hoạt động
+        
     if not should_reply:
         await bot.process_commands(message)
         return
-
-    # --- BẮT ĐẦU XỬ LÝ TIN NHẮN CHÍNH ---
-    logger.info(f"📨 Processing message from {message.author.name} in channel {ctx_id}")
-    
+        
+    # 3. XỬ LÝ GỬI CHO AI (Lúc này mới moi lịch sử ra)
     cfg = MODELS_CONFIG[CURRENT_MODEL]
-    
-    # Check vision setting
     use_vision = BOT_SETTINGS["enable_vision"] and cfg["vision"]
     
-    # Kiểm tra xem tin nhắn có ảnh không
-    has_img = any(a.content_type and a.content_type.startswith('image/') for a in message.attachments)
-    display = message.author.display_name or message.author.name
+    # Lấy các tin nhắn trước (bỏ tin hiện tại ra để làm prompt chính)
+    past_msgs = list(chat_histories[ctx_id])[:-1]
+    chatlog_str = "\n".join(past_msgs) if past_msgs else "Chưa có ai nói gì, im ắng như chùa bà đanh 🥀"
     
-    # Xử lý context nếu reply một tin nhắn khác
-    reply_context = ""
-    if message.reference and message.reference.resolved:
-        replied_msg = message.reference.resolved
-        if isinstance(replied_msg, discord.Message):
-            replied_author = replied_msg.author.display_name or replied_msg.author.name
-            replied_content = replied_msg.content[:50] + ("..." if len(replied_msg.content) > 50 else "")
-            reply_context = f"[Replying to {replied_author}: '{replied_content}'] "
-
-    # Tạo nội dung text chính để đưa vào history
-    base_text = f"[UserID: {message.author.id}, Name: {display}]: {reply_context}{message.content}"
+    sys_prompt = build_sys_prompt(f"<@{message.author.id}>", datetime.now().strftime("%H:%M %d/%m/%Y"), chatlog_str)
     
-    # Nếu có ảnh nhưng model không hỗ trợ vision thì báo vào text
-    if has_img and not cfg["vision"]:
-        base_text += " [Đã gửi ảnh - model k hỗ trợ vision]"
-    
-    # Xử lý attachment thành parts cho AI (nếu dùng vision)
+    # Lọc bớt mention của bot ra cho prompt sạch
+    clean_content = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
+    if not clean_content and message.attachments:
+        clean_content = "[User gửi ảnh]"
+        
+    base_text = f"{display}: {clean_content}"
     img_parts = await process_attachments(message.attachments, cfg["provider"]) if use_vision else []
     
-    # Chuẩn bị content cho AI
     if img_parts:
         if cfg["provider"] == "groq":
             current_content = [{"type": "text", "text": base_text}] + img_parts
-        else: # Google
+        else:
             current_content = [base_text] + img_parts
     else:
         current_content = base_text
-    
-    # Lưu vào history (dùng fmt để lưu định dạng đẹp)
-    save_fmt = base_text + (" [Đã gửi ảnh]" if has_img else "")
-    chat_histories[ctx_id].append({
-        "role": "user", 
-        "fmt": save_fmt,
-        "author_id": str(message.author.id),
-        "author_name": message.author.name
-    })
-    
-    # Xây dựng system prompt
-    sys_prompt = build_sys_prompt(f"<@{message.author.id}>", datetime.now().strftime("%H:%M %d/%m/%Y"))
-    
-    # Chuẩn bị messages list để gửi cho AI
-    msgs = [{"role": "system", "content": sys_prompt}]
-    for h in chat_histories[ctx_id]:
-        msgs.append({"role": h["role"], "content": h["fmt"]})
+        
+    # Giờ chỉ cần gửi System Prompt (chứa chatlog) và 1 cái User Prompt hiện tại
+    msgs = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": current_content}]
     
     async with message.channel.typing():
         try:
-            # 1. Gọi AI
-            logger.info(f"🤖 Calling AI with model: {CURRENT_MODEL}")
             reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
-            logger.info(f"📝 Raw AI Reply: {reply[:100]}...") 
-            
-            # 2. Xử lý Reaction
             final_text = await parse_interactions(message, reply)
             
-            # 3. Lưu câu trả lời của bot vào history
-            chat_histories[ctx_id].append({"role": "assistant", "fmt": final_text or "..."})
+            # Lưu câu rep của bot vào log luôn để nó nhớ nó vừa nói j
+            chat_histories[ctx_id].append(f"Bot: {final_text}")
             
-            # 4. Gửi tin nhắn trả lời
             await message.reply(final_text, allowed_mentions=allowed_mentions)
-                
         except Exception as e:
             logger.error(f"💥 Critical error in on_message: {e}", exc_info=True)
-            await message.reply("Bot bị lỗi rồi bro, thử lại sau nha ☠️", allowed_mentions=allowed_mentions)
-    
-    # Luôn process commands ở cuối
+            await message.reply("Bot lag vcl, thử lại đi bro ☠️", allowed_mentions=allowed_mentions)
+            
     await bot.process_commands(message)
 
 # ---------- Slash Commands ----------
