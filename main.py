@@ -2,6 +2,7 @@ import os
 import asyncio
 import io
 import re
+import random
 import json
 import time
 import logging
@@ -127,6 +128,39 @@ OWNER_ID = 1155129530122510376
 
 def is_owner(interaction: discord.Interaction):
     return interaction.user.id == OWNER_ID
+
+class RPSView(discord.ui.View):
+    def __init__(self, author_id: int):
+        super().__init__(timeout=30.0)
+        self.author_id = author_id
+        self.user_choice = None
+        # Bot chốt lựa chọn NGAY KHI tạo view, AI đéo biết được 🤡
+        self.bot_choice = random.choice(["rock", "paper", "scissors"]) 
+
+    @discord.ui.button(label="Búa 🗿", style=discord.ButtonStyle.blurple, custom_id="rps_rock")
+    async def btn_rock(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_choice(interaction, "rock")
+
+    @discord.ui.button(label="Giấy 📄", style=discord.ButtonStyle.green, custom_id="rps_paper")
+    async def btn_paper(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_choice(interaction, "paper")
+
+    @discord.ui.button(label="Kéo ✂️", style=discord.ButtonStyle.red, custom_id="rps_scissors")
+    async def btn_scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self._handle_choice(interaction, "scissors")
+
+    async def _handle_choice(self, interaction: discord.Interaction, choice: str):
+        if interaction.user.id != self.author_id:
+            return await interaction.response.send_message("Nút của người ta mà m bấm j vậy? Vô duyên vl 💔", ephemeral=True)
+        
+        self.user_choice = choice
+        self.stop()  # Dừng view lại, disable các nút
+        
+        # Disable tất cả nút sau khi bấm
+        for child in self.children:
+            child.disabled = True
+        await interaction.response.edit_message(view=self)
+
 
 async def fetch_bytes(url: str, timeout: int = 15) -> bytes | None:
     headers = {
@@ -428,6 +462,69 @@ async def clear_cmd(interaction):
     ctx_id = interaction.channel_id if interaction.guild_id else interaction.user.id
     chat_histories[ctx_id].clear()
     await interaction.response.send_message("Clear sạch sẽ r bro ✌🏿")
+
+@bot.tree.command(name="summer_game", description="Oẳn tù tì với bot (Chống gian lận 100%)")
+async def summer_game_cmd(interaction: discord.Interaction):
+    view = RPSView(interaction.user.id)
+    
+    embed = discord.Embed(
+        title="🌊 Summer Game: Oẳn Tù Tì", 
+        description="Bot đã chốt đơn trong bóng tối rồi nha.\nBấm nút bên dưới để quyết đấu đi bro! ⏳", 
+        color=0x7289da
+    )
+    await interaction.response.send_message(embed=embed, view=view)
+    
+    # Chờ user bấm nút (tối đa 30s)
+    await view.wait()
+    
+    if not view.user_choice:
+        return await interaction.edit_original_response(
+            content="Hết giờ rồi mà k chịu bấm, mày sợ hả? Nhát gan vl ☠️", 
+            embed=None, view=None
+        )
+    
+    # Lúc này mới gọi AI để nó bình luận về kết quả (AI k hề biết quá trình chọn)
+    u = view.user_choice
+    b = view.bot_choice
+    emojis = {"rock": "🗿", "paper": "📄", "scissors": "✂️"}
+    
+    if u == b:
+        result_text = "Hòa"
+        score = "Mày: 0 | Bot: 0"
+    elif (u == "rock" and b == "scissors") or \
+         (u == "paper" and b == "rock") or \
+         (u == "scissors" and b == "paper"):
+        result_text = "Mày thắng"
+        score = "Mày: +1 | Bot: 0"
+    else:
+        result_text = "Bot thắng"
+        score = "Mày: 0 | Bot: +1"
+        
+    # Gọi AI cà khịa dựa trên KẾT QUẢ CUỐI CÙNG thui
+    await interaction.edit_original_response(content="🤔 Đang nhờ AI soạn văn tế...", embed=None, view=None)
+    
+    prompt = f"""Kết quả oẳn tù tì: User ra {emojis[u]}, Bot ra {emojis[b]}. Kết quả: {result_text}.
+Hãy viết 1 câu bình luận ngắn gọn (dưới 20 từ) bằng giọng GenZ nhây, cà khịa. 
+- Nếu user thắng: Cay cú, đổ lỗi, hậm hực.
+- Nếu bot thắng: Kiêu ngạo, khinh bỉ, cười cợt.
+- Nếu hòa: Chán nản, kêu xui xẻo.
+Dùng teencode + emoji. KHÔNG markdown."""
+
+    try:
+        cfg = MODELS_CONFIG[CURRENT_MODEL]
+        msgs = [{"role": "user", "content": prompt}]
+        ai_comment = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
+    except Exception as e:
+        logger.error(f"RPS AI error: {e}")
+        ai_comment = "Bot bị đứng hình, thôi tính mày thắng đi cho lẹ =))"
+    
+    color_map = {"Mày thắng": 0x00ff00, "Bot thắng": 0xff0000, "Hòa": 0xffff00}
+    final_embed = discord.Embed(title=f"🎮 Kết Quả: {result_text}", description=ai_comment, color=color_map.get(result_text, 0x7289da))
+    final_embed.add_field(name="Lượt đấu", value=f"{emojis[u]} vs {emojis[b]}", inline=False)
+    final_embed.add_field(name="Tỉ số", value=score, inline=False)
+    final_embed.set_footer(text="Bot chốt trước khi mày bấm, gian lận cái dái 🤡")
+    
+    await interaction.edit_original_response(content=None, embed=final_embed, view=None)
 
 @bot.tree.command(name="role_play", description="Chuyển đổi tính cách bot")
 @app_commands.choices(template=[
