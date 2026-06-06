@@ -203,8 +203,29 @@ async def process_attachments(atts, provider):
     return parts
 
 async def call_ai(msgs, model_name, provider):
+    # 🛡️ LỌC TIN NHẮN RỖNG ĐỂ TRÁNH LỖI API
+    cleaned_msgs = []
+    for m in msgs:
+        content = m.get("content", "")
+        # Nếu content là list (vision), giữ nguyên. Nếu là text thì strip()
+        if isinstance(content, str):
+            if not content.strip(): 
+                continue # Bỏ qua tin nhắn text rỗng
+        elif isinstance(content, list) and not any(c.get("text", "").strip() for c in content if isinstance(c, dict)):
+            continue # Bỏ qua tin nhắn vision mà phần text rỗng tuếch
+            
+        cleaned_msgs.append(m)
+        
+    if not cleaned_msgs:
+        return "Đéo có gì để nói, m gửi prompt rỗng à? 💀"
+        
     cfg = MODELS_CONFIG[model_name]
     mid = cfg["id"]
+    # ... (Giữ nguyên logic temp, max_tok và try/except bên dưới) ...
+    
+    # NHỚ THAY msgs.copy() BẰNG cleaned_msgs NHA BRO!
+    # Ví dụ khúc Groq: "messages": cleaned_msgs,
+    # Khúc Google: for m in cleaned_msgs[1:]:
     
     # Lấy setting từ global
     temp = BOT_SETTINGS["temperature"]
@@ -215,7 +236,7 @@ async def call_ai(msgs, model_name, provider):
             headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
             payload = {
                 "model": mid, 
-                "messages": msgs.copy(), 
+                "messages": cleaned_msgs, 
                 "temperature": temp, 
                 "max_tokens": max_tok
             }
@@ -510,10 +531,20 @@ Hãy viết 1 câu bình luận ngắn gọn (dưới 20 từ) bằng giọng Ge
 - Nếu hòa: Chán nản, kêu xui xẻo.
 Dùng teencode + emoji. KHÔNG markdown."""
 
-    try:
+        try:
         cfg = MODELS_CONFIG[CURRENT_MODEL]
         msgs = [{"role": "user", "content": prompt}]
         ai_comment = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
+        
+        # 🛡️ CHỐT HẠ: NẾU AI TRẢ VỀ RỖNG THÌ TỰ ĐỘNG GÁN CÂU MẶC ĐỊNH
+        if not ai_comment or not ai_comment.strip():
+            if result_text == "Mày thắng":
+                ai_comment = "Thắng rồi thì làm j? Cay vl 😤"
+            elif result_text == "Bot thắng":
+                ai_comment = "Gà vcl, về nhà luyện thêm đi bro =))"
+            else:
+                ai_comment = "Hòa hả? Xui xẻo vãi chưởng 🥀"
+                
     except Exception as e:
         logger.error(f"RPS AI error: {e}")
         ai_comment = "Bot bị đứng hình, thôi tính mày thắng đi cho lẹ =))"
