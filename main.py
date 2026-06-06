@@ -531,7 +531,7 @@ Hãy viết 1 câu bình luận ngắn gọn (dưới 20 từ) bằng giọng Ge
 - Nếu hòa: Chán nản, kêu xui xẻo.
 Dùng teencode + emoji. KHÔNG markdown."""
 
-        try:
+    try:
         cfg = MODELS_CONFIG[CURRENT_MODEL]
         msgs = [{"role": "user", "content": prompt}]
         ai_comment = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
