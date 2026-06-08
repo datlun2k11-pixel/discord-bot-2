@@ -206,17 +206,30 @@ CURRENT_TTS_VOICE = VIETNAMESE_VOICES["hoaimy"] # Mặc định dùng Hoai My
 
 async def generate_edge_tts(text: str) -> bytes | None:
     """Dùng Edge TTS để tạo audio từ text"""
+    # Lọc bớt các ký tự đặc biệt gây lỗi hoặc khiến AI đọc ngọng
+    # Chỉ giữ lại chữ, số, dấu câu cơ bản và dấu tiếng Việt
+    clean_text = re.sub(r'[^\w\s.,!?;:\-àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]', ' ', text)
+    
+    # Nếu text quá ngắn hoặc chỉ toàn từ cảm thán, bỏ qua để tránh lỗi TTS
+    if len(clean_text.strip()) < 3:
+        logger.warning(f"⚠️ Text too short for TTS: {text}")
+        return None
+
     try:
-        communicate = edge_tts.Communicate(text, CURRENT_TTS_VOICE)
+        communicate = edge_tts.Communicate(clean_text, CURRENT_TTS_VOICE)
         audio_data = b""
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 audio_data += chunk["data"]
         
-        if audio_data:
+        # Kiểm tra xem có thực sự lấy được audio không (phải > 100 bytes mới coi là valid)
+        if len(audio_data) > 100: 
             logger.info(f"✅ Generated Edge TTS audio: {len(audio_data)} bytes")
             return audio_data
-        return None
+        else:
+            logger.warning(f"⚠️ Edge TTS returned empty/short audio for: {text}")
+            return None
+            
     except Exception as e:
         logger.error(f"Edge TTS error: {e}")
         return None
