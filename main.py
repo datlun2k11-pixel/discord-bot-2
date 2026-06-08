@@ -4,6 +4,7 @@ import io
 import re
 import random
 import json
+import edge_tts
 import time
 import logging
 import socket
@@ -32,9 +33,14 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PORT = int(os.getenv("PORT", 8000))
-# TTS
-GEMINI_TTS_MODEL = "gemini-2.5-flash-tts" 
-GEMINI_TTS_VOICE = "Kore"
+# ========== EDGE TTS CONFIG ==========
+# Danh sách giọng tiếng Việt xịn sò
+VIETNAMESE_VOICES = {
+    "hoaimy": "vi-VN-HoaiMyNeural",   # Nữ, nhẹ nhàng, phổ biến nhất
+    "namminh": "vi-VN-NamMinhNeural", # Nam, trầm ấm
+    "thanhtuyen": "vi-VN-ThanhTuyenNeural" # Nữ, cao vút
+}
+CURRENT_TTS_VOICE = VIETNAMESE_VOICES["hoaimy"]
 
 if not TOKEN:
     logger.error("THIẾU DISCORD_TOKEN TRONG ENV! 💀")
@@ -190,39 +196,32 @@ class RPSView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
-async def generate_gemini_tts(text: str) -> bytes | None:
-    """Gọi Gemini TTS API để tạo audio từ text"""
-    if not GEMINI_API_KEY: 
-        logger.error("THIẾU GEMINI_API_KEY để làm TTS 💀")
-        return None
-    
+import edge_tts # Nhớ import ở đầu file nha bro
+
+# ========== EDGE TTS CONFIG ==========
+# Danh sách giọng tiếng Việt xịn sò
+VIETNAMESE_VOICES = {
+    "hoaimy": "vi-VN-HoaiMyNeural",   # Nữ, nhẹ nhàng, phổ biến nhất
+    "namminh": "vi-VN-NamMinhNeural", # Nam, trầm ấm
+    "thanhtuyen": "vi-VN-ThanhTuyenNeural" # Nữ, cao vút
+}
+CURRENT_TTS_VOICE = VIETNAMESE_VOICES["hoaimy"] # Mặc định dùng Hoai My
+
+async def generate_edge_tts(text: str) -> bytes | None:
+    """Dùng Edge TTS để tạo audio từ text"""
     try:
-        model = genai.GenerativeModel(GEMINI_TTS_MODEL)
-        response = model.generate_content(
-            f"Speak in a natural, conversational tone: {text}",
-            generation_config={
-                "response_modalities": ["AUDIO"],
-                "speech_config": {
-                    "voice_config": {
-                        "prebuilt_voice_config": {
-                            "voice_name": GEMINI_TTS_VOICE
-                        }
-                    }
-                }
-            }
-        )
+        communicate = edge_tts.Communicate(text, CURRENT_TTS_VOICE)
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
         
-        if response.candidates and response.candidates[0].content.parts:
-            for part in response.candidates[0].content.parts:
-                if hasattr(part, 'inline_data') and part.inline_data:
-                    logger.info(f"✅ Generated Gemini TTS audio: {len(part.inline_data.data)} bytes")
-                    return part.inline_data.data
-        
-        logger.warning("No audio data in Gemini response")
+        if audio_data:
+            logger.info(f"✅ Generated Edge TTS audio: {len(audio_data)} bytes")
+            return audio_data
         return None
-        
     except Exception as e:
-        logger.error(f"Gemini TTS error: {e}")
+        logger.error(f"Edge TTS error: {e}")
         return None
 
 def parse_voice_tag(text: str) -> tuple[str, str | None]:
@@ -446,7 +445,7 @@ async def on_message(message):
     # Giờ chỉ cần gửi System Prompt (chứa chatlog) và 1 cái User Prompt hiện tại
     msgs = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": current_content}]
     
-    async with message.channel.typing():
+        async with message.channel.typing():
         try:
             reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
             
@@ -456,16 +455,16 @@ async def on_message(message):
             
             chat_histories[ctx_id].append(f"Bot: {final_text}")
             
-            # 🎤 XỬ LÝ GIỌNG NÓI (CHỈ DÙNG GEMINI)
+            # 🎤 XỬ LÝ GIỌNG NÓI (DÙNG EDGE TTS)
             if voice_text:
-                logger.info(f"🎤 Generating Gemini voice for: {voice_text}")
-                audio_data = await generate_gemini_tts(voice_text)
+                logger.info(f"🎤 Generating Edge voice for: {voice_text}")
+                audio_data = await generate_edge_tts(voice_text)
                 
                 if audio_data:
-                    # Gemini thường trả về WAV/PCM nên để ext là wav cho chắc
+                    # Edge TTS trả về mp3
                     audio_file = discord.File(
                         io.BytesIO(audio_data),
-                        filename="voice.wav",
+                        filename="voice.mp3",
                         description=f"Voice message: {voice_text}"
                     )
                     
@@ -475,9 +474,8 @@ async def on_message(message):
                         allowed_mentions=allowed_mentions
                     )
                 else:
-                    # Nếu TTS lỗi thì vẫn gửi text bình thường
                     await message.reply(final_text, allowed_mentions=allowed_mentions)
-                    logger.warning("⚠️ Gemini TTS failed, sent text only")
+                    logger.warning("⚠️ Edge TTS failed, sent text only")
             else:
                 await message.reply(final_text, allowed_mentions=allowed_mentions)
                 
@@ -531,20 +529,20 @@ async def model_cmd(interaction, provider: str = None, model_id: str = None, cus
 
     await interaction.response.send_message(f"Đổi sang `{CURRENT_MODEL}` r đó ✌🏿")
 
-@bot.tree.command(name="voice", description="Đổi giọng TTS Gemini (Owner Only)")
+@bot.tree.command(name="voice", description="Đổi giọng TTS (Owner Only)")
 @app_commands.check(is_owner)
 @app_commands.choices(voice=[
-    app_commands.Choice(name="Kore (Nữ, rõ ràng)", value="Kore"),
-    app_commands.Choice(name="Fenrir (Nam, trầm ấm)", value="Fenrir"),
-    app_commands.Choice(name="Aoede (Nữ, nhẹ nhàng)", value="Aoede"),
-    app_commands.Choice(name="Charon (Nam, nghiêm túc)", value="Charon"),
-    app_commands.Choice(name="Puck (Nam, vui vẻ)", value="Puck"),
-    app_commands.Choice(name="Zephyr (Nam, trẻ trung)", value="Zephyr")
+    app_commands.Choice(name="Hoài My (Nữ, nhẹ nhàng)", value="hoaimy"),
+    app_commands.Choice(name="Nam Minh (Nam, trầm ấm)", value="namminh"),
+    app_commands.Choice(name="Thanh Tuyền (Nữ, cao vút)", value="thanhtuyen")
 ])
 async def voice_cmd(interaction, voice: app_commands.Choice[str]):
-    global GEMINI_TTS_VOICE
-    GEMINI_TTS_VOICE = voice.value
-    await interaction.response.send_message(f"🎤 Đổi giọng Gemini sang **{voice.name}** r đó bro ✌🏿", ephemeral=True)
+    global CURRENT_TTS_VOICE
+    if voice.value in VIETNAMESE_VOICES:
+        CURRENT_TTS_VOICE = VIETNAMESE_VOICES[voice.value]
+        await interaction.response.send_message(f"🎤 Đổi giọng sang **{voice.name}** r đó bro ✌🏿", ephemeral=True)
+    else:
+        await interaction.response.send_message("Giọng k hợp lệ 💀", ephemeral=True)
 
 # NEW COMMAND: SETTING (OWNER ONLY)
 @bot.tree.command(name="setting", description="Cấu hình bot (Owner Only)")
