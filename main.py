@@ -195,44 +195,43 @@ class RPSView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(view=self)
-# ========== EDGE TTS CONFIG ==========
-# Danh sách giọng tiếng Việt xịn sò
-VIETNAMESE_VOICES = {
-    "hoaimy": "vi-VN-HoaiMyNeural",   # Nữ, nhẹ nhàng, phổ biến nhất
-    "namminh": "vi-VN-NamMinhNeural", # Nam, trầm ấm
-    "thanhtuyen": "vi-VN-ThanhTuyenNeural" # Nữ, cao vút
-}
-CURRENT_TTS_VOICE = VIETNAMESE_VOICES["hoaimy"] # Mặc định dùng Hoai My
 
-async def generate_edge_tts(text: str) -> bytes | None:
-    """Dùng Edge TTS để tạo audio từ text"""
-    # Lọc bớt các ký tự đặc biệt gây lỗi hoặc khiến AI đọc ngọng
-    # Chỉ giữ lại chữ, số, dấu câu cơ bản và dấu tiếng Việt
+async def generate_edge_tts(text: str, retries: int = 2) -> bytes | None:
+    """Dùng Edge TTS để tạo audio từ text, có cơ chế thử lại nếu lỗi"""
+    # Lọc bớt các ký tự đặc biệt gây lỗi
     clean_text = re.sub(r'[^\w\s.,!?;:\-àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]', ' ', text)
     
-    # Nếu text quá ngắn hoặc chỉ toàn từ cảm thán, bỏ qua để tránh lỗi TTS
     if len(clean_text.strip()) < 3:
-        logger.warning(f"⚠️ Text too short for TTS: {text}")
         return None
 
-    try:
-        communicate = edge_tts.Communicate(clean_text, CURRENT_TTS_VOICE)
-        audio_data = b""
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data += chunk["data"]
-        
-        # Kiểm tra xem có thực sự lấy được audio không (phải > 100 bytes mới coi là valid)
-        if len(audio_data) > 100: 
-            logger.info(f"✅ Generated Edge TTS audio: {len(audio_data)} bytes")
-            return audio_data
-        else:
-            logger.warning(f"⚠️ Edge TTS returned empty/short audio for: {text}")
-            return None
+    for attempt in range(retries + 1):
+        try:
+            # Tạo đối tượng Communicate
+            communicate = edge_tts.Communicate(clean_text, CURRENT_TTS_VOICE)
+            audio_data = b""
             
-    except Exception as e:
-        logger.error(f"Edge TTS error: {e}")
-        return None
+            # Stream dữ liệu âm thanh
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
+            
+            # Kiểm tra độ dài dữ liệu
+            if len(audio_data) > 100: 
+                logger.info(f"✅ Generated Edge TTS audio (Attempt {attempt + 1}): {len(audio_data)} bytes")
+                return audio_data
+            else:
+                logger.warning(f"⚠️ Attempt {attempt + 1}: Edge TTS returned empty/short audio.")
+                
+        except Exception as e:
+            logger.error(f"❌ Attempt {attempt + 1} failed: {e}")
+        
+        # Nếu chưa phải lần cuối thì đợi 1 chút rồi thử lại
+        if attempt < retries:
+            logger.info(f"🔄 Retrying TTS in 1 second...")
+            await asyncio.sleep(1)
+
+    logger.error(f"💀 Edge TTS failed after {retries + 1} attempts for: {text[:50]}...")
+    return None
 
 def parse_voice_tag(text: str) -> tuple[str, str | None]:
     """Parse tag [voice: text] từ tin nhắn"""
