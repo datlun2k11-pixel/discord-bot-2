@@ -20,7 +20,8 @@ import threading
 import google.generativeai as genai
 from PIL import Image
 
-aiohttp.resolver.DefaultResolver = lambda: aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
+resolver = aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
+async with aiohttp.ClientSession(timeout=..., resolver=resolver) as s:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -137,15 +138,15 @@ class RPSView(discord.ui.View):
         # Bot chốt lựa chọn NGAY KHI tạo view, AI đéo biết được 🤡
         self.bot_choice = random.choice(["rock", "paper", "scissors"]) 
 
-    @discord.ui.button(label="Búa 🗿", style=discord.ButtonStyle.blurple, custom_id="rps_rock")
+    @discord.ui.button(label="Búa 🗿", style=discord.ButtonStyle.blurple)
     async def btn_rock(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_choice(interaction, "rock")
 
-    @discord.ui.button(label="Giấy 📄", style=discord.ButtonStyle.green, custom_id="rps_paper")
+    @discord.ui.button(label="Giấy 📄", style=discord.ButtonStyle.green)
     async def btn_paper(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_choice(interaction, "paper")
 
-    @discord.ui.button(label="Kéo ✂️", style=discord.ButtonStyle.red, custom_id="rps_scissors")
+    @discord.ui.button(label="Kéo ✂️", style=discord.ButtonStyle.red)
     async def btn_scissors(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self._handle_choice(interaction, "scissors")
 
@@ -211,8 +212,14 @@ async def call_ai(msgs, model_name, provider):
         if isinstance(content, str):
             if not content.strip(): 
                 continue # Bỏ qua tin nhắn text rỗng
-        elif isinstance(content, list) and not any(c.get("text", "").strip() for c in content if isinstance(c, dict)):
-            continue # Bỏ qua tin nhắn vision mà phần text rỗng tuếch
+        elif isinstance(content, list):
+            # Kiểm tra xem có text hoặc ảnh nào không
+            has_content = any(
+                (c.strip() if isinstance(c, str) else (c.get("text", "").strip() if isinstance(c, dict) else True))
+                for c in content
+            )
+            if not has_content:
+                continue
             
         cleaned_msgs.append(m)
         
