@@ -19,12 +19,14 @@ from flask import Flask
 import threading
 import google.generativeai as genai
 from PIL import Image
-
-resolver = aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
-async with aiohttp.ClientSession(timeout=..., resolver=resolver) as s:
+# Setup DNS resolver (để riêng, k nằm trong async with)
+# Lưu ý: Chỉ override nếu thực sự cần, còn k thì để mặc định cũng được
+try:
+    aiohttp.resolver.DefaultResolver = lambda: aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
+except Exception:
+    pass
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
 # ---------- Config ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
