@@ -195,9 +195,6 @@ class RPSView(discord.ui.View):
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(view=self)
-
-import edge_tts # Nhớ import ở đầu file nha bro
-
 # ========== EDGE TTS CONFIG ==========
 # Danh sách giọng tiếng Việt xịn sò
 VIETNAMESE_VOICES = {
@@ -445,7 +442,7 @@ async def on_message(message):
     # Giờ chỉ cần gửi System Prompt (chứa chatlog) và 1 cái User Prompt hiện tại
     msgs = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": current_content}]
     
-        async with message.channel.typing():
+    async with message.channel.typing():
         try:
             reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
             
