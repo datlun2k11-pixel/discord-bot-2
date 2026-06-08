@@ -32,6 +32,9 @@ TOKEN = os.getenv("DISCORD_TOKEN")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 PORT = int(os.getenv("PORT", 8000))
+# TTS
+GEMINI_TTS_MODEL = "gemini-2.5-flash-tts" 
+GEMINI_TTS_VOICE = "Kore"
 
 if not TOKEN:
     logger.error("THIẾU DISCORD_TOKEN TRONG ENV! 💀")
@@ -59,7 +62,6 @@ BOT_SETTINGS = {
     "enable_vision": True  # Mặc định bật vision nếu model hỗ trợ
 }
 
-# ========== System Prompt & RP ==========
 # ========== System Prompt & RP ==========
 BASE_SYSTEM_PROMPT = """Mày là GenA-bot (ID: <@1458799287910535324>) - thằng bạn thân hãm lờ, nhây nhất server.
 - Đệ cứng của <@1155129530122510376> (Đạt Lùn 2k11, Thanh Hoá 36). KO nhắc đến trừ khi được hỏi.
@@ -89,6 +91,30 @@ TEENCODE_OVERRIDE = """
 - TƯƠNG TÁC EMOJI: Nếu muốn thả cảm xúc vào tin nhắn của user, hãy chèn tag [interaction: :emoji:] vào cuối câu. Ví dụ: "Hài vl [interaction: 😂] 🥀💔" hoặc "Buồn quá [interaction: 💔] ✌🏿💔". ĐỪNG INTERACTING QUÁ NHIỀU, CHỈ INTERACT NHƯNG TIN NHẮN HAY, CÓ CẢM XÚC.
 - M ko có chức năng tạo ảnh, đừng bốc phét bản thân có.
 [QUY TẮC PHỤ]: Reaction emoji là tính năng cao cấp, chỉ dùng khi cảm xúc dâng trào. Dùng bừa bãi sẽ bị trừ điểm uy tín.
+
+[QUY TẮC BẮT BUỘC CHO TAG [voice: ...]]
+1. MỤC ĐÍCH: Tag [voice: nội dung] dùng để tạo file âm thanh TTS. API TTS cần văn bản sạch, có dấu đầy đủ để đọc không bị ngọng.
+2. CẤM TUYỆT ĐỐI TRONG TAG VOICE:
+   - KHÔNG dùng teencode (k, m, t, nx, vs, th, j, dc, cx...).
+   - KHÔNG dùng slang tiếng Anh (vl, cmn, idc, tbh...).
+   - KHÔNG dùng ký tự đặc biệt hoặc icon (=)), :v, 💀) bên trong tag.
+   - KHÔNG viết tắt tên riêng hoặc địa danh.
+3. YÊU CẦU BẮT BUỘC:
+   - Phải viết HOÀN CHỈNH bằng tiếng Việt có dấu.
+   - Giữ nguyên ý nghĩa nhưng chuyển đổi từ ngữ sang văn phong nói tự nhiên, lịch sự hơn một chút để giọng đọc nghe mượt mà.
+   - Có thể thêm các từ cảm thán tự nhiên như "à", "nhé", "đấy" để tăng độ thật.
+4. VÍ DỤ MINH HỌA (HỌC THEO):
+   - Sai: [voice: m ăn cơm chưa zậy? vl no r] ❌ (TTS sẽ đọc: "mờ ăn cơm chưa zậy vờ lờ no rờ")
+   - Đúng: [voice: Mày ăn cơm chưa vậy? Vô cùng no rồi.] ✅
+   
+   - Sai: [voice: okie dokie, lát gặp nx nha =))] ❌
+   - Đúng: [voice: Okie dokie, lát gặp nhé.] ✅
+
+   - Sai: [voice: gà vl 🐔] ❌
+   - Đúng: [voice: Gà vô cùng luôn.] ✅
+
+5. LƯU Ý: Nội dung bên ngoài tag [voice:] vẫn cứ thoải mái dùng teencode, slang, emoji bình thường để giữ chất GenZ. Chỉ cần "thanh lọc" phần bên trong tag voice thôi.
+6. LƯU Ý 2: Cấm tuyệt đối việc lạm dụng tính năng tạo voice này, chỉ khi yêu cầu mới dùng vì nó sẽ tốn thời gian rep hơn và cực kì ăn token.
 """
 
 current_rp_mode = "genz"
@@ -164,6 +190,52 @@ class RPSView(discord.ui.View):
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
+async def generate_gemini_tts(text: str) -> bytes | None:
+    """Gọi Gemini TTS API để tạo audio từ text"""
+    if not GEMINI_API_KEY: 
+        logger.error("THIẾU GEMINI_API_KEY để làm TTS 💀")
+        return None
+    
+    try:
+        model = genai.GenerativeModel(GEMINI_TTS_MODEL)
+        response = model.generate_content(
+            f"Speak in a natural, conversational tone: {text}",
+            generation_config={
+                "response_modalities": ["AUDIO"],
+                "speech_config": {
+                    "voice_config": {
+                        "prebuilt_voice_config": {
+                            "voice_name": GEMINI_TTS_VOICE
+                        }
+                    }
+                }
+            }
+        )
+        
+        if response.candidates and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data:
+                    logger.info(f"✅ Generated Gemini TTS audio: {len(part.inline_data.data)} bytes")
+                    return part.inline_data.data
+        
+        logger.warning("No audio data in Gemini response")
+        return None
+        
+    except Exception as e:
+        logger.error(f"Gemini TTS error: {e}")
+        return None
+
+def parse_voice_tag(text: str) -> tuple[str, str | None]:
+    """Parse tag [voice: text] từ tin nhắn"""
+    pattern = r"\[voice:\s*(.*?)\]"
+    match = re.search(pattern, text, re.IGNORECASE)
+    
+    if match:
+        voice_text = match.group(1).strip()
+        clean_text = re.sub(pattern, "", text, flags=re.IGNORECASE).strip()
+        return clean_text, voice_text
+    
+    return text, None
 
 async def fetch_bytes(url: str, timeout: int = 15) -> bytes | None:
     headers = {
@@ -377,12 +449,38 @@ async def on_message(message):
     async with message.channel.typing():
         try:
             reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
-            final_text = await parse_interactions(message, reply)
             
-            # Lưu câu rep của bot vào log luôn để nó nhớ nó vừa nói j
+            # 🎤 PARSE VOICE TAG
+            final_text, voice_text = parse_voice_tag(reply)
+            final_text = await parse_interactions(message, final_text)
+            
             chat_histories[ctx_id].append(f"Bot: {final_text}")
             
-            await message.reply(final_text, allowed_mentions=allowed_mentions)
+            # 🎤 XỬ LÝ GIỌNG NÓI (CHỈ DÙNG GEMINI)
+            if voice_text:
+                logger.info(f"🎤 Generating Gemini voice for: {voice_text}")
+                audio_data = await generate_gemini_tts(voice_text)
+                
+                if audio_data:
+                    # Gemini thường trả về WAV/PCM nên để ext là wav cho chắc
+                    audio_file = discord.File(
+                        io.BytesIO(audio_data),
+                        filename="voice.wav",
+                        description=f"Voice message: {voice_text}"
+                    )
+                    
+                    await message.reply(
+                        content=final_text if final_text else None,
+                        file=audio_file,
+                        allowed_mentions=allowed_mentions
+                    )
+                else:
+                    # Nếu TTS lỗi thì vẫn gửi text bình thường
+                    await message.reply(final_text, allowed_mentions=allowed_mentions)
+                    logger.warning("⚠️ Gemini TTS failed, sent text only")
+            else:
+                await message.reply(final_text, allowed_mentions=allowed_mentions)
+                
         except Exception as e:
             logger.error(f"💥 Critical error in on_message: {e}", exc_info=True)
             await message.reply("Bot lag vcl, thử lại đi bro ☠️", allowed_mentions=allowed_mentions)
@@ -432,6 +530,21 @@ async def model_cmd(interaction, provider: str = None, model_id: str = None, cus
         return await interaction.response.send_message(embed=embed, ephemeral=True)
 
     await interaction.response.send_message(f"Đổi sang `{CURRENT_MODEL}` r đó ✌🏿")
+
+@bot.tree.command(name="voice", description="Đổi giọng TTS Gemini (Owner Only)")
+@app_commands.check(is_owner)
+@app_commands.choices(voice=[
+    app_commands.Choice(name="Kore (Nữ, rõ ràng)", value="Kore"),
+    app_commands.Choice(name="Fenrir (Nam, trầm ấm)", value="Fenrir"),
+    app_commands.Choice(name="Aoede (Nữ, nhẹ nhàng)", value="Aoede"),
+    app_commands.Choice(name="Charon (Nam, nghiêm túc)", value="Charon"),
+    app_commands.Choice(name="Puck (Nam, vui vẻ)", value="Puck"),
+    app_commands.Choice(name="Zephyr (Nam, trẻ trung)", value="Zephyr")
+])
+async def voice_cmd(interaction, voice: app_commands.Choice[str]):
+    global GEMINI_TTS_VOICE
+    GEMINI_TTS_VOICE = voice.value
+    await interaction.response.send_message(f"🎤 Đổi giọng Gemini sang **{voice.name}** r đó bro ✌🏿", ephemeral=True)
 
 # NEW COMMAND: SETTING (OWNER ONLY)
 @bot.tree.command(name="setting", description="Cấu hình bot (Owner Only)")
