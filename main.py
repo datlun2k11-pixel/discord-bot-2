@@ -15,6 +15,7 @@ from discord.ext import commands
 from discord import app_commands
 from flask import Flask
 import threading
+os.environ["GOOGLE_GENAI_USE_REST"] = "true"
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from PIL import Image
@@ -305,7 +306,7 @@ async def call_ai(msgs, model_name, provider):
                                          generation_config={"temperature": temp, "max_output_tokens": max_tok,
                                                            "stop_sequences": ["<thinking>", "<thought>"]})
             history = []
-            for m in msgs[1:]:
+            for m in cleaned_msgs[1:]:
                 role = "model" if m["role"] == "assistant" else "user"
                 content = m["content"] if isinstance(m["content"], list) else [m["content"]]
                 history.append({"role": role, "parts": content})
