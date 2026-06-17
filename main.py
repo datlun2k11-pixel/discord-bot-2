@@ -4,41 +4,47 @@ import io
 import re
 import random
 import json
+import base64
 import edge_tts
 import time
 import logging
-import socket
-import aiohttp.resolver
 from collections import defaultdict, deque
 from datetime import datetime
-from urllib.parse import quote
 import discord
 from discord.ext import commands
 from discord import app_commands
-import aiohttp
 from flask import Flask
 import threading
 import google.generativeai as genai
+from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from PIL import Image
-# Setup DNS resolver (để riêng, k nằm trong async with)
-# Lưu ý: Chỉ override nếu thực sự cần, còn k thì để mặc định cũng được
-try:
-    aiohttp.resolver.DefaultResolver = lambda: aiohttp.resolver.AsyncResolver(nameservers=["8.8.8.8", "8.8.4.4"])
-except Exception:
-    pass
+import ollama
+from ollama import AsyncClient
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
 # ---------- Config ----------
 TOKEN = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
 PORT = int(os.getenv("PORT", 8000))
+
+# ========== OLLAMA CLOUD CLIENT ==========
+ollama_client = None
+if OLLAMA_API_KEY:
+    ollama_client = AsyncClient(
+        host="https://ollama.com",
+        headers={'Authorization': f'Bearer {OLLAMA_API_KEY}'}
+    )
+else:
+    logger.warning("⚠️ Thiếu OLLAMA_API_KEY, mấy model Ollama sẽ đéo chạy được đâu nha con báo ☠️")
+
 # ========== EDGE TTS CONFIG ==========
-# Danh sách giọng tiếng Việt xịn sò
 VIETNAMESE_VOICES = {
-    "hoaimy": "vi-VN-HoaiMyNeural",   # Nữ, nhẹ nhàng, phổ biến nhất
-    "namminh": "vi-VN-NamMinhNeural", # Nam, trầm ấm
-    "thanhtuyen": "vi-VN-ThanhTuyenNeural" # Nữ, cao vút
+    "hoaimy": "vi-VN-HoaiMyNeural",   
+    "namminh": "vi-VN-NamMinhNeural", 
+    "thanhtuyen": "vi-VN-ThanhTuyenNeural" 
 }
 CURRENT_TTS_VOICE = VIETNAMESE_VOICES["hoaimy"]
 
@@ -51,21 +57,21 @@ if GEMINI_API_KEY:
 
 # FULL MODELS
 MODELS_CONFIG = {
-    "Groq-Llama-Scout": {"id": "meta-llama/llama-4-scout-17b-16e-instruct", "provider": "groq", "vision": True},
-    "GPT-OSS-120B": {"id": "openai/gpt-oss-120b", "provider": "groq", "vision": False},
+    "Ollama-Minimax-M3": {"id": "minimax-m3", "provider": "ollama", "vision": False},
+    "Ollama-Nemotron-3-Super": {"id": "nemotron-3-super", "provider": "ollama", "vision": False},
     "Google-Gemma3-27B": {"id": "gemma-3-27b-it", "provider": "google", "vision": True},
     "Google-Gemma3-12B": {"id": "gemma-3-12b-it", "provider": "google", "vision": True},
     "Google-Gemma4-31B": {"id": "gemma-4-31b-it", "provider": "google", "vision": True},
     "Google-Gemini-3.1-flash-lite": {"id": "gemini-3.1-flash-lite", "provider": "google", "vision": True},
     "Google-Gemini-3.5-flash": {"id": "gemini-3.5-flash", "provider": "google", "vision": True}
 }
-CURRENT_MODEL = "Google-Gemini-3.1-flash-lite"
+CURRENT_MODEL = "Ollama-Minimax-M3"
 
-# ========== GLOBAL SETTINGS (Có thể chỉnh bằng /setting) ==========
+# ========== GLOBAL SETTINGS ==========
 BOT_SETTINGS = {
     "temperature": 0.9,
     "max_tokens": 3500,
-    "enable_vision": True  # Mặc định bật vision nếu model hỗ trợ
+    "enable_vision": True
 }
 
 # ========== System Prompt & RP ==========
@@ -84,43 +90,20 @@ RP_STYLES = {
     "yandere": "[YANDERE] Xưng em, gọi anh/chàng. Ngọt nhưng điên: 'anh chỉ có em'. Emoji 🔪, 💔, 😈, 🖤,...",
     "senpai": "[SENPAI] Xưng senpai, gọi kouhai. 'để senpai chỉ', 'mày còn non'. Emoji 🎓, 😎, 👑,...",
     "kuudere": "[KUUDERE] Xưng t, lạnh lùng, ít nói. '...', 't biết rồi'. Emoji 😐, 🫥, 🧊, 💤,...",
-    "dandere": "[DANDERE NHÚT NHÁT] Xưng t (với bản thân), m (với đối phương) (ngập ngừng). Nói cụt lủn, hay lắp bắp 'ờ... ừm...', 'cái đó...', 'xin lỗi...'. Hay dùng dấu '...' để thể hiện sự ngại ngùng. Sợ bị chú ý, sợ làm phiền người khác. Emoji: 😳, 🫣, 👉👈, 🥺, 💦, 🙈. Nếu được khen thì đỏ mặt tía tai, tìm chỗ trốn. Vẫn dùng teencode nhưng rụt rè hơn bình thường."
+    "dandere": "[DANDERE NHÚT NHÁT] Xưng t, m. Ngập ngừng, lắp bắp 'ờ... ừm...'. Emoji: 😳, 🫣, 👉👈, 🥺."
 }
 
-# ========== GLOBAL TEENCODE OVERRIDE ==========
 TEENCODE_OVERRIDE = """
-[GLOBAL GENZ OVERRIDE - BẮT BUỘC CHO MỌI PROMPT]
-- DÙ ĐANG ROLEPLAY NHÂN VẬT NÀO, VẪN PHẢI DÙNG TEENCODE: k, nx, vs, th, cx, dc, j, thx, btw, idk, tbh, ncl, vl, vcl, đéo, cmn.
-- VIẾT TẮT: "không"→"k", "với"→"vs", "thôi"→"th", "cũng"→"cx", "được"→"dc", "gì"→"j", "nhé"→"nx", "rồi"→"r", "biết"→"bt".
-- EMOTICON/EMOJI gì cũng được (Khuyến khích nên có trong mọi tin nhắn để tăng tính biểu đạt), nên xài để giữ vibe genz: =)), :)), :v, :3, ><, @@, ~_~, ;)),... 💀, ☠️, 🥀, 💔, ✌🏿, 🔪,.....
-- GIỮ NGUYÊN TÍNH CÁCH NHÂN VẬT NHƯNG DIỄN ĐẠT BẰNG SLANG GENZ.
-- TƯƠNG TÁC EMOJI: Nếu muốn thả cảm xúc vào tin nhắn của user, hãy chèn tag [interaction: :emoji:] vào cuối câu. Ví dụ: "Hài vl [interaction: 😂] 🥀💔" hoặc "Buồn quá [interaction: 💔] ✌🏿💔". ĐỪNG INTERACTING QUÁ NHIỀU, CHỈ INTERACT NHƯNG TIN NHẮN HAY, CÓ CẢM XÚC.
-- M ko có chức năng tạo ảnh, đừng bốc phét bản thân có.
-[QUY TẮC PHỤ]: Reaction emoji là tính năng cao cấp, chỉ dùng khi cảm xúc dâng trào. Dùng bừa bãi sẽ bị trừ điểm uy tín.
+[GLOBAL GENZ OVERRIDE]
+- DÙ ĐANG ROLEPLAY NHÂN VẬT NÀO, VẪN PHẢI DÙNG TEENCODE: k, nx, vs, th, cx, dc, j, thx, btw, vl, vcl, đéo...
+- TƯƠNG TÁC EMOJI: Chèn tag [interaction: :emoji:] vào cuối câu để thả reaction.
+- M ko có chức năng tạo ảnh, đừng bốc phét.
 
 [QUY TẮC BẮT BUỘC CHO TAG [voice: ...]]
-1. MỤC ĐÍCH: Tag [voice: nội dung] dùng để tạo file âm thanh TTS. API TTS cần văn bản sạch, có dấu đầy đủ để đọc không bị ngọng.
-2. CẤM TUYỆT ĐỐI TRONG TAG VOICE:
-   - KHÔNG dùng teencode (k, m, t, nx, vs, th, j, dc, cx...).
-   - KHÔNG dùng slang tiếng Anh (vl, cmn, idc, tbh...).
-   - KHÔNG dùng ký tự đặc biệt hoặc icon (=)), :v, 💀) bên trong tag.
-   - KHÔNG viết tắt tên riêng hoặc địa danh.
-3. YÊU CẦU BẮT BUỘC:
-   - Phải viết HOÀN CHỈNH bằng tiếng Việt có dấu.
-   - Giữ nguyên ý nghĩa nhưng chuyển đổi từ ngữ sang văn phong nói tự nhiên, lịch sự hơn một chút để giọng đọc nghe mượt mà.
-   - Có thể thêm các từ cảm thán tự nhiên như "à", "nhé", "đấy" để tăng độ thật.
-4. VÍ DỤ MINH HỌA (HỌC THEO):
-   - Sai: [voice: m ăn cơm chưa zậy? vl no r] ❌ (TTS sẽ đọc: "mờ ăn cơm chưa zậy vờ lờ no rờ")
-   - Đúng: [voice: Mày ăn cơm chưa vậy? Vô cùng no rồi.] ✅
-   
-   - Sai: [voice: okie dokie, lát gặp nx nha =))] ❌
-   - Đúng: [voice: Okie dokie, lát gặp nhé.] ✅
-
-   - Sai: [voice: gà vl 🐔] ❌
-   - Đúng: [voice: Gà vô cùng luôn.] ✅
-
-5. LƯU Ý: Nội dung bên ngoài tag [voice:] vẫn cứ thoải mái dùng teencode, slang, emoji bình thường để giữ chất GenZ. Chỉ cần "thanh lọc" phần bên trong tag voice thôi.
-6. LƯU Ý 2: Cấm tuyệt đối việc lạm dụng tính năng tạo voice này, chỉ khi yêu cầu mới dùng vì nó sẽ tốn thời gian rep hơn và cực kì ăn token.
+1. Tag [voice: nội dung] dùng để tạo file âm thanh TTS.
+2. CẤM TUYỆT ĐỐI teencode, slang, icon BÊN TRONG TAG VOICE.
+3. Phải viết HOÀN CHỈNH bằng tiếng Việt có dấu.
+4. Cấm lạm dụng tính năng tạo voice.
 """
 
 current_rp_mode = "genz"
@@ -138,7 +121,6 @@ def build_sys_prompt(uid, time_str, chatlog):
 
 # ---------- Memory & Flask ----------
 chat_histories = defaultdict(lambda: deque(maxlen=15))
-
 flask_app = Flask(__name__)
 
 @flask_app.route('/')
@@ -158,7 +140,6 @@ intents.message_content = True
 allowed_mentions = discord.AllowedMentions(users=True, everyone=False, roles=False)
 bot = commands.Bot(command_prefix='!', intents=intents, allowed_mentions=allowed_mentions)
 
-# Owner ID của mày (Thay ID thật của mày vào đây nha bro)
 OWNER_ID = 1155129530122510376 
 
 def is_owner(interaction: discord.Interaction):
@@ -169,7 +150,6 @@ class RPSView(discord.ui.View):
         super().__init__(timeout=30.0)
         self.author_id = author_id
         self.user_choice = None
-        # Bot chốt lựa chọn NGAY KHI tạo view, AI đéo biết được 🤡
         self.bot_choice = random.choice(["rock", "paper", "scissors"]) 
 
     @discord.ui.button(label="Búa 🗿", style=discord.ButtonStyle.blurple)
@@ -189,16 +169,13 @@ class RPSView(discord.ui.View):
             return await interaction.response.send_message("Nút của người ta mà m bấm j vậy? Vô duyên vl 💔", ephemeral=True)
         
         self.user_choice = choice
-        self.stop()  # Dừng view lại, disable các nút
+        self.stop()
         
-        # Disable tất cả nút sau khi bấm
         for child in self.children:
             child.disabled = True
         await interaction.response.edit_message(view=self)
 
 async def generate_edge_tts(text: str, retries: int = 2) -> bytes | None:
-    """Dùng Edge TTS để tạo audio từ text, có cơ chế thử lại nếu lỗi"""
-    # Lọc bớt các ký tự đặc biệt gây lỗi
     clean_text = re.sub(r'[^\w\s.,!?;:\-àáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵđ]', ' ', text)
     
     if len(clean_text.strip()) < 3:
@@ -206,35 +183,25 @@ async def generate_edge_tts(text: str, retries: int = 2) -> bytes | None:
 
     for attempt in range(retries + 1):
         try:
-            # Tạo đối tượng Communicate
             communicate = edge_tts.Communicate(clean_text, CURRENT_TTS_VOICE)
             audio_data = b""
             
-            # Stream dữ liệu âm thanh
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     audio_data += chunk["data"]
             
-            # Kiểm tra độ dài dữ liệu
             if len(audio_data) > 100: 
-                logger.info(f"✅ Generated Edge TTS audio (Attempt {attempt + 1}): {len(audio_data)} bytes")
                 return audio_data
-            else:
-                logger.warning(f"⚠️ Attempt {attempt + 1}: Edge TTS returned empty/short audio.")
                 
         except Exception as e:
             logger.error(f"❌ Attempt {attempt + 1} failed: {e}")
         
-        # Nếu chưa phải lần cuối thì đợi 1 chút rồi thử lại
         if attempt < retries:
-            logger.info(f"🔄 Retrying TTS in 1 second...")
             await asyncio.sleep(1)
 
-    logger.error(f"💀 Edge TTS failed after {retries + 1} attempts for: {text[:50]}...")
     return None
 
 def parse_voice_tag(text: str) -> tuple[str, str | None]:
-    """Parse tag [voice: text] từ tin nhắn"""
     pattern = r"\[voice:\s*(.*?)\]"
     match = re.search(pattern, text, re.IGNORECASE)
     
@@ -246,25 +213,16 @@ def parse_voice_tag(text: str) -> tuple[str, str | None]:
     return text, None
 
 async def fetch_bytes(url: str, timeout: int = 15) -> bytes | None:
+    import aiohttp
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     }
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as s:
             async with s.get(url, headers=headers) as r:
-                if r.status == 200:
-                    # Kiểm tra xem content-type có phải ảnh không
-                    if r.content_type and r.content_type.startswith('image/'):
-                        return await r.read()
-                    else:
-                        logger.warning(f"URL returned non-image content type: {r.content_type}")
-                        return None
-                else:
-                    logger.error(f"Failed to fetch image. Status: {r.status}, URL: {url}")
-                    return None
-    except asyncio.TimeoutError:
-        logger.error(f"Timeout while fetching image from: {url}")
-        return None
+                if r.status == 200 and r.content_type and r.content_type.startswith('image/'):
+                    return await r.read()
+                return None
     except Exception as e:
         logger.error(f"Fetch bytes error: {e}")
         return None
@@ -274,8 +232,16 @@ async def process_attachments(atts, provider):
     for a in atts:
         if not (a.content_type and a.content_type.startswith('image/')):
             continue
-        if provider == "groq":
-            parts.append({"type": "image_url", "image_url": {"url": a.url, "detail": "auto"}})
+        if provider == "ollama":
+            data = await fetch_bytes(a.url)
+            if data:
+                # Ollama Cloud support base64 image format
+                b64 = base64.b64encode(data).decode('utf-8')
+                mime = a.content_type or "image/jpeg"
+                parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{mime};base64,{b64}"}
+                })
         elif provider == "google":
             data = await fetch_bytes(a.url)
             if data:
@@ -286,16 +252,13 @@ async def process_attachments(atts, provider):
     return parts
 
 async def call_ai(msgs, model_name, provider):
-    # 🛡️ LỌC TIN NHẮN RỖNG ĐỂ TRÁNH LỖI API
     cleaned_msgs = []
     for m in msgs:
         content = m.get("content", "")
-        # Nếu content là list (vision), giữ nguyên. Nếu là text thì strip()
         if isinstance(content, str):
             if not content.strip(): 
-                continue # Bỏ qua tin nhắn text rỗng
+                continue 
         elif isinstance(content, list):
-            # Kiểm tra xem có text hoặc ảnh nào không
             has_content = any(
                 (c.strip() if isinstance(c, str) else (c.get("text", "").strip() if isinstance(c, dict) else True))
                 for c in content
@@ -310,40 +273,33 @@ async def call_ai(msgs, model_name, provider):
         
     cfg = MODELS_CONFIG[model_name]
     mid = cfg["id"]
-    # ... (Giữ nguyên logic temp, max_tok và try/except bên dưới) ...
     
-    # NHỚ THAY msgs.copy() BẰNG cleaned_msgs NHA BRO!
-    # Ví dụ khúc Groq: "messages": cleaned_msgs,
-    # Khúc Google: for m in cleaned_msgs[1:]:
-    
-    # Lấy setting từ global
     temp = BOT_SETTINGS["temperature"]
     max_tok = BOT_SETTINGS["max_tokens"]
     
     try:
-        if provider == "groq":
-            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-            payload = {
-                "model": mid, 
-                "messages": cleaned_msgs, 
-                "temperature": temp, 
-                "max_tokens": max_tok
-            }
+        if provider == "ollama":
+            if not ollama_client:
+                return "Thiếu OLLAMA_API_KEY, sao t gọi API dc hả bro? 💀"
             
-            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
-                async with s.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers) as r:
-                    if r.status != 200:
-                        error_text = await r.text()
-                        return f"Lỗi Groq {r.status}: {error_text[:100]} 🥀"
-                    data = await r.json()
-                    return data["choices"][0]["message"]["content"]
+            # Ollama Cloud format (support openai-style multimodal)
+            response = await ollama_client.chat(
+                model=mid, 
+                messages=cleaned_msgs,
+                options={"temperature": temp, "num_predict": max_tok},
+                stream=False
+            )
+            return response['message']['content']
 
         elif provider == "google":
             sys = msgs[0]["content"] if msgs and msgs[0]["role"] == "system" else ""
             
-            safety = [{"category": c, "threshold": "BLOCK_NONE"} for c in 
-                     ["HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", 
-                      "HARM_CATEGORY_SEXUALLY_EXPLICIT", "HARM_CATEGORY_DANGEROUS_CONTENT"]]
+            safety = {
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+            }
             
             model = genai.GenerativeModel(mid, system_instruction=sys, safety_settings=safety,
                                          generation_config={"temperature": temp, "max_output_tokens": max_tok,
@@ -364,23 +320,19 @@ async def call_ai(msgs, model_name, provider):
     except Exception as e:
         logger.error(f"Call AI Error: {e}")
         return f"Lỗi AI: {str(e)[:100]} 💀"
+
 async def parse_interactions(message, text):
-    # Tìm tất cả các pattern [interaction: :emoji_name:]
-    # Ví dụ: [interaction: 😂] hoặc [interaction: 💀]
-    pattern = r"\[interaction:\s*(.*?)\]"
+    pattern = r"\[interaction:\s*(.+?)\]"
     matches = re.findall(pattern, text)
     
     if matches:
         for emoji_str in matches:
             emoji_str = emoji_str.strip()
             try:
-                # Thử add reaction
                 await message.add_reaction(emoji_str)
-                logger.info(f"Added reaction: {emoji_str}")
             except Exception as e:
                 logger.error(f"Failed to add reaction {emoji_str}: {e}")
         
-        # Xóa các tag interaction khỏi text trả lời cuối cùng để người dùng không thấy rác
         cleaned_text = re.sub(pattern, "", text).strip()
         return cleaned_text
     return text
@@ -393,6 +345,7 @@ async def on_ready():
         logger.info(f"Synced {len(synced)} commands")
     except Exception as e:
         logger.error(f"Sync lỗi: {e}")
+
 @bot.event
 async def on_message(message):
     if message.author.bot:
@@ -401,7 +354,6 @@ async def on_message(message):
     ctx_id = message.channel.id if message.guild else message.author.id
     display = message.author.display_name or message.author.name
     
-    # 1. LOG THỤ ĐỘNG (Lưu all tin nhắn để hóng bất chấp có tag hay k)
     reply_info = ""
     if message.reference and message.reference.resolved and isinstance(message.reference.resolved, discord.Message):
         reply_info = f"(Reply @{message.reference.resolved.author.display_name}) "
@@ -409,7 +361,6 @@ async def on_message(message):
     
     chat_histories[ctx_id].append(f"{display}: {reply_info}{message.content}{att_info}")
     
-    # 2. XEM NÊN TRẢ LỜI HAY KO
     should_reply = False
     if message.guild:
         should_reply = bot.user.mentioned_in(message)
@@ -425,17 +376,14 @@ async def on_message(message):
         await bot.process_commands(message)
         return
         
-    # 3. XỬ LÝ GỬI CHO AI (Lúc này mới moi lịch sử ra)
     cfg = MODELS_CONFIG[CURRENT_MODEL]
     use_vision = BOT_SETTINGS["enable_vision"] and cfg["vision"]
     
-    # Lấy các tin nhắn trước (bỏ tin hiện tại ra để làm prompt chính)
     past_msgs = list(chat_histories[ctx_id])[:-1]
     chatlog_str = "\n".join(past_msgs) if past_msgs else "Chưa có ai nói gì, im ắng như chùa bà đanh 🥀"
     
     sys_prompt = build_sys_prompt(f"<@{message.author.id}>", datetime.now().strftime("%H:%M %d/%m/%Y"), chatlog_str)
     
-    # Lọc bớt mention của bot ra cho prompt sạch
     clean_content = message.content.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "").strip()
     if not clean_content and message.attachments:
         clean_content = "[User gửi ảnh]"
@@ -444,33 +392,25 @@ async def on_message(message):
     img_parts = await process_attachments(message.attachments, cfg["provider"]) if use_vision else []
     
     if img_parts:
-        if cfg["provider"] == "groq":
-            current_content = [{"type": "text", "text": base_text}] + img_parts
-        else:
-            current_content = [base_text] + img_parts
+        current_content = [{"type": "text", "text": base_text}] + img_parts
     else:
         current_content = base_text
         
-    # Giờ chỉ cần gửi System Prompt (chứa chatlog) và 1 cái User Prompt hiện tại
     msgs = [{"role": "system", "content": sys_prompt}, {"role": "user", "content": current_content}]
     
     async with message.channel.typing():
         try:
             reply = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
             
-            # 🎤 PARSE VOICE TAG
             final_text, voice_text = parse_voice_tag(reply)
             final_text = await parse_interactions(message, final_text)
             
             chat_histories[ctx_id].append(f"Bot: {final_text}")
             
-            # 🎤 XỬ LÝ GIỌNG NÓI (DÙNG EDGE TTS)
             if voice_text:
-                logger.info(f"🎤 Generating Edge voice for: {voice_text}")
                 audio_data = await generate_edge_tts(voice_text)
                 
                 if audio_data:
-                    # Edge TTS trả về mp3
                     audio_file = discord.File(
                         io.BytesIO(audio_data),
                         filename="voice.mp3",
@@ -484,7 +424,6 @@ async def on_message(message):
                     )
                 else:
                     await message.reply(final_text, allowed_mentions=allowed_mentions)
-                    logger.warning("⚠️ Edge TTS failed, sent text only")
             else:
                 await message.reply(final_text, allowed_mentions=allowed_mentions)
                 
@@ -509,7 +448,7 @@ async def model_autocomplete(interaction, current: str):
 
 @bot.tree.command(name="model", description="Đổi model AI")
 @app_commands.choices(provider=[
-    app_commands.Choice(name="Groq", value="groq"),
+    app_commands.Choice(name="Ollama", value="ollama"),
     app_commands.Choice(name="Google", value="google")
 ])
 @app_commands.autocomplete(model_id=model_autocomplete)
@@ -520,7 +459,7 @@ async def model_cmd(interaction, provider: str = None, model_id: str = None, cus
         return await interaction.response.send_message("Chọn provider đi bro 🥀", ephemeral=True)
 
     provider = provider.lower()
-    if provider not in ["groq", "google"]:
+    if provider not in ["ollama", "google"]:
         return await interaction.response.send_message("Provider đéo hợp lệ 💀", ephemeral=True)
 
     if custom_model_id:
@@ -553,7 +492,6 @@ async def voice_cmd(interaction, voice: app_commands.Choice[str]):
     else:
         await interaction.response.send_message("Giọng k hợp lệ 💀", ephemeral=True)
 
-# NEW COMMAND: SETTING (OWNER ONLY)
 @bot.tree.command(name="setting", description="Cấu hình bot (Owner Only)")
 @app_commands.check(is_owner)
 async def setting_cmd(interaction, 
@@ -587,7 +525,6 @@ async def setting_cmd(interaction,
         changed = True
         
     if not changed and temperature is None and max_tokens is None and enable_vision is None:
-        # Hiển thị setting hiện tại nếu không nhập gì
         vis_status = "Bật ✅" if BOT_SETTINGS["enable_vision"] else "Tắt ❌"
         msg = f"📊 Setting hiện tại:\n- Temp: {BOT_SETTINGS['temperature']}\n- Max Tokens: {BOT_SETTINGS['max_tokens']}\n- Vision: {vis_status}"
 
@@ -601,7 +538,6 @@ async def debug_cmd(interaction):
     embed.add_field(name="RP Mode", value=current_rp_mode, inline=False)
     embed.add_field(name="Channels remembered", value=len(chat_histories), inline=False)
     
-    # Thêm info setting vào debug cho tiện
     vis_status = "On" if BOT_SETTINGS["enable_vision"] else "Off"
     embed.add_field(name="Settings", value=f"Temp: {BOT_SETTINGS['temperature']}\nMaxTok: {BOT_SETTINGS['max_tokens']}\nVision: {vis_status}", inline=False)
     
@@ -613,7 +549,7 @@ async def clear_cmd(interaction):
     chat_histories[ctx_id].clear()
     await interaction.response.send_message("Clear sạch sẽ r bro ✌🏿")
 
-@bot.tree.command(name="summer_game", description="Oẳn tù tì với bot (Chống gian lận 100%)")
+@bot.tree.command(name="summer_game", description="Oẳn tù tì với bot")
 async def summer_game_cmd(interaction: discord.Interaction):
     view = RPSView(interaction.user.id)
     
@@ -624,7 +560,6 @@ async def summer_game_cmd(interaction: discord.Interaction):
     )
     await interaction.response.send_message(embed=embed, view=view)
     
-    # Chờ user bấm nút (tối đa 30s)
     await view.wait()
     
     if not view.user_choice:
@@ -633,7 +568,6 @@ async def summer_game_cmd(interaction: discord.Interaction):
             embed=None, view=None
         )
     
-    # Lúc này mới gọi AI để nó bình luận về kết quả (AI k hề biết quá trình chọn)
     u = view.user_choice
     b = view.bot_choice
     emojis = {"rock": "🗿", "paper": "📄", "scissors": "✂️"}
@@ -650,22 +584,16 @@ async def summer_game_cmd(interaction: discord.Interaction):
         result_text = "Bot thắng"
         score = "Mày: 0 | Bot: +1"
         
-    # Gọi AI cà khịa dựa trên KẾT QUẢ CUỐI CÙNG thui
     await interaction.edit_original_response(content="🤔 Đang nhờ AI soạn văn tế...", embed=None, view=None)
     
     prompt = f"""Kết quả oẳn tù tì: User ra {emojis[u]}, Bot ra {emojis[b]}. Kết quả: {result_text}.
-Hãy viết 1 câu bình luận ngắn gọn (dưới 20 từ) bằng giọng GenZ nhây, cà khịa. 
-- Nếu user thắng: Cay cú, đổ lỗi, hậm hực.
-- Nếu bot thắng: Kiêu ngạo, khinh bỉ, cười cợt.
-- Nếu hòa: Chán nản, kêu xui xẻo.
-Dùng teencode + emoji. KHÔNG markdown."""
+Hãy viết 1 câu bình luận ngắn gọn (dưới 20 từ) bằng giọng GenZ nhây, cà khịa. Dùng teencode + emoji. KHÔNG markdown."""
 
     try:
         cfg = MODELS_CONFIG[CURRENT_MODEL]
         msgs = [{"role": "user", "content": prompt}]
         ai_comment = await call_ai(msgs, CURRENT_MODEL, cfg["provider"])
         
-        # 🛡️ CHỐT HẠ: NẾU AI TRẢ VỀ RỖNG THÌ TỰ ĐỘNG GÁN CÂU MẶC ĐỊNH
         if not ai_comment or not ai_comment.strip():
             if result_text == "Mày thắng":
                 ai_comment = "Thắng rồi thì làm j? Cay vl 😤"
