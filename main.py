@@ -120,7 +120,6 @@ async def handle_chat_response(message, channel_id):
             history = chat_history.get(channel_id, [])
             
             # Xây dựng nội dung chat theo kiểu từng phần (parts)
-            # Phần 1: System Prompt
             contents = [
                 {
                     "role": "user",
@@ -147,18 +146,17 @@ async def handle_chat_response(message, channel_id):
             })
 
             model = get_model(DEFAULT_MODEL_ID)
-            # Gọi API với danh sách contents đã chuẩn hóa
             response = model.generate_content(contents)
             
-            # Gửi trả lời
+            # Gửi trả lời CÓ REPLY
             if response.text:
-                await message.channel.send(response.text)
+                await message.reply(response.text, mention_author=False) # mention_author=False để ko tag lại người đó lần nữa
             else:
-                await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲")
+                await message.reply("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲", mention_author=False)
                 
         except Exception as e:
             print(f"Lỗi khi gọi API: {e}")
-            await message.channel.send("Đm, lỗi cmnr 🥲 Check log đi bro.")
+            await message.reply("Đm, lỗi cmnr 🥲 Check log đi bro.", mention_author=False)
 # --- SLASH COMMANDS ---
 
 @bot.tree.command(name="model", description="Đổi model ID của bot")
