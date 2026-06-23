@@ -6,12 +6,14 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from flask import Flask
 import threading
+import signal
+import sys
 
 # Load biến môi trường
 load_dotenv()
 
 # --- CẤU HÌNH GLOBAL (M SỬA Ở ĐÂY) ---
-PORT = 8080
+PORT = int(os.getenv('PORT', 8080))
 DEFAULT_MODEL_ID = "gemini-3.1-flash-lite"
 OWNER_ID = 1155129530122510376
 
@@ -35,9 +37,9 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 # Lưu trữ history chat cho từng kênh: {channel_id: [list_of_messages]}
 chat_history = {}
 
-# System Prompt ngắn gọn, đậm chất GenZ
+# System Prompt mới nhất
 SYSTEM_PROMPT = """
-Mày 1 con AI Discord, bạn thân online của user. 
+Mày là 1 con AI Discord, bạn thân online của user. 
 TÍNH CÁCH: Hài hước, nhây, cà khịa nhẹ, nói chuyện tự nhiên như Gen Z thật. 
 CÁCH NÓI: Xưng hô "m - t" hoặc "bro". Dùng teencode vừa phải (ko, cx, v, j, bít, r, th…). 
 Thỉnh thoảng chèn emoji 💀, 🔥, 🥀, 🐧, 😇, 🥹,... và emoticon/kaomoji (biểu tượng cảm xúc bằng ký tự) nhưng đừng spam. 
@@ -90,11 +92,10 @@ async def on_message(message):
     is_mentioned = bot.user in message.mentions
     is_dm = isinstance(message.channel, discord.DMChannel)
 
-    # Fix: Đọc biến global đúng cách
     if IS_CHAT_ENABLED and (is_mentioned or is_dm):
         await handle_chat_response(message, channel_id)
     
-    # Xử lý lệnh cũ nếu có (nếu m vẫn muốn dùng prefix /)
+    # Xử lý lệnh cũ nếu có
     await bot.process_commands(message)
 
 async def handle_chat_response(message, channel_id):
@@ -150,7 +151,6 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
         await interaction.response.send_message("Cút đi, lệnh này dành cho owner thôi 😤", ephemeral=True)
         return
 
-    # Fix: Khai báo global NGAY ĐẦU HÀM trước khi sử dụng
     global IS_CHAT_ENABLED, CURRENT_MAX_TOKENS, CURRENT_TEMPERATURE
 
     if action == "view":
@@ -190,22 +190,38 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
         except ValueError:
             await interaction.response.send_message("Giá trị không hợp lệ!", ephemeral=True)
 
-# Chạy Flask trong thread riêng để không chặn Discord Bot
+# --- FLASK HEALTH CHECK ---
 def run_flask():
     app = Flask(__name__)
     
     @app.route('/')
     def home():
         return "Bot đang chạy ngon lành 🚀"
+
+    @app.route('/health')
+    def health():
+        return "OK", 200
     
-    # Koyeb cần host 0.0.0.0 để truy cập từ bên ngoài
+    # Disable logs để console sạch hơn trên Koyeb
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+
     app.run(host='0.0.0.0', port=PORT)
 
+def signal_handler(sig, frame):
+    print('Đang tắt bot...')
+    sys.exit(0)
+
 if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
     # Start Flask in a separate thread
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
     
+    print("Flask đã khởi động, đang chạy Discord Bot...")
     # Run Discord Bot
     bot.run(DISCORD_TOKEN)
