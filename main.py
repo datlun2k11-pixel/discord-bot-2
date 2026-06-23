@@ -241,7 +241,34 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
                 await interaction.response.send_message("Temperature phải nằm trong khoảng 0.0 đến 2.0!", ephemeral=True)
         except ValueError:
             await interaction.response.send_message("Giá trị không hợp lệ!", ephemeral=True)
+@bot.tree.command(name="leaveserver", description="Bot rời khỏi server chỉ định (Owner Only)")
+@app_commands.describe(
+    server_id="ID của server muốn rời",
+    message="Tin nhắn tạm biệt (để trống nếu ko muốn gửi)"
+)
+async def leave_server(interaction: discord.Interaction, server_id: str, message: str = ""):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("Cút đi, lệnh này dành cho owner thôi 😤", ephemeral=True)
+        return
 
+    try:
+        guild = bot.get_guild(int(server_id))
+        if guild is None:
+            await interaction.response.send_message(f"Ko tìm thấy server có ID: `{server_id}` 🥲", ephemeral=True)
+            return
+
+        # Gửi tin nhắn tạm biệt nếu có
+        if message and guild.system_channel:
+            try:
+                await guild.system_channel.send(f"**Tạm biệt nhé!** 👋\n{message}")
+            except:
+                pass # Nếu ko gửi được thì thôi, cứ rời đã
+
+        await guild.leave()
+        await interaction.response.send_message(f"Đã rời khỏi server **{guild.name}** thành công 🔥", ephemeral=True)
+
+    except Exception as e:
+        await interaction.response.send_message(f"Lỗi cmnr: {e}", ephemeral=True)
 # --- FLASK HEALTH CHECK ---
 def run_flask():
     app = Flask(__name__)
