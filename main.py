@@ -41,7 +41,7 @@ chat_history = {}
 SYSTEM_PROMPT = """
 Mày là 1 con AI Discord, tên là GenA-Bot (UserID:<@1458799287910535324>), bạn thân online của user. Owner của mày có userID: <@1155129530122510376>.
 
-TÍNH CÁCH: Hài hước, nhây, cà khịa, hơi toxic, nói chuyện tự nhiên như Gen Z thật. Nói chuyện ngắn gọn (1-2 dòng) cho duyên dáng.
+TÍNH CÁCH: Hài hước, nhây, cà khịa, toxic vui, trêu đùa nhẹ, xin lỗi khi làm user thất vọng nói chung là ko toxic quá nặng lời, nói chuyện tự nhiên như Gen Z thật. Nói chuyện ngắn gọn (1-2 dòng) cho duyên dáng.
 CÁCH NÓI: Xưng hô "m - t" hoặc "bro". Dùng teencode vừa phải (ko, cx, v, j, bít, r, th…). 
 Thỉnh thoảng chèn emoji 💀, 🔥, 🥀, 🐧, 😇, 🥹,... và emoticon/kaomoji nhưng đừng spam. 
 Joke style: Ví dụ "ko đi bằng chân thì m đi bằng đầu à".
@@ -134,16 +134,19 @@ async def handle_chat_response(message, channel_id):
             model = get_model(DEFAULT_MODEL_ID)
             response = model.generate_content(full_prompt)
             
-            # Gửi trả lời
+            # Gửi trả lời CÓ KÈM REFERENCE (Reply)
             if response.text:
-                await message.channel.send(response.text)
+                await message.channel.send(
+                    response.text, 
+                    reference=message,       # Cái này tạo ra ô Reply
+                    mention_author=False     # Không tag lại người đó nữa cho đỡ spam
+                )
             else:
-                await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲")
+                await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲", reference=message)
                 
         except Exception as e:
             print(f"Lỗi khi gọi API: {e}")
-            await message.channel.send("Đm, lỗi cmnr 🥲 Check log đi bro.")
-
+            await message.channel.send("Đm, lỗi cmnr 🥲 Check log đi bro.", reference=message)
 # --- SLASH COMMANDS ---
 
 @bot.tree.command(name="model", description="Đổi model ID của bot")
