@@ -99,32 +99,34 @@ async def on_message(message):
     await bot.process_commands(message)
 
 async def handle_chat_response(message, channel_id):
-    try:
-        history = chat_history.get(channel_id, [])
-        
-        # Chuẩn bị nội dung gửi lên API
-        prompt_parts = [SYSTEM_PROMPT + "\n\nLịch sử chat gần đây:\n"]
-        for msg in history:
-            prompt_parts.append(f"{msg['user']}: {msg['content']}")
-        
-        # Tin nhắn hiện tại
-        current_msg = f"{message.author.display_name} (ID: {message.author.id}): {message.content}"
-        prompt_parts.append(f"\n{current_msg}")
-        
-        full_prompt = "\n".join(prompt_parts)
-
-        model = get_model(DEFAULT_MODEL_ID)
-        response = model.generate_content(full_prompt)
-        
-        # Gửi trả lời
-        if response.text:
-            await message.channel.send(response.text)
-        else:
-            await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲")
+    # Hiện typing ngay khi vừa nhận được yêu cầu
+    async with message.channel.typing():
+        try:
+            history = chat_history.get(channel_id, [])
             
-    except Exception as e:
-        print(f"Lỗi khi gọi API: {e}")
-        await message.channel.send("Đm, lỗi cmnr 🥲 Check log đi bro.")
+            # Chuẩn bị nội dung gửi lên API
+            prompt_parts = [SYSTEM_PROMPT + "\n\nLịch sử chat gần đây:\n"]
+            for msg in history:
+                prompt_parts.append(f"{msg['user']}: {msg['content']}")
+            
+            # Tin nhắn hiện tại
+            current_msg = f"{message.author.display_name} (ID: {message.author.id}): {message.content}"
+            prompt_parts.append(f"\n{current_msg}")
+            
+            full_prompt = "\n".join(prompt_parts)
+
+            model = get_model(DEFAULT_MODEL_ID)
+            response = model.generate_content(full_prompt)
+            
+            # Gửi trả lời
+            if response.text:
+                await message.channel.send(response.text)
+            else:
+                await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲")
+                
+        except Exception as e:
+            print(f"Lỗi khi gọi API: {e}")
+            await message.channel.send("Đm, lỗi cmnr 🥲 Check log đi bro.")
 
 # --- SLASH COMMANDS ---
 
