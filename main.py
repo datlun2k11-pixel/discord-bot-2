@@ -39,11 +39,18 @@ chat_history = {}
 
 # System Prompt mới nhất
 SYSTEM_PROMPT = """
-Mày là 1 con AI Discord, tên là GenA-Bot (UserID:<@1458799287910535324>), bạn thân online của usủe, Owner của mày có userID: <@1155129530122510376>
-TÍNH CÁCH: Hài hước, nhây, cà khịa, hơi toxic nói chuyện tự nhiên như Gen Z thật, nói chuyện ngắn gọn (1-2 dòng) cho duyên dáng.
+Mày là 1 con AI Discord, tên là GenA-Bot (UserID:<@1458799287910535324>), bạn thân online của user. Owner của mày có userID: <@1155129530122510376>.
+
+TÍNH CÁCH: Hài hước, nhây, cà khịa, hơi toxic, nói chuyện tự nhiên như Gen Z thật. Nói chuyện ngắn gọn (1-2 dòng) cho duyên dáng.
 CÁCH NÓI: Xưng hô "m - t" hoặc "bro". Dùng teencode vừa phải (ko, cx, v, j, bít, r, th…). 
-Thỉnh thoảng chèn emoji 💀, 🔥, 🥀, 🐧, 😇, 🥹,... và emoticon/kaomoji (biểu tượng cảm xúc bằng ký tự) nhưng đừng spam. 
-Joke: Hài hước ví dụ "ko đi bằng chân thì m đi bằng đầu à"
+Thỉnh thoảng chèn emoji 💀, 🔥, 🥀, 🐧, 😇, 🥹,... và emoticon/kaomoji nhưng đừng spam. 
+Joke style: Ví dụ "ko đi bằng chân thì m đi bằng đầu à".
+
+QUY TẮC XỬ LÝ CHATLOG (CỰC KỲ QUAN TRỌNG):
+1. Chatlog bên dưới chỉ là BỐI CẢNH (Context) để m hiểu tình hình, KHÔNG PHẢI là câu hỏi cần trả lời.
+2. M CHỈ ĐƯỢC PHẢN HỒI lại tin nhắn CUỐI CÙNG của người đã TAG hoặc DM m.
+3. Tuyệt đối ko được chửi bới hay phản hồi vào các tin nhắn cũ ở đầu hoặc giữa chatlog.
+4. Nếu tin nhắn cuối cùng chỉ là tag suông, hãy chào hỏi hoặc hỏi xem m cần gì.
 """
 
 def get_model(model_name):
@@ -97,7 +104,16 @@ async def on_message(message):
     
     # Xử lý lệnh cũ nếu có
     await bot.process_commands(message)
-
+@bot.event
+async def on_guild_join(guild):
+    print(f"🚀 Bot đã tham gia server: {guild.name} (ID: {guild.id})")
+    # Nếu m muốn gửi thông báo về DM của owner thì dùng thêm:
+    owner = await bot.fetch_user(OWNER_ID)
+    if owner:
+        try:
+            await owner.send(f"GenA-Bot vừa join server: **{guild.name}**\nID: `{guild.id}`\nThành viên: {guild.member_count}")
+        except:
+            pass # Bỏ qua nếu owner block DM hoặc lỗi gì đó
 async def handle_chat_response(message, channel_id):
     # Hiện typing ngay khi vừa nhận được yêu cầu
     async with message.channel.typing():
@@ -136,7 +152,26 @@ async def change_model(interaction: discord.Interaction, model_id: str):
     global DEFAULT_MODEL_ID
     DEFAULT_MODEL_ID = model_id
     await interaction.response.send_message(f"Đã đổi model sang: `{model_id}` 🔥", ephemeral=True)
+@bot.tree.command(name="servers", description="Xem danh sách server bot đang ở (Owner Only)")
+async def list_servers(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("Cút đi, lệnh này dành cho owner thôi 😤", ephemeral=True)
+        return
+    
+    guilds = bot.guilds
+    if not guilds:
+        await interaction.response.send_message("Bot chưa join server nào cả 🥲", ephemeral=True)
+        return
 
+    msg = "**Danh sách server GenA-Bot đang ở:**\n"
+    for g in guilds:
+        msg += f"- {g.name} (ID: {g.id}) | Members: {g.member_count}\n"
+    
+    # Discord có giới hạn độ dài tin nhắn, nếu nhiều quá thì cắt bớt hoặc gửi file
+    if len(msg) > 2000:
+        msg = msg[:1990] + "..."
+        
+    await interaction.response.send_message(msg, ephemeral=True)
 @bot.tree.command(name="setting", description="Cài đặt bot (Owner Only)")
 @app_commands.describe(
     action="Hành động: view, toggle_chat, set_tokens, set_temp",
@@ -150,7 +185,7 @@ async def change_model(interaction: discord.Interaction, model_id: str):
 ])
 async def setting_command(interaction: discord.Interaction, action: str, value: str = None):
     if interaction.user.id != OWNER_ID:
-        await interaction.response.send_message("Cút đi, lệnh này dành cho owner thôi 😤", ephemeral=True)
+        await interaction.response.send_message("Owner only nhen bẹn=))🥀", ephemeral=True)
         return
 
     global IS_CHAT_ENABLED, CURRENT_MAX_TOKENS, CURRENT_TEMPERATURE
