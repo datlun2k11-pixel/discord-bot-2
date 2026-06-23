@@ -115,7 +115,6 @@ async def on_guild_join(guild):
         except:
             pass # Bỏ qua nếu owner block DM hoặc lỗi gì đó
 async def handle_chat_response(message, channel_id):
-    # Hiện typing ngay khi vừa nhận được yêu cầu
     async with message.channel.typing():
         try:
             history = chat_history.get(channel_id, [])
@@ -125,21 +124,34 @@ async def handle_chat_response(message, channel_id):
             for msg in history:
                 prompt_parts.append(f"{msg['user']}: {msg['content']}")
             
-            # Tin nhắn hiện tại
-            current_msg = f"{message.author.display_name} (ID: {message.author.id}): {message.content}"
-            prompt_parts.append(f"\n{current_msg}")
+            # Xử lý tin nhắn hiện tại (có thể kèm ảnh)
+            current_content = [{"text": f"\n{message.author.display_name} (ID: {message.author.id}): {message.content}"}]
             
-            full_prompt = "\n".join(prompt_parts)
-
+            # Nếu có ảnh đính kèm thì tải về và thêm vào prompt
+            if message.attachments:
+                for attachment in message.attachments:
+                    if attachment.content_type and attachment.content_type.startswith('image/'):
+                        try:
+                            image_bytes = await attachment.read()
+                            current_content.append({
+                                "inline_data": {
+                                    "mime_type": attachment.content_type,
+                                    "data": image_bytes
+                                }
+                            })
+                        except Exception as img_err:
+                            print(f"Lỗi tải ảnh: {img_err}")
+            
+            prompt_parts.append(current_content)
+            
             model = get_model(DEFAULT_MODEL_ID)
-            response = model.generate_content(full_prompt)
+            response = model.generate_content(prompt_parts)
             
-            # Gửi trả lời CÓ KÈM REFERENCE (Reply)
             if response.text:
                 await message.channel.send(
                     response.text, 
-                    reference=message,       # Cái này tạo ra ô Reply
-                    mention_author=False     # Không tag lại người đó nữa cho đỡ spam
+                    reference=message,
+                    mention_author=False
                 )
             else:
                 await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲", reference=message)
