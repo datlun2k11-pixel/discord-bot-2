@@ -119,46 +119,46 @@ async def handle_chat_response(message, channel_id):
         try:
             history = chat_history.get(channel_id, [])
             
-            # Chuẩn bị nội dung gửi lên API
-            prompt_parts = [SYSTEM_PROMPT + "\n\nLịch sử chat gần đây:\n"]
+            # Xây dựng nội dung chat theo kiểu từng phần (parts)
+            # Phần 1: System Prompt
+            contents = [
+                {
+                    "role": "user",
+                    "parts": [{"text": SYSTEM_PROMPT}]
+                },
+                {
+                    "role": "model",
+                    "parts": [{"text": "Ok bro, t đã hiểu luật chơi rồi 😎"}]
+                }
+            ]
+
+            # Phần 2: Lịch sử chat gần đây
             for msg in history:
-                prompt_parts.append(f"{msg['user']}: {msg['content']}")
-            
-            # Xử lý tin nhắn hiện tại (có thể kèm ảnh)
-            current_content = [{"text": f"\n{message.author.display_name} (ID: {message.author.id}): {message.content}"}]
-            
-            # Nếu có ảnh đính kèm thì tải về và thêm vào prompt
-            if message.attachments:
-                for attachment in message.attachments:
-                    if attachment.content_type and attachment.content_type.startswith('image/'):
-                        try:
-                            image_bytes = await attachment.read()
-                            current_content.append({
-                                "inline_data": {
-                                    "mime_type": attachment.content_type,
-                                    "data": image_bytes
-                                }
-                            })
-                        except Exception as img_err:
-                            print(f"Lỗi tải ảnh: {img_err}")
-            
-            prompt_parts.append(current_content)
-            
+                contents.append({
+                    "role": "user",
+                    "parts": [{"text": f"{msg['user']}: {msg['content']}"}]
+                })
+
+            # Phần 3: Tin nhắn hiện tại
+            current_msg_text = f"{message.author.display_name} (ID: {message.author.id}): {message.content}"
+            contents.append({
+                "role": "user",
+                "parts": [{"text": current_msg_text}]
+            })
+
             model = get_model(DEFAULT_MODEL_ID)
-            response = model.generate_content(prompt_parts)
+            # Gọi API với danh sách contents đã chuẩn hóa
+            response = model.generate_content(contents)
             
+            # Gửi trả lời
             if response.text:
-                await message.channel.send(
-                    response.text, 
-                    reference=message,
-                    mention_author=False
-                )
+                await message.channel.send(response.text)
             else:
-                await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲", reference=message)
+                await message.channel.send("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲")
                 
         except Exception as e:
             print(f"Lỗi khi gọi API: {e}")
-            await message.channel.send("Đm, lỗi cmnr 🥲 Check log đi bro.", reference=message)
+            await message.channel.send("Đm, lỗi cmnr 🥲 Check log đi bro.")
 # --- SLASH COMMANDS ---
 
 @bot.tree.command(name="model", description="Đổi model ID của bot")
