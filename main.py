@@ -37,7 +37,7 @@ chat_history = {}
 
 # System Prompt ngắn gọn, đậm chất GenZ
 SYSTEM_PROMPT = """
-Mày là Qwen GenZ, bạn thân online của user. 
+Mày 1 con AI Discord, bạn thân online của user. 
 TÍNH CÁCH: Hài hước, nhây, cà khịa nhẹ, nói chuyện tự nhiên như Gen Z thật. 
 CÁCH NÓI: Xưng hô "m - t" hoặc "bro". Dùng teencode vừa phải (ko, cx, v, j, bít, r, th…). 
 Thỉnh thoảng chèn emoji 💀, 🔥, 🥀, 🐧, 😇, 🥹,... và emoticon/kaomoji (biểu tượng cảm xúc bằng ký tự) nhưng đừng spam. 
@@ -90,6 +90,7 @@ async def on_message(message):
     is_mentioned = bot.user in message.mentions
     is_dm = isinstance(message.channel, discord.DMChannel)
 
+    # Fix: Đọc biến global đúng cách
     if IS_CHAT_ENABLED and (is_mentioned or is_dm):
         await handle_chat_response(message, channel_id)
     
@@ -149,6 +150,9 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
         await interaction.response.send_message("Cút đi, lệnh này dành cho owner thôi 😤", ephemeral=True)
         return
 
+    # Fix: Khai báo global NGAY ĐẦU HÀM trước khi sử dụng
+    global IS_CHAT_ENABLED, CURRENT_MAX_TOKENS, CURRENT_TEMPERATURE
+
     if action == "view":
         info = f"""
         **Cài đặt hiện tại:**
@@ -161,7 +165,6 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
         await interaction.response.send_message(info, ephemeral=True)
 
     elif action == "toggle_chat":
-        global IS_CHAT_ENABLED
         IS_CHAT_ENABLED = not IS_CHAT_ENABLED
         status = "BẬT" if IS_CHAT_ENABLED else "TẮT"
         await interaction.response.send_message(f"Đã {status} tính năng chat 🔥", ephemeral=True)
@@ -170,7 +173,6 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
         if not value or not value.isdigit():
             await interaction.response.send_message("Vui lòng nhập số tokens hợp lệ!", ephemeral=True)
             return
-        global CURRENT_MAX_TOKENS
         CURRENT_MAX_TOKENS = int(value)
         await interaction.response.send_message(f"Đã đổi Max Tokens thành: `{value}` 🔥", ephemeral=True)
 
@@ -181,7 +183,6 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
         try:
             temp_val = float(value)
             if 0.0 <= temp_val <= 2.0:
-                global CURRENT_TEMPERATURE
                 CURRENT_TEMPERATURE = temp_val
                 await interaction.response.send_message(f"Đã đổi Temperature thành: `{temp_val}` 🔥", ephemeral=True)
             else:
