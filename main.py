@@ -75,34 +75,49 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # Bỏ qua tin nhắn của chính bot
     if message.author == bot.user:
         return
 
     channel_id = message.channel.id
     
-    # Cập nhật history cho kênh này
     if channel_id not in chat_history:
         chat_history[channel_id] = []
     
-    # Thêm tin nhắn mới vào history
+    # Xử lý nội dung text
+    content_text = message.content
+    
+    # Xử lý ảnh đính kèm
+    image_parts = []
+    for attachment in message.attachments:
+        if attachment.content_type and attachment.content_type.startswith('image/'):
+            try:
+                # Tải ảnh về dưới dạng bytes để gửi lên API
+                image_bytes = await attachment.read()
+                image_parts.append({
+                    "mime_type": attachment.content_type,
+                    "data": image_bytes
+                })
+                # Thêm thông báo vào text history để bot biết là có ảnh
+                content_text += f" [Đã gửi một hình ảnh: {attachment.filename}]"
+            except:
+                pass
+
+    # Lưu vào history
     chat_history[channel_id].append({
         'user': f"{message.author.display_name} (ID: {message.author.id})",
-        'content': message.content
+        'content': content_text,
+        'images': image_parts # Lưu cả data ảnh vào đây
     })
 
-    # Giữ lại tối đa 15 tin nhắn gần nhất
     if len(chat_history[channel_id]) > 15:
         chat_history[channel_id] = chat_history[channel_id][-15:]
 
-    # Kiểm tra xem bot có được tag hoặc DM không VÀ tính năng chat đang bật
     is_mentioned = bot.user in message.mentions
     is_dm = isinstance(message.channel, discord.DMChannel)
 
     if IS_CHAT_ENABLED and (is_mentioned or is_dm):
         await handle_chat_response(message, channel_id)
     
-    # Xử lý lệnh cũ nếu có
     await bot.process_commands(message)
 @bot.event
 async def on_guild_join(guild):
@@ -119,7 +134,6 @@ async def handle_chat_response(message, channel_id):
         try:
             history = chat_history.get(channel_id, [])
             
-            # Xây dựng nội dung chat theo kiểu từng phần (parts)
             contents = [
                 {
                     "role": "user",
@@ -131,26 +145,59 @@ async def handle_chat_response(message, channel_id):
                 }
             ]
 
-            # Phần 2: Lịch sử chat gần đây
+            # Duyệt qua lịch sử
             for msg in history:
+                parts = []
+                
+                # Nếu có ảnh trong tin nhắn lịch sử, thêm vào parts
+                if msg.get('images'):
+                    for img in msg['images']:
+                        parts.append({
+                            "inline_data": {
+                                "mime_type": img['mime_type'],
+                                "data": img['data']
+                            }
+                        })
+                
+                # Luôn thêm text vào parts
+                parts.append({"text": f"{msg['user']}: {msg['content']}"})
+                
                 contents.append({
                     "role": "user",
-                    "parts": [{"text": f"{msg['user']}: {msg['content']}"}]
+                    "parts": parts
                 })
 
-            # Phần 3: Tin nhắn hiện tại
+            # Xử lý tin nhắn hiện tại (có thể cũng có ảnh)
+            current_parts = []
+            
+            # Kiểm tra ảnh trong tin nhắn hiện tại
+            for attachment in message.attachments:
+                if attachment.content_type and attachment.content_type.startswith('image/'):
+                    try:
+                        image_bytes = await attachment.read()
+                        current_parts.append({
+                            "inline_data": {
+                                "mime_type": attachment.content_type,
+                                "data": image_bytes
+                            }
+                        })
+                    except:
+                        pass
+
+            # Thêm text của tin nhắn hiện tại
             current_msg_text = f"{message.author.display_name} (ID: {message.author.id}): {message.content}"
+            current_parts.append({"text": current_msg_text})
+            
             contents.append({
                 "role": "user",
-                "parts": [{"text": current_msg_text}]
+                "parts": current_parts
             })
 
             model = get_model(DEFAULT_MODEL_ID)
             response = model.generate_content(contents)
             
-            # Gửi trả lời CÓ REPLY
             if response.text:
-                await message.reply(response.text, mention_author=False) # mention_author=False để ko tag lại người đó lần nữa
+                await message.reply(response.text, mention_author=False)
             else:
                 await message.reply("Bot không nghĩ ra câu trả lời nào hợp lệ 🥲", mention_author=False)
                 
