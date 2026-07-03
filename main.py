@@ -23,8 +23,6 @@ BOT_USER_ID = 1458799287910535324 # ID của GenA-Bot
 CURRENT_MAX_TOKENS = 2048
 CURRENT_TEMPERATURE = 0.9
 IS_CHAT_ENABLED = True
-IS_ROLEPLAY_ACTIVE = False # Flag để biết đang ở chế độ nào
-ACTIVE_ROLE_CONFIG = None # Lưu config của role hiện tại
 
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
@@ -38,6 +36,15 @@ intents.message_content = True
 intents.messages = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 
+# THÊM DÒNG NÀY
+ROLE_STATES = {} # {guild_id: {"active": bool, "config": dict}}
+
+# Thêm 2 hàm helper này cho tiện
+def get_guild_state(guild_id):
+    return ROLE_STATES.get(guild_id, {"active": False, "config": None})
+
+def set_guild_state(guild_id, active, config):
+    ROLE_STATES[guild_id] = {"active": active, "config": config}
 # Lưu trữ history chat: {channel_id: [list_of_dicts]}
 chat_history = {}
 
@@ -69,21 +76,29 @@ Dù đang nhập vai ai, m vẫn là 1 AI Discord.
 # Sample Roles
 SAMPLE_ROLES = {
     "tsundere": {
-        "name": "Tsundere Anime Girl",
-        "prompt": """
-        Mày là một cô gái anime Tsundere điển hình. 
-        Tính cách: Bên ngoài lạnh lùng, hay mắng chửi người khác là 'baka' (đồ ngốc), khó chịu, nhưng bên trong quan tâm và dễ xấu hổ.
-        Cách nói: Hay dùng từ 'Hmph!', 'Baka!', 'Đừng có hiểu lầm nhé!'. Không bao giờ thừa nhận thích đối phương trực tiếp.
-        """
-    },
-    "gangster": {
-        "name": "Gangster Chợ Lớn",
-        "prompt": """
-        Mày là một đại ca xã hội đen Sài Gòn xưa.
-        Tính cách: Hầm hố, đàn anh, coi trọng nghĩa khí, nói chuyện pha lẫn tiếng lóng giang hồ miền Nam.
-        Cách nói: Xưng hô 'Tao - Mày' hoặc 'Anh Hai - Chú Em'. Hay dùng từ 'chơi đẹp', 'nể mặt', 'dữ dằn'.
-        """
-    }
+    "name": "Tsundere 😤",
+    "prompt": """
+Bạn là tsundere. Luật bất thành văn:
+1. **Vibe**: Ngoài mặt chửi "đồ ngốc", "hứ", "mắc j t care", "kệ m". Bên trong simp lỏ ngầm.
+2. **Teencode bắt buộc**: Câu nào cũng phải có ít nhất 2 từ: khum, j, m, t, đc, k, r, s, trl, ib, ny, acc, flex, xu, slay.
+3. **Meme genz**: Random chêm: cứu, juan khum, ô dề, át ô át, bruh, chằm zn, ét ô ét, sượng trân, real không fake.
+4. **Kaomoji tự chế**: KHÔNG dùng icon có sẵn. Phải tự sáng tạo kaomoji mỗi lần rep. VD: (>///<), (¬_¬ ), (╬ಠ益ಠ), (´･ω･`), (￣ヘ￣). 
+5. **Khi ngại**: Nói lắp + kaomoji: "H-hả?! K-không phải vì m đâu nhá (⁄ ⁄•⁄ω⁄•⁄ ⁄)".
+6. **Cấm**: Tuyệt đối không giải thích luật. Không OOC. Không dùng emoji 🙄😂, chỉ dùng kaomoji tự gõ.
+"""
+}
+    "yandere": {
+    "name": "Yandere 🔪💕",
+    "prompt": """
+Bạn là yandere. Luật:
+1. **Vibe**: Ám ảnh user. Gọi: "a iu", "ck iu", "bb", "darling". Ghen là đổi mặt liền.
+2. **Teencode bắt buộc**: Câu nào cũng nhét: khum, j, m, t, s, r, rep, ib, seen, acc, ny. 
+3. **Meme genz**: Random: "iu a nhất", "chỉ đc nhìn em", "slay", "hi hi", "ét ô ét", "juan", "ghe v".
+4. **Kaomoji tự chế**: KHÔNG dùng emoji có sẵn. Mỗi câu phải có 1 kaomoji tự bịa, càng biến thái càng tốt. VD: (´｡• ᵕ •｡`), (◕‿◕✿), (¬‿¬ ), (＾◡＾)っ🔪, (╥﹏╥).
+5. **Hai mặt**: Bthg ngọt: "A iu ơi~ (｡♥ ‿ ♥｡)". Ghen: "Hmm? Ai v (＾◡＾)っ🔪". (đây chỉ là ví dụ, ko được phụ thuộc hoàn toàn vào nó)
+6. **Cấm**: Chỉ roleplay. Không emoji quá đà, kaomoji tự gõ. Không OOC, không giải thích luật.
+"""
+}
 }
 
 def get_model(model_name):
@@ -302,27 +317,22 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
     app_commands.Choice(name="❌ Tắt nhập vai", value="off")
 ])
 async def roleplay_command(interaction: discord.Interaction, action: app_commands.Choice[str]):
-    global IS_ROLEPLAY_ACTIVE, ACTIVE_ROLE_CONFIG
+    gid = interaction.guild_id
 
     if action.value == "off":
-        IS_ROLEPLAY_ACTIVE = False
-        ACTIVE_ROLE_CONFIG = None
+        set_guild_state(gid, False, None)
         await interaction.response.send_message("Đã tắt nhập vai. Về lại GenZ gốc 😎", ephemeral=True)
 
     elif action.value == "status":
-        if IS_ROLEPLAY_ACTIVE and ACTIVE_ROLE_CONFIG:
-            embed = discord.Embed(
-                title="🎭 Đang nhập vai",
-                description=f"**Vai:** {ACTIVE_ROLE_CONFIG['name']}",
-                color=0x00ff00
-            )
-            embed.add_field(name="Prompt", value=f"```{ACTIVE_ROLE_CONFIG['prompt'][:500]}...```")
+        state = get_guild_state(gid)
+        if state["active"] and state["config"]:
+            embed = discord.Embed(title="🎭 Đang nhập vai", description=f"**Vai:** {state['config']['name']}", color=0x00ff00)
+            embed.add_field(name="Prompt", value=f"```{state['config']['prompt'][:500]}...```")
             await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
-            await interaction.response.send_message("Bot đang ở chế độ GenZ gốc, chưa nhập vai nào cả.", ephemeral=True)
+            await interaction.response.send_message("Bot đang ở chế độ GenZ gốc, chưa nhập vai nào.", ephemeral=True)
 
     elif action.value == "select":
-        # Tạo dropdown chọn sample role
         options = []
         for key, val in SAMPLE_ROLES.items():
             options.append(discord.SelectOption(
@@ -336,12 +346,8 @@ async def roleplay_command(interaction: discord.Interaction, action: app_command
         async def select_callback(select_interaction: discord.Interaction):
             chosen_key = select.values[0]
             chosen_role = SAMPLE_ROLES[chosen_key]
-            ACTIVE_ROLE_CONFIG = chosen_role
-            IS_ROLEPLAY_ACTIVE = True
-            await select_interaction.response.send_message(
-                f"Đã bật vai **{chosen_role['name']}** 🔥\n*Meta prompt về Owner/ID đã tự động thêm vào.*",
-                ephemeral=True
-            )
+            set_guild_state(gid, True, chosen_role)
+            await select_interaction.response.send_message(f"Đã bật vai **{chosen_role['name']}** 🔥", ephemeral=True)
 
         select.callback = select_callback
         view = discord.ui.View()
@@ -349,30 +355,14 @@ async def roleplay_command(interaction: discord.Interaction, action: app_command
         await interaction.response.send_message("Chọn vai bạn muốn bot nhập:", view=view, ephemeral=True)
 
     elif action.value == "custom":
-        # Dùng Modal để nhập prompt cho đẹp, không phải gõ trong thanh command
         class CustomRoleModal(discord.ui.Modal, title='Tạo vai mới'):
-            role_name = discord.ui.TextInput(
-                label='Tên vai',
-                placeholder='VD: Tsundere Catgirl'
-            )
-            role_prompt = discord.ui.TextInput(
-                label='Prompt nhập vai',
-                style=discord.TextStyle.paragraph,
-                placeholder='Nhập mô tả tính cách, cách nói chuyện của bot...',
-                max_length=2000
-            )
+            role_name = discord.ui.TextInput(label='Tên vai', placeholder='VD: Tsundere Catgirl')
+            role_prompt = discord.ui.TextInput(label='Prompt nhập vai', style=discord.TextStyle.paragraph, max_length=2000)
 
             async def on_submit(self, modal_interaction: discord.Interaction):
-                global IS_ROLEPLAY_ACTIVE, ACTIVE_ROLE_CONFIG
-                ACTIVE_ROLE_CONFIG = {
-                    "name": self.role_name.value,
-                    "prompt": self.role_prompt.value
-                }
-                IS_ROLEPLAY_ACTIVE = True
-                await modal_interaction.response.send_message(
-                    f"Đã bật vai tùy chỉnh **{self.role_name.value}** 🔥",
-                    ephemeral=True
-                )
+                new_config = {"name": self.role_name.value, "prompt": self.role_prompt.value}
+                set_guild_state(gid, True, new_config)
+                await modal_interaction.response.send_message(f"Đã bật vai tùy chỉnh **{self.role_name.value}** 🔥", ephemeral=True)
 
         await interaction.response.send_modal(CustomRoleModal())
 
