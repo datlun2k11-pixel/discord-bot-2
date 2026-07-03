@@ -293,7 +293,7 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
             except ValueError:
                 await interaction.response.send_message("Số đê bro!", ephemeral=True)
 
-@bot.tree.command(name="role_play", description="Bật chế độ nhập vai (Owner Only)")
+@bot.tree.command(name="role_play", description="Bật chế độ nhập vai")
 @app_commands.describe(
     option="Chọn 'on' để bật, 'off' để tắt, hoặc 'sample' để xem mẫu",
     custom_prompt="Prompt nhập vai tùy chỉnh (chỉ dùng khi bật)"
@@ -304,10 +304,6 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
     app_commands.Choice(name="Xem mẫu (Sample)", value="sample"),
 ])
 async def role_play_command(interaction: discord.Interaction, option: str, custom_prompt: str = None):
-    if interaction.user.id != OWNER_ID:
-        await interaction.response.send_message("Owner only nhen bẹn=))🥀", ephemeral=True)
-        return
-
     global IS_ROLEPLAY_ACTIVE, ACTIVE_ROLE_CONFIG
 
     if option == "off":
@@ -333,6 +329,14 @@ async def role_play_command(interaction: discord.Interaction, option: str, custo
             await interaction.response.send_message(f"Đã bật Role Play với prompt tùy chỉnh 🔥\n*Lưu ý: Meta prompt về Owner/ID đã được tự động thêm vào.*", ephemeral=True)
         else:
             await interaction.response.send_message("Vui lòng nhập prompt vào ô `custom_prompt` hoặc chọn sample để copy paste!", ephemeral=True)
+
+@bot.tree.command(name="reset_role", description="Reset về prompt GenZ gốc")
+async def reset_role(interaction: discord.Interaction):
+    global IS_ROLEPLAY_ACTIVE, ACTIVE_ROLE_CONFIG
+    IS_ROLEPLAY_ACTIVE = False
+    ACTIVE_ROLE_CONFIG = None
+    
+    await interaction.response.send_message("Đã reset về chế độ GenA-Bot gốc 😎", ephemeral=True)
 
 # --- FLASK HEALTH CHECK ---
 def run_flask():
