@@ -239,11 +239,13 @@ async def on_message(message):
                 image_parts.append({"mime_type": att.content_type, "data": img_bytes})
             except: pass
 
-    # Gọi Gemini
+    # Gọi Gemini + HIỆN "GenA-Bot is typing..."
     try:
-        model = get_model(CURRENT_MODEL_ID)
-        parts = [system_instruction, f"User: {message.content}"] + image_parts
-        response = await model.generate_content_async(parts)
+        async with message.channel.typing():  # Dòng thần thánh đây
+            model = get_model(CURRENT_MODEL_ID)
+            parts = [system_instruction, f"User: {message.content}"] + image_parts
+            response = await model.generate_content_async(parts)
+        
         await message.channel.send(response.text[:2000])
     except Exception as e:
         print(f"Lỗi API: {e}")
