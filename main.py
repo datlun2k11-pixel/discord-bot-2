@@ -293,50 +293,88 @@ async def setting_command(interaction: discord.Interaction, action: str, value: 
             except ValueError:
                 await interaction.response.send_message("Số đê bro!", ephemeral=True)
 
-@bot.tree.command(name="role_play", description="Bật chế độ nhập vai")
-@app_commands.describe(
-    option="Chọn 'on' để bật, 'off' để tắt, hoặc 'sample' để xem mẫu",
-    custom_prompt="Prompt nhập vai tùy chỉnh (chỉ dùng khi bật)"
-)
-@app_commands.choices(option=[
-    app_commands.Choice(name="Bật (On)", value="on"),
-    app_commands.Choice(name="Tắt (Off)", value="off"),
-    app_commands.Choice(name="Xem mẫu (Sample)", value="sample"),
+@bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai của bot")
+@app_commands.describe(action="Chọn hành động bạn muốn làm")
+@app_commands.choices(action=[
+    app_commands.Choice(name="🎭 Chọn vai có sẵn", value="select"),
+    app_commands.Choice(name="✏️ Tạo vai mới", value="custom"),
+    app_commands.Choice(name="📋 Xem vai hiện tại", value="status"),
+    app_commands.Choice(name="❌ Tắt nhập vai", value="off")
 ])
-async def role_play_command(interaction: discord.Interaction, option: str, custom_prompt: str = None):
+async def roleplay_command(interaction: discord.Interaction, action: app_commands.Choice[str]):
     global IS_ROLEPLAY_ACTIVE, ACTIVE_ROLE_CONFIG
 
-    if option == "off":
+    if action.value == "off":
         IS_ROLEPLAY_ACTIVE = False
         ACTIVE_ROLE_CONFIG = None
-        await interaction.response.send_message("Đã tắt chế độ Role Play. Về lại GenZ bình thường 😎", ephemeral=True)
-        
-    elif option == "sample":
-        msg = "**Các Sample Role có sẵn:**\n"
-        for key, val in SAMPLE_ROLES.items():
-            msg += f"- **{key}**: {val['name']}\n"
-        msg += "\n*Dùng lệnh này lại và paste prompt vào custom_prompt nếu muốn dùng sample.*"
-        await interaction.response.send_message(msg, ephemeral=True)
+        await interaction.response.send_message("Đã tắt nhập vai. Về lại GenZ gốc 😎", ephemeral=True)
 
-    elif option == "on":
-        if custom_prompt:
-            # Nếu user tự nhập prompt
-            ACTIVE_ROLE_CONFIG = {
-                "name": "Custom Role",
-                "prompt": custom_prompt
-            }
-            IS_ROLEPLAY_ACTIVE = True
-            await interaction.response.send_message(f"Đã bật Role Play với prompt tùy chỉnh 🔥\n*Lưu ý: Meta prompt về Owner/ID đã được tự động thêm vào.*", ephemeral=True)
+    elif action.value == "status":
+        if IS_ROLEPLAY_ACTIVE and ACTIVE_ROLE_CONFIG:
+            embed = discord.Embed(
+                title="🎭 Đang nhập vai",
+                description=f"**Vai:** {ACTIVE_ROLE_CONFIG['name']}",
+                color=0x00ff00
+            )
+            embed.add_field(name="Prompt", value=f"```{ACTIVE_ROLE_CONFIG['prompt'][:500]}...```")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
         else:
-            await interaction.response.send_message("Vui lòng nhập prompt vào ô `custom_prompt` hoặc chọn sample để copy paste!", ephemeral=True)
+            await interaction.response.send_message("Bot đang ở chế độ GenZ gốc, chưa nhập vai nào cả.", ephemeral=True)
 
-@bot.tree.command(name="reset_role", description="Reset về prompt GenZ gốc")
-async def reset_role(interaction: discord.Interaction):
-    global IS_ROLEPLAY_ACTIVE, ACTIVE_ROLE_CONFIG
-    IS_ROLEPLAY_ACTIVE = False
-    ACTIVE_ROLE_CONFIG = None
-    
-    await interaction.response.send_message("Đã reset về chế độ GenA-Bot gốc 😎", ephemeral=True)
+    elif action.value == "select":
+        # Tạo dropdown chọn sample role
+        options = []
+        for key, val in SAMPLE_ROLES.items():
+            options.append(discord.SelectOption(
+                label=val['name'][:100],
+                value=key,
+                description=val['prompt'][:100]
+            ))
+
+        select = discord.ui.Select(placeholder="Chọn 1 vai để kích hoạt...", options=options)
+
+        async def select_callback(select_interaction: discord.Interaction):
+            chosen_key = select.values[0]
+            chosen_role = SAMPLE_ROLES[chosen_key]
+            ACTIVE_ROLE_CONFIG = chosen_role
+            IS_ROLEPLAY_ACTIVE = True
+            await select_interaction.response.send_message(
+                f"Đã bật vai **{chosen_role['name']}** 🔥\n*Meta prompt về Owner/ID đã tự động thêm vào.*",
+                ephemeral=True
+            )
+
+        select.callback = select_callback
+        view = discord.ui.View()
+        view.add_item(select)
+        await interaction.response.send_message("Chọn vai bạn muốn bot nhập:", view=view, ephemeral=True)
+
+    elif action.value == "custom":
+        # Dùng Modal để nhập prompt cho đẹp, không phải gõ trong thanh command
+        class CustomRoleModal(discord.ui.Modal, title='Tạo vai mới'):
+            role_name = discord.ui.TextInput(
+                label='Tên vai',
+                placeholder='VD: Tsundere Catgirl'
+            )
+            role_prompt = discord.ui.TextInput(
+                label='Prompt nhập vai',
+                style=discord.TextStyle.paragraph,
+                placeholder='Nhập mô tả tính cách, cách nói chuyện của bot...',
+                max_length=2000
+            )
+
+            async def on_submit(self, modal_interaction: discord.Interaction):
+                global IS_ROLEPLAY_ACTIVE, ACTIVE_ROLE_CONFIG
+                ACTIVE_ROLE_CONFIG = {
+                    "name": self.role_name.value,
+                    "prompt": self.role_prompt.value
+                }
+                IS_ROLEPLAY_ACTIVE = True
+                await modal_interaction.response.send_message(
+                    f"Đã bật vai tùy chỉnh **{self.role_name.value}** 🔥",
+                    ephemeral=True
+                )
+
+        await interaction.response.send_modal(CustomRoleModal())
 
 # --- FLASK HEALTH CHECK ---
 def run_flask():
