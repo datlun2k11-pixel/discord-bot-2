@@ -254,6 +254,11 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
+    # FIX: Chỉ rep khi bị tag @GenA-Bot hoặc reply tin nhắn của bot
+    is_reply_to_bot = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
+    if bot.user not in message.mentions and not is_reply_to_bot:
+        return
+
     if not IS_CHAT_ENABLED and message.author.id!= OWNER_ID:
         return
 
@@ -272,11 +277,13 @@ async def on_message(message):
                 image_parts.append({"mime_type": att.content_type, "data": img_bytes})
             except: pass
 
-    # Gọi Gemini + HIỆN "GenA-Bot is typing..."
+    # Gọi Gemini + typing
     try:
-        async with message.channel.typing():  # Dòng thần thánh đây
+        async with message.channel.typing():
             model = get_model(CURRENT_MODEL_ID)
-            parts = [system_instruction, f"User: {message.content}"] + image_parts
+            # Xóa tag bot khỏi content để AI đỡ ngu
+            clean_content = message.content.replace(f'<@{BOT_USER_ID}>', '').strip()
+            parts = [system_instruction, f"User: {clean_content}"] + image_parts
             response = await model.generate_content_async(parts)
         
         await message.channel.send(response.text[:2000])
