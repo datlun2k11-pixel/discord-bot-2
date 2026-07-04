@@ -157,6 +157,125 @@ async def on_ready():
     except Exception as e:
         print(f"Lỗi đồng bộ lệnh: {e}")
 
+# --- EVENT KHI BOT JOIN SERVER ---
+@bot.event
+async def on_guild_join(guild: discord.Guild):
+    """Gửi DM cho owner khi bot join server"""
+    try:
+        owner = await bot.fetch_user(OWNER_ID)
+        if owner:
+            # Tạo link vào server
+            # Sử dụng widget URL hoặc link mời mặc định
+            invite_url = None
+            try:
+                # Lấy channel đầu tiên để tạo mời
+                for channel in guild.channels:
+                    if isinstance(channel, discord.TextChannel) and channel.permissions_for(guild.me).create_instant_invite:
+                        invite = await channel.create_invite(max_age=0, max_uses=0)
+                        invite_url = invite.url
+                        break
+            except:
+                pass
+            
+            # Nếu không tạo được mời, dùng URL mặc định
+            if not invite_url:
+                invite_url = f"https://discord.gg/invalid (Không thể tạo link, hãy tạo thủ công)"
+            
+            embed = discord.Embed(
+                title="✅ Bot vừa join 1 server mới!",
+                color=0x00f0ff,
+                description=f"**Server:** {guild.name}\n**ID:** {guild.id}\n**Số thành viên:** {guild.member_count}\n\n**Link:** [Vào server]({invite_url})"
+            )
+            embed.set_thumbnail(url=guild.icon.url if guild.icon else "")
+            
+            await owner.send(embed=embed)
+    except Exception as e:
+        print(f"Lỗi gửi DM khi join server: {e}")
+
+# --- COMMAND GETLINK ---
+@bot.tree.command(name="getlink", description="Lấy link vào server - Chỉ Owner")
+@app_commands.describe(server_id="ID của server cần lấy link")
+async def getlink_command(interaction: discord.Interaction, server_id: str):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("M k phải owner, cút! 🔪", ephemeral=True)
+        return
+    
+    try:
+        guild_id = int(server_id)
+        guild = bot.get_guild(guild_id)
+        
+        if not guild:
+            await interaction.response.send_message(f"Không tìm thấy server với ID: `{guild_id}` 💀", ephemeral=True)
+            return
+        
+        # Tạo link mời
+        invite_url = None
+        try:
+            for channel in guild.channels:
+                if isinstance(channel, discord.TextChannel) and channel.permissions_for(guild.me).create_instant_invite:
+                    invite = await channel.create_invite(max_age=0, max_uses=0)
+                    invite_url = invite.url
+                    break
+        except:
+            pass
+        
+        if not invite_url:
+            await interaction.response.send_message(f"Không thể tạo link cho server `{guild.name}` 💀", ephemeral=True)
+            return
+        
+        # Gửi link qua DM riêng tư
+        embed = discord.Embed(
+            title=f"🔗 Link vào server: {guild.name}",
+            color=0x00f0ff,
+            description=f"**Server ID:** {guild_id}\n**Số thành viên:** {guild.member_count}\n\n**Link:** {invite_url}"
+        )
+        embed.set_thumbnail(url=guild.icon.url if guild.icon else "")
+        
+        await interaction.user.send(embed=embed)
+        await interaction.response.send_message("✅ Đã gửi link vào DM của bạn 🥀", ephemeral=True)
+    
+    except ValueError:
+        await interaction.response.send_message("Server ID phải là số nha! 🤡", ephemeral=True)
+    except Exception as e:
+        await interaction.response.send_message(f"Lỗi: `{e}` 💀", ephemeral=True)
+
+# --- COMMAND SERVER_LIST ---
+@bot.tree.command(name="server_list", description="Xem toàn bộ thông tin các server bot đang ở - Chỉ Owner")
+async def server_list_command(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("M k phải owner, cút! 🔪", ephemeral=True)
+        return
+    
+    guilds = bot.guilds
+    
+    if not guilds:
+        await interaction.response.send_message("Bot chưa join server nào hết á đại ca! 🥀", ephemeral=True)
+        return
+    
+    # Tạo embed chính
+    embed = discord.Embed(
+        title=f"📊 Danh sách các server ({len(guilds)} server)",
+        color=0x00f0ff
+    )
+    
+    # Sắp xếp theo số lượng thành viên
+    sorted_guilds = sorted(guilds, key=lambda g: g.member_count, reverse=True)
+    
+    total_members = sum(g.member_count for g in guilds)
+    
+    embed.set_footer(text=f"Tổng cộng: {total_members} thành viên")
+    
+    # Thêm info từng server (tối đa 25 field)
+    for guild in sorted_guilds[:25]:
+        field_value = f"**ID:** {guild.id}\n**Thành viên:** {guild.member_count}\n**Owner:** <@{guild.owner_id}>"
+        embed.add_field(name=guild.name, value=field_value, inline=False)
+    
+    # Nếu còn nhiều server, gửi thông báo
+    if len(sorted_guilds) > 25:
+        embed.description = f"*Đang hiển thị 25 server đầu tiên, tổng cộng {len(sorted_guilds)} server*"
+    
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
 # --- COMMAND ROLEPLAY ---
 @bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai")
 @app_commands.choices(action=[
