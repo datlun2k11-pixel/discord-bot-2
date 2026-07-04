@@ -288,6 +288,8 @@ async def on_message(message):
     if bot.user not in message.mentions and not is_reply_to_bot:
         return
 
+    # ⚡ SỬA: Kiểm tra chat enabled TRƯỚC khi làm gì
+    # Nếu chat tắt và người dùng không phải owner → dừng lại ngay
     if not IS_CHAT_ENABLED and message.author.id != OWNER_ID:
         return
 
