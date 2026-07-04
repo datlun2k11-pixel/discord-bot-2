@@ -29,6 +29,8 @@ intents.messages = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 
 # --- GLOBAL STATE ---
+import time
+SPAM_TRACKER = {} # {user_id: {"last_msgs": [], "blocked_until": 0}}
 ROLE_STATES = {} # {guild_id: {"active": bool, "config": dict}}
 chat_history = {} # {channel_id: [{"role": "user"/"model", "parts": [...], "user_id": ..., "display_name": ...}]}
 MSG_COUNTERS = {} # {guild_id: count}  <-- THÊM CÁI NÀY NHA
@@ -202,10 +204,10 @@ async def roleplay_command(interaction: discord.Interaction, action: app_command
                 await modal_inter.response.send_message(f"Đã bật vai **{self.name.value}** 🔥", ephemeral=True)
         await interaction.response.send_modal(CustomModal())
 
-# --- COMMAND SETTING ---
-@bot.tree.command(name="setting", description="Cài đặt bot - Chỉ Owner")
-@app_commands.describe(
-    max_tokens="Số token tối đa AI trả về",
+    # Kiểm tra quyền: Owner hoặc người có quyền quản lý server/mute/ban
+    if interaction.user.id != OWNER_ID and not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.moderate_members):
+        await interaction.response.send_message("M k có quyền chỉnh setting, cút! 🔪", ephemeral=True)
+        return    max_tokens="Số token tối đa AI trả về",
     temperature="Độ sáng tạo 0.0-1.0",
     chat_enabled="Bật/tắt chat"
 )
@@ -306,6 +308,41 @@ async def on_message(message):
 
     # ⚡ SỬA: Nếu chat tắt → dừng luôn, kể cả owner (owner vẫn có thể dùng /setting để bật)
     if not IS_CHAT_ENABLED:
+    # --- CHỐNG SPAM ---
+    now = time.time()
+    uid = message.author.id
+    if uid != OWNER_ID:
+        if uid not in SPAM_TRACKER:
+            SPAM_TRACKER[uid] = {"last_msgs": [], "blocked_until": 0, "last_content": "", "dup_count": 0}
+        
+        data = SPAM_TRACKER[uid]
+        if now < data["blocked_until"]:
+            return
+
+        # Check trùng lặp (4 tin giống nhau trong 10s)
+        if message.content == data["last_content"] and (now - data.get("last_time", 0) < 10):
+            data["dup_count"] += 1
+        else:
+            data["dup_count"] = 1
+        
+        data["last_content"] = message.content
+        data["last_time"] = now
+
+        # Lọc tin nhắn trong 7 giây qua
+        data["last_msgs"] = [t for t in data["last_msgs"] if now - t < 7]
+        data["last_msgs"].append(now)
+        
+        if len(data["last_msgs"]) > 5 or data["dup_count"] >= 4:
+            data["blocked_until"] = now + 30
+            data["last_msgs"] = []
+            data["dup_count"] = 0
+            await message.channel.send(f"<@{uid}> Spam clm, cút 30s! 🤡", delete_after=10)
+            return            user_spam["blocked_until"] = now + 30
+            user_spam["last_msgs"] = []
+            await message.channel.send(f"<@{user_id}> Spam clm, cút 30s! 🤡", delete_after=10)
+            return
+
+    # --- ĐẾM TIN NHẮN TỪNG SERVER ---
         return
 
     state = get_guild_state(message.guild.id)
