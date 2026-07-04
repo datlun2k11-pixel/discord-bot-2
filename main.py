@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from flask import Flask
 import threading
 import aiohttp
+import re
 
 # --- ENV ---
 load_dotenv()
@@ -130,27 +131,14 @@ def get_model(model_name):
         }
     )
 
-# --- HÀM TẢI ẢNH TỪ URL ---
-async def download_image_from_url(url):
-    """Tải ảnh từ URL và trả về binary data"""
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status == 200:
-                    return await resp.read()
-    except Exception as e:
-        print(f"Lỗi tải ảnh từ URL: {e}")
-    return None
+# --- HÀM KIỂM TRA AVATAR TAG ---
+def has_avatar_tag(text):
+    """Kiểm tra xem text có chứa [avatar] hay không"""
+    return '[avatar]' in text.lower()
 
-# --- HÀM LẤY CONTENT TYPE TỪ URL ---
-async def get_image_mime_type(url):
-    """Lấy MIME type từ URL"""
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.head(url) as resp:
-                return resp.headers.get('content-type', 'image/png')
-    except:
-        return 'image/png'
+def remove_avatar_tag(text):
+    """Xóa [avatar] tag khỏi text"""
+    return re.sub(r'\[avatar\]', '', text, flags=re.IGNORECASE).strip()
 
 @bot.event
 async def on_ready():
@@ -161,21 +149,6 @@ async def on_ready():
         print(f"Đã đồng bộ {len(synced)} lệnh.")
     except Exception as e:
         print(f"Lỗi đồng bộ lệnh: {e}")
-
-# --- COMMAND AVATAR ---
-@bot.tree.command(name="avatar", description="Xem avatar của bot")
-async def avatar_command(interaction: discord.Interaction):
-    """Bot xem avatar của chính nó"""
-    if bot.user.avatar:
-        avatar_url = bot.user.avatar.url
-        embed = discord.Embed(
-            title=f"Avatar của {bot.user.name}",
-            color=0x00f0ff
-        )
-        embed.set_image(url=avatar_url)
-        await interaction.response.send_message(embed=embed)
-    else:
-        await interaction.response.send_message("Hồn nhiên t khum có avatar 💀", ephemeral=True)
 
 # --- COMMAND ROLEPLAY ---
 @bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai")
@@ -261,6 +234,7 @@ async def setting_command(interaction: discord.Interaction, max_tokens: int = No
 """, ephemeral=True)
     else:
         await interaction.response.send_message("Đã update: " + ", ".join(msg), ephemeral=True)
+
 # --- COMMAND USAGE ---
 @bot.tree.command(name="usage", description="Xem thống kê tin nhắn các server - Chỉ Owner")
 async def usage_command(interaction: discord.Interaction):
@@ -335,23 +309,13 @@ async def on_message(message):
     else:
         system_instruction = DEFAULT_SYSTEM_PROMPT
 
-    # Xử lý ảnh từ attachments
+    # Xử lý ảnh từ attachments ONLY (không xử lý embed)
     image_parts = []
     for att in message.attachments:
         if att.content_type and att.content_type.startswith('image/'):
             try:
                 img_bytes = await att.read()
                 image_parts.append({"mime_type": att.content_type, "data": img_bytes})
-            except: pass
-
-    # Xử lý ảnh từ embeds (nếu có URL ảnh từ embed)
-    for embed in message.embeds:
-        if embed.image and embed.image.url:
-            try:
-                img_bytes = await download_image_from_url(embed.image.url)
-                mime_type = await get_image_mime_type(embed.image.url)
-                if img_bytes:
-                    image_parts.append({"mime_type": mime_type, "data": img_bytes})
             except: pass
 
     # Gọi Gemini + typing
@@ -372,11 +336,10 @@ async def on_message(message):
             user_display_name = message.author.display_name or message.author.name
             user_mention = f"<@{user_id}>"
             
-            # Lưu tin nhắn user vào chat_history (kèm theo user_id và display_name)
-            user_message_parts = [clean_content] + image_parts
+            # Lưu tin nhắn user vào chat_history (chỉ text, không lưu ảnh)
             chat_history[channel_id].append({
                 "role": "user",
-                "parts": user_message_parts,
+                "parts": [clean_content],
                 "user_id": user_id,
                 "display_name": user_display_name,
                 "user_mention": user_mention
@@ -388,24 +351,40 @@ async def on_message(message):
             
             # Xây dựng parts để gửi lên Gemini:
             # - System instruction đầu tiên
-            # - Rồi toàn bộ lịch sử chat kèm theo tên người dùng
+            # - Rồi toàn bộ lịch sử chat (chỉ text)
+            # - Sau cùng là ảnh hiện tại (không lưu vào history)
             parts = [system_instruction]
             
-            # Thêm toàn bộ lịch sử chat vào parts
+            # Thêm toàn bộ lịch sử chat vào parts (text only)
             for hist_item in chat_history[channel_id]:
                 if hist_item["role"] == "user":
                     display_name = hist_item.get("display_name", "User")
                     parts.append(f"{display_name} (ID: {hist_item.get('user_id')}): {hist_item['parts'][0]}")
-                    # Nếu có ảnh thì thêm vào
-                    if len(hist_item["parts"]) > 1:
-                        parts.extend(hist_item["parts"][1:])
                 elif hist_item["role"] == "model":
                     parts.append(f"Model: {hist_item['parts'][0]}")
             
+            # Thêm ảnh hiện tại vào parts (KHÔNG lưu vào history)
+            if image_parts:
+                parts.extend(image_parts)
+            
             response = await model.generate_content_async(parts)
             response_text = response.text[:2000]
+            
+            # Kiểm tra xem có [avatar] tag không
+            if has_avatar_tag(response_text):
+                response_text = remove_avatar_tag(response_text)
+                # Gửi avatar của bot
+                if bot.user.avatar:
+                    avatar_url = bot.user.avatar.url
+                    embed = discord.Embed(color=0x00f0ff)
+                    embed.set_image(url=avatar_url)
+                    await message.reply(response_text if response_text else "🥀", embed=embed, mention_author=False)
+                else:
+                    await message.reply(response_text if response_text else "Hồn nhiên t khum có avatar 💀", mention_author=False)
+            else:
+                await message.reply(response_text, mention_author=False)
         
-        # Lưu câu trả lời của bot vào chat_history
+        # Lưu câu trả lời của bot vào chat_history (KHÔNG lưu ảnh)
         chat_history[channel_id].append({
             "role": "model",
             "parts": [response_text]
@@ -415,7 +394,6 @@ async def on_message(message):
         if len(chat_history[channel_id]) > 15:
             chat_history[channel_id] = chat_history[channel_id][-15:]
         
-        await message.reply(response_text, mention_author=False)
     except Exception as e:
         print(f"Lỗi API: {e}")
         if message.author.id == OWNER_ID:
