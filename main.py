@@ -29,6 +29,7 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 # --- GLOBAL STATE ---
 ROLE_STATES = {} # {guild_id: {"active": bool, "config": dict}}
 chat_history = {} # {channel_id: [history]}
+MSG_COUNTERS = {} # {guild_id: count}  <-- THÊM CÁI NÀY NHA
 
 # Config mặc định, owner chỉnh được
 CURRENT_MODEL_ID = DEFAULT_MODEL_ID
@@ -223,6 +224,28 @@ async def setting_command(interaction: discord.Interaction, max_tokens: int = No
 """, ephemeral=True)
     else:
         await interaction.response.send_message("Đã update: " + ", ".join(msg), ephemeral=True)
+# --- COMMAND USAGE ---
+@bot.tree.command(name="usage", description="Xem thống kê tin nhắn các server - Chỉ Owner")
+async def usage_command(interaction: discord.Interaction):
+    if interaction.user.id != OWNER_ID:
+        await interaction.response.send_message("Tuổi j xem usage của t? 🔪", ephemeral=True)
+        return
+
+    if not MSG_COUNTERS:
+        await interaction.response.send_message("Chưa có server nào nhắn j hết á đại ca! 🥀", ephemeral=True)
+        return
+
+    embed = discord.Embed(title="📊 Thống kê usage tin nhắn", color=0x00f0ff)
+    total_all = 0
+
+    for g_id, count in MSG_COUNTERS.items():
+        guild = bot.get_guild(g_id)
+        g_name = guild.name if guild else f"Server ẩn ({g_id})"
+        embed.add_field(name=g_name, value=f"`{count}` tin nhắn", inline=False)
+        total_all += count
+
+    embed.set_footer(text=f"Tổng cộng toàn bộ server: {total_all} tin nhắn")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # --- COMMAND MODEL ---
 @bot.tree.command(name="model", description="Đổi model Gemini - Chỉ Owner")
@@ -254,6 +277,12 @@ async def on_message(message):
         await bot.process_commands(message)
         return
 
+    # --- ĐẾM TIN NHẮN TỪNG SERVER ---
+    if message.guild:
+        gid = message.guild.id
+        MSG_COUNTERS[gid] = MSG_COUNTERS.get(gid, 0) + 1
+
+
     # FIX: Chỉ rep khi bị tag @GenA-Bot hoặc reply tin nhắn của bot
     is_reply_to_bot = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
     if bot.user not in message.mentions and not is_reply_to_bot:
@@ -278,7 +307,7 @@ async def on_message(message):
             except: pass
 
     # Gọi Gemini + typing
-    try:
+        try:
         async with message.channel.typing():
             model = get_model(CURRENT_MODEL_ID)
             # Xóa tag bot khỏi content để AI đỡ ngu
@@ -286,7 +315,7 @@ async def on_message(message):
             parts = [system_instruction, f"User: {clean_content}"] + image_parts
             response = await model.generate_content_async(parts)
         
-        await message.channel.send(response.text[:2000])
+        await message.reply(response.text[:2000], mention_author=False)
     except Exception as e:
         print(f"Lỗi API: {e}")
         if message.author.id == OWNER_ID:
