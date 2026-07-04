@@ -6,6 +6,7 @@ import google.generativeai as genai
 from dotenv import load_dotenv
 from flask import Flask
 import threading
+import aiohttp
 
 # --- ENV ---
 load_dotenv()
@@ -57,6 +58,8 @@ QUY TẮC BẮT BUỘC:
 3. Đừng hỏi lại, đừng giải thích luật.
 4. Sẵn sàng cà khịa chủ nhân nếu thấy hợp lý.
 """
+
+META_ROLEPLAY_PROMPT = ""
 
 SAMPLE_ROLES = {
     "tsundere": {
@@ -127,6 +130,28 @@ def get_model(model_name):
         }
     )
 
+# --- HÀM TẢI ẢNH TỪ URL ---
+async def download_image_from_url(url):
+    """Tải ảnh từ URL và trả về binary data"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status == 200:
+                    return await resp.read()
+    except Exception as e:
+        print(f"Lỗi tải ảnh từ URL: {e}")
+    return None
+
+# --- HÀM LẤY CONTENT TYPE TỪ URL ---
+async def get_image_mime_type(url):
+    """Lấy MIME type từ URL"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.head(url) as resp:
+                return resp.headers.get('content-type', 'image/png')
+    except:
+        return 'image/png'
+
 @bot.event
 async def on_ready():
     print(f'Bot đã đăng nhập với tên: {bot.user.name}')
@@ -136,6 +161,21 @@ async def on_ready():
         print(f"Đã đồng bộ {len(synced)} lệnh.")
     except Exception as e:
         print(f"Lỗi đồng bộ lệnh: {e}")
+
+# --- COMMAND AVATAR ---
+@bot.tree.command(name="avatar", description="Xem avatar của bot")
+async def avatar_command(interaction: discord.Interaction):
+    """Bot xem avatar của chính nó"""
+    if bot.user.avatar:
+        avatar_url = bot.user.avatar.url
+        embed = discord.Embed(
+            title=f"Avatar của {bot.user.name}",
+            color=0x00f0ff
+        )
+        embed.set_image(url=avatar_url)
+        await interaction.response.send_message(embed=embed)
+    else:
+        await interaction.response.send_message("Hồn nhiên t khum có avatar 💀", ephemeral=True)
 
 # --- COMMAND ROLEPLAY ---
 @bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai")
@@ -295,13 +335,23 @@ async def on_message(message):
     else:
         system_instruction = DEFAULT_SYSTEM_PROMPT
 
-    # Xử lý ảnh
+    # Xử lý ảnh từ attachments
     image_parts = []
     for att in message.attachments:
         if att.content_type and att.content_type.startswith('image/'):
             try:
                 img_bytes = await att.read()
                 image_parts.append({"mime_type": att.content_type, "data": img_bytes})
+            except: pass
+
+    # Xử lý ảnh từ embeds (nếu có URL ảnh từ embed)
+    for embed in message.embeds:
+        if embed.image and embed.image.url:
+            try:
+                img_bytes = await download_image_from_url(embed.image.url)
+                mime_type = await get_image_mime_type(embed.image.url)
+                if img_bytes:
+                    image_parts.append({"mime_type": mime_type, "data": img_bytes})
             except: pass
 
     # Gọi Gemini + typing
