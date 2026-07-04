@@ -207,7 +207,12 @@ async def roleplay_command(interaction: discord.Interaction, action: app_command
     # Kiểm tra quyền: Owner hoặc người có quyền quản lý server/mute/ban
     if interaction.user.id != OWNER_ID and not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.moderate_members):
         await interaction.response.send_message("M k có quyền chỉnh setting, cút! 🔪", ephemeral=True)
-        return    max_tokens="Số token tối đa AI trả về",
+        return
+
+# --- COMMAND SETTING ---
+@bot.tree.command(name="setting", description="Chỉnh config bot - Chỉ Owner")
+@app_commands.describe(
+    max_tokens="Số token tối đa AI trả về",
     temperature="Độ sáng tạo 0.0-1.0",
     chat_enabled="Bật/tắt chat"
 )
@@ -308,6 +313,8 @@ async def on_message(message):
 
     # ⚡ SỬA: Nếu chat tắt → dừng luôn, kể cả owner (owner vẫn có thể dùng /setting để bật)
     if not IS_CHAT_ENABLED:
+        return
+
     # --- CHỐNG SPAM ---
     now = time.time()
     uid = message.author.id
@@ -337,13 +344,7 @@ async def on_message(message):
             data["last_msgs"] = []
             data["dup_count"] = 0
             await message.channel.send(f"<@{uid}> Spam clm, cút 30s! 🤡", delete_after=10)
-            return            user_spam["blocked_until"] = now + 30
-            user_spam["last_msgs"] = []
-            await message.channel.send(f"<@{user_id}> Spam clm, cút 30s! 🤡", delete_after=10)
             return
-
-    # --- ĐẾM TIN NHẮN TỪNG SERVER ---
-        return
 
     state = get_guild_state(message.guild.id)
     if state["active"]:
