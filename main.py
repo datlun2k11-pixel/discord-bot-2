@@ -28,7 +28,7 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 
 # --- GLOBAL STATE ---
 ROLE_STATES = {} # {guild_id: {"active": bool, "config": dict}}
-chat_history = {} # {channel_id: [history]}
+chat_history = {} # {channel_id: [{"role": "user"/"model", "parts": [...]}]}
 MSG_COUNTERS = {} # {guild_id: count}  <-- THÊM CÁI NÀY NHA
 
 # Config mặc định, owner chỉnh được
@@ -266,8 +266,9 @@ async def model_command(interaction: discord.Interaction, model_name: str):
 # --- COMMAND RESET ---
 @bot.tree.command(name="reset", description="Xóa lịch sử chat kênh này")
 async def reset_command(interaction: discord.Interaction):
-    if interaction.channel_id in chat_history:
-        del chat_history[interaction.channel_id]
+    channel_id = interaction.channel_id
+    if channel_id in chat_history:
+        del chat_history[channel_id]
     await interaction.response.send_message("Đã reset memory kênh này 🧹", ephemeral=True)
 
 # --- XỬ LÝ CHAT ---
@@ -281,7 +282,6 @@ async def on_message(message):
     if message.guild:
         gid = message.guild.id
         MSG_COUNTERS[gid] = MSG_COUNTERS.get(gid, 0) + 1
-
 
     # FIX: Chỉ rep khi bị tag @GenA-Bot hoặc reply tin nhắn của bot
     is_reply_to_bot = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
@@ -310,12 +310,55 @@ async def on_message(message):
     try:
         async with message.channel.typing():
             model = get_model(CURRENT_MODEL_ID)
+            
             # Xóa tag bot khỏi content để AI đỡ ngu
             clean_content = message.content.replace(f'<@{BOT_USER_ID}>', '').strip()
-            parts = [system_instruction, f"User: {clean_content}"] + image_parts
+            
+            # Khởi tạo chat_history cho kênh nếu chưa có
+            channel_id = message.channel.id
+            if channel_id not in chat_history:
+                chat_history[channel_id] = []
+            
+            # Lưu tin nhắn user vào chat_history
+            user_message_parts = [clean_content] + image_parts
+            chat_history[channel_id].append({
+                "role": "user",
+                "parts": user_message_parts
+            })
+            
+            # Giữ tối đa 15 tin nhắn (user + model kết hợp)
+            if len(chat_history[channel_id]) > 15:
+                chat_history[channel_id] = chat_history[channel_id][-15:]
+            
+            # Xây dựng parts để gửi lên Gemini:
+            # - System instruction đầu tiên
+            # - Rồi toàn bộ lịch sử chat
+            parts = [system_instruction]
+            
+            # Thêm toàn bộ lịch sử chat vào parts
+            for hist_item in chat_history[channel_id]:
+                if hist_item["role"] == "user":
+                    parts.append(f"User: {hist_item['parts'][0]}")
+                    # Nếu có ảnh thì thêm vào
+                    if len(hist_item["parts"]) > 1:
+                        parts.extend(hist_item["parts"][1:])
+                elif hist_item["role"] == "model":
+                    parts.append(f"Model: {hist_item['parts'][0]}")
+            
             response = await model.generate_content_async(parts)
+            response_text = response.text[:2000]
         
-        await message.reply(response.text[:2000], mention_author=False)
+        # Lưu câu trả lời của bot vào chat_history
+        chat_history[channel_id].append({
+            "role": "model",
+            "parts": [response_text]
+        })
+        
+        # Giữ tối đa 15 tin nhắn sau khi lưu response
+        if len(chat_history[channel_id]) > 15:
+            chat_history[channel_id] = chat_history[channel_id][-15:]
+        
+        await message.reply(response_text, mention_author=False)
     except Exception as e:
         print(f"Lỗi API: {e}")
         if message.author.id == OWNER_ID:
