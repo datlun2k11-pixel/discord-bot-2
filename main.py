@@ -197,7 +197,7 @@ async def roleplay_command(interaction: discord.Interaction, action: app_command
 async def setting_command(interaction: discord.Interaction, max_tokens: int = None, temperature: float = None, chat_enabled: bool = None):
     global CURRENT_MAX_TOKENS, CURRENT_TEMPERATURE, IS_CHAT_ENABLED
 
-    if interaction.user.id!= OWNER_ID:
+    if interaction.user.id != OWNER_ID:
         await interaction.response.send_message("M k phải owner, tuổi? 🔪", ephemeral=True)
         return
 
@@ -252,7 +252,7 @@ async def usage_command(interaction: discord.Interaction):
 @app_commands.describe(model_name="Tên model: gemini-3.1-flash-lite, gemini-3.5-pro,...")
 async def model_command(interaction: discord.Interaction, model_name: str):
     global CURRENT_MODEL_ID
-    if interaction.user.id!= OWNER_ID:
+    if interaction.user.id != OWNER_ID:
         await interaction.response.send_message("Chỉ owner mới đổi đc model nha bro 💀", ephemeral=True)
         return
 
@@ -288,7 +288,7 @@ async def on_message(message):
     if bot.user not in message.mentions and not is_reply_to_bot:
         return
 
-    if not IS_CHAT_ENABLED and message.author.id!= OWNER_ID:
+    if not IS_CHAT_ENABLED and message.author.id != OWNER_ID:
         return
 
     state = get_guild_state(message.guild.id)
@@ -307,7 +307,7 @@ async def on_message(message):
             except: pass
 
     # Gọi Gemini + typing
-            try:
+    try:
         async with message.channel.typing():
             model = get_model(CURRENT_MODEL_ID)
             # Xóa tag bot khỏi content để AI đỡ ngu
