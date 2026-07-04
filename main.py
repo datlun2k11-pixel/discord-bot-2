@@ -28,7 +28,7 @@ bot = commands.Bot(command_prefix='/', intents=intents)
 
 # --- GLOBAL STATE ---
 ROLE_STATES = {} # {guild_id: {"active": bool, "config": dict}}
-chat_history = {} # {channel_id: [{"role": "user"/"model", "parts": [...]}]}
+chat_history = {} # {channel_id: [{"role": "user"/"model", "parts": [...], "user_id": ..., "display_name": ...}]}
 MSG_COUNTERS = {} # {guild_id: count}  <-- THÊM CÁI NÀY NHA
 
 # Config mặc định, owner chỉnh được
@@ -319,11 +319,19 @@ async def on_message(message):
             if channel_id not in chat_history:
                 chat_history[channel_id] = []
             
-            # Lưu tin nhắn user vào chat_history
+            # Lấy thông tin user
+            user_id = message.author.id
+            user_display_name = message.author.display_name or message.author.name
+            user_mention = f"<@{user_id}>"
+            
+            # Lưu tin nhắn user vào chat_history (kèm theo user_id và display_name)
             user_message_parts = [clean_content] + image_parts
             chat_history[channel_id].append({
                 "role": "user",
-                "parts": user_message_parts
+                "parts": user_message_parts,
+                "user_id": user_id,
+                "display_name": user_display_name,
+                "user_mention": user_mention
             })
             
             # Giữ tối đa 15 tin nhắn (user + model kết hợp)
@@ -332,13 +340,14 @@ async def on_message(message):
             
             # Xây dựng parts để gửi lên Gemini:
             # - System instruction đầu tiên
-            # - Rồi toàn bộ lịch sử chat
+            # - Rồi toàn bộ lịch sử chat kèm theo tên người dùng
             parts = [system_instruction]
             
             # Thêm toàn bộ lịch sử chat vào parts
             for hist_item in chat_history[channel_id]:
                 if hist_item["role"] == "user":
-                    parts.append(f"User: {hist_item['parts'][0]}")
+                    display_name = hist_item.get("display_name", "User")
+                    parts.append(f"{display_name} (ID: {hist_item.get('user_id')}): {hist_item['parts'][0]}")
                     # Nếu có ảnh thì thêm vào
                     if len(hist_item["parts"]) > 1:
                         parts.extend(hist_item["parts"][1:])
