@@ -307,7 +307,7 @@ async def on_message(message):
             except: pass
 
     # Gọi Gemini + typing
-        try:
+            try:
         async with message.channel.typing():
             model = get_model(CURRENT_MODEL_ID)
             # Xóa tag bot khỏi content để AI đỡ ngu
