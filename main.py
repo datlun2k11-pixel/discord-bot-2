@@ -8,6 +8,7 @@ from flask import Flask
 import threading
 import aiohttp
 import re
+import time
 
 # --- ENV ---
 load_dotenv()
@@ -29,23 +30,32 @@ intents.messages = True
 bot = commands.Bot(command_prefix='/', intents=intents)
 
 # --- GLOBAL STATE ---
-import time
-SPAM_TRACKER = {} # {user_id: {"last_msgs": [], "blocked_until": 0}}
-ROLE_STATES = {} # {guild_id: {"active": bool, "config": dict}}
-chat_history = {} # {channel_id: [{"role": "user"/"model", "parts": [...], "user_id": ..., "display_name": ...}]}
-MSG_COUNTERS = {} # {guild_id: count}  <-- THÊM CÁI NÀY NHA
+SPAM_TRACKER = {} 
+CONTEXT_STATES = {} # Lưu trạng thái roleplay theo context (DM hoặc Channel)
+chat_history = {} 
+MSG_COUNTERS = {} 
 
-# Config mặc định, owner chỉnh được
+# Config mặc định
 CURRENT_MODEL_ID = DEFAULT_MODEL_ID
 CURRENT_MAX_TOKENS = 2048
 CURRENT_TEMPERATURE = 0.9
 IS_CHAT_ENABLED = True
 
-def get_guild_state(guild_id):
-    return ROLE_STATES.get(guild_id, {"active": False, "config": None})
+# --- HÀM HỖ TRỢ CONTEXT ---
+def get_context_key(message_or_interaction):
+    """Trả về ID duy nhất: User ID nếu là DM, Channel ID nếu là Server"""
+    # Hỗ trợ cả object Message và Interaction
+    if hasattr(message_or_interaction, 'guild'):
+        if message_or_interaction.guild is None:
+            return f"dm_{message_or_interaction.author.id}" if hasattr(message_or_interaction, 'author') else f"dm_{message_or_interaction.user.id}"
+        return str(message_or_interaction.channel.id)
+    return str(message_or_interaction.channel_id)
 
-def set_guild_state(guild_id, active, config):
-    ROLE_STATES[guild_id] = {"active": active, "config": config}
+def get_context_state(ctx_key):
+    return CONTEXT_STATES.get(ctx_key, {"active": False, "config": None})
+
+def set_context_state(ctx_key, active, config):
+    CONTEXT_STATES[ctx_key] = {"active": active, "config": config}
 
 # --- PROMPTS ---
 DEFAULT_SYSTEM_PROMPT = """
@@ -140,11 +150,9 @@ def get_model(model_name):
 
 # --- HÀM KIỂM TRA AVATAR TAG ---
 def has_avatar_tag(text):
-    """Kiểm tra xem text có chứa [avatar] hay không"""
     return '[avatar]' in text.lower()
 
 def remove_avatar_tag(text):
-    """Xóa [avatar] tag khỏi text"""
     return re.sub(r'\[avatar\]', '', text, flags=re.IGNORECASE).strip()
 
 @bot.event
@@ -160,15 +168,11 @@ async def on_ready():
 # --- EVENT KHI BOT JOIN SERVER ---
 @bot.event
 async def on_guild_join(guild: discord.Guild):
-    """Gửi DM cho owner khi bot join server"""
     try:
         owner = await bot.fetch_user(OWNER_ID)
         if owner:
-            # Tạo link vào server
-            # Sử dụng widget URL hoặc link mời mặc định
             invite_url = None
             try:
-                # Lấy channel đầu tiên để tạo mời
                 for channel in guild.channels:
                     if isinstance(channel, discord.TextChannel) and channel.permissions_for(guild.me).create_instant_invite:
                         invite = await channel.create_invite(max_age=0, max_uses=0)
@@ -177,9 +181,8 @@ async def on_guild_join(guild: discord.Guild):
             except:
                 pass
             
-            # Nếu không tạo được mời, dùng URL mặc định
             if not invite_url:
-                invite_url = f"https://discord.gg/invalid (Không thể tạo link, hãy tạo thủ công)"
+                invite_url = f"https://discord.gg/invalid"
             
             embed = discord.Embed(
                 title="✅ Bot vừa join 1 server mới!",
@@ -187,7 +190,6 @@ async def on_guild_join(guild: discord.Guild):
                 description=f"**Server:** {guild.name}\n**ID:** {guild.id}\n**Số thành viên:** {guild.member_count}\n\n**Link:** [Vào server]({invite_url})"
             )
             embed.set_thumbnail(url=guild.icon.url if guild.icon else "")
-            
             await owner.send(embed=embed)
     except Exception as e:
         print(f"Lỗi gửi DM khi join server: {e}")
@@ -208,7 +210,6 @@ async def getlink_command(interaction: discord.Interaction, server_id: str):
             await interaction.response.send_message(f"Không tìm thấy server với ID: `{guild_id}` 💀", ephemeral=True)
             return
         
-        # Tạo link mời
         invite_url = None
         try:
             for channel in guild.channels:
@@ -223,7 +224,6 @@ async def getlink_command(interaction: discord.Interaction, server_id: str):
             await interaction.response.send_message(f"Không thể tạo link cho server `{guild.name}` 💀", ephemeral=True)
             return
         
-        # Gửi link qua DM riêng tư
         embed = discord.Embed(
             title=f"🔗 Link vào server: {guild.name}",
             color=0x00f0ff,
@@ -247,37 +247,26 @@ async def server_list_command(interaction: discord.Interaction):
         return
     
     guilds = bot.guilds
-    
     if not guilds:
         await interaction.response.send_message("Bot chưa join server nào hết á đại ca! 🥀", ephemeral=True)
         return
     
-    # Tạo embed chính
-    embed = discord.Embed(
-        title=f"📊 Danh sách các server ({len(guilds)} server)",
-        color=0x00f0ff
-    )
-    
-    # Sắp xếp theo số lượng thành viên
+    embed = discord.Embed(title=f"📊 Danh sách các server ({len(guilds)} server)", color=0x00f0ff)
     sorted_guilds = sorted(guilds, key=lambda g: g.member_count, reverse=True)
-    
     total_members = sum(g.member_count for g in guilds)
-    
     embed.set_footer(text=f"Tổng cộng: {total_members} thành viên")
     
-    # Thêm info từng server (tối đa 25 field)
     for guild in sorted_guilds[:25]:
         field_value = f"**ID:** {guild.id}\n**Thành viên:** {guild.member_count}\n**Owner:** <@{guild.owner_id}>"
         embed.add_field(name=guild.name, value=field_value, inline=False)
     
-    # Nếu còn nhiều server, gửi thông báo
     if len(sorted_guilds) > 25:
         embed.description = f"*Đang hiển thị 25 server đầu tiên, tổng cộng {len(sorted_guilds)} server*"
     
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
-# --- COMMAND ROLEPLAY ---
-@bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai")
+# --- COMMAND ROLEPLAY (ĐÃ SỬA ĐỂ HỖ TRỢ DM) ---
+@bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai (Hỗ trợ cả DM)")
 @app_commands.choices(action=[
     app_commands.Choice(name="🎭 Chọn vai có sẵn", value="select"),
     app_commands.Choice(name="✏️ Tạo vai mới", value="custom"),
@@ -285,14 +274,22 @@ async def server_list_command(interaction: discord.Interaction):
     app_commands.Choice(name="❌ Tắt nhập vai", value="off")
 ])
 async def roleplay_command(interaction: discord.Interaction, action: app_commands.Choice[str]):
-    gid = interaction.guild_id
+    # Xác định context key
+    ctx_key = get_context_key(interaction)
+
+    # Kiểm tra quyền
+    if interaction.guild_id:
+        if interaction.user.id != OWNER_ID and not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.moderate_members):
+            await interaction.response.send_message("M k có quyền chỉnh setting, cút! 🔪", ephemeral=True)
+            return
+    # Trong DM thì ai cũng dùng được
 
     if action.value == "off":
-        set_guild_state(gid, False, None)
+        set_context_state(ctx_key, False, None)
         await interaction.response.send_message("Đã tắt nhập vai. Về lại GenZ gốc 😎", ephemeral=True)
 
     elif action.value == "status":
-        state = get_guild_state(gid)
+        state = get_context_state(ctx_key)
         if state["active"]:
             embed = discord.Embed(title="🎭 Đang nhập vai", description=f"**Vai:** {state['config']['name']}", color=0x00ff00)
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -305,7 +302,7 @@ async def roleplay_command(interaction: discord.Interaction, action: app_command
 
         async def select_callback(select_interaction: discord.Interaction):
             chosen = SAMPLE_ROLES[select.values[0]]
-            set_guild_state(gid, True, chosen)
+            set_context_state(ctx_key, True, chosen)
             await select_interaction.response.send_message(f"Đã bật vai **{chosen['name']}** 🔥", ephemeral=True)
 
         select.callback = select_callback
@@ -319,14 +316,9 @@ async def roleplay_command(interaction: discord.Interaction, action: app_command
             prompt = discord.ui.TextInput(label='Prompt', style=discord.TextStyle.paragraph, max_length=2000)
             async def on_submit(self, modal_inter: discord.Interaction):
                 cfg = {"name": self.name.value, "prompt": self.prompt.value}
-                set_guild_state(gid, True, cfg)
+                set_context_state(ctx_key, True, cfg)
                 await modal_inter.response.send_message(f"Đã bật vai **{self.name.value}** 🔥", ephemeral=True)
         await interaction.response.send_modal(CustomModal())
-
-    # Kiểm tra quyền: Owner hoặc người có quyền quản lý server/mute/ban
-    if interaction.user.id != OWNER_ID and not (interaction.user.guild_permissions.manage_guild or interaction.user.guild_permissions.moderate_members):
-        await interaction.response.send_message("M k có quyền chỉnh setting, cút! 🔪", ephemeral=True)
-        return
 
 # --- COMMAND SETTING ---
 @bot.tree.command(name="setting", description="Chỉnh config bot - Chỉ Owner")
@@ -354,7 +346,8 @@ async def setting_command(interaction: discord.Interaction, max_tokens: int = No
         msg.append(f"Chat: `{'Bật' if chat_enabled else 'Tắt'}`")
 
     if not msg:
-        state = get_guild_state(interaction.guild_id)
+        ctx_key = get_context_key(interaction)
+        state = get_context_state(ctx_key)
         await interaction.response.send_message(f"""
 **Config hiện tại:**
 - Model: `{CURRENT_MODEL_ID}`
@@ -399,19 +392,19 @@ async def model_command(interaction: discord.Interaction, model_name: str):
         return
 
     try:
-        get_model(model_name) # test xem model tồn tại không
+        get_model(model_name)
         CURRENT_MODEL_ID = model_name
         await interaction.response.send_message(f"Đã đổi sang model `{model_name}` ✅", ephemeral=True)
     except Exception as e:
         await interaction.response.send_message(f"Model lỗi r: `{e}`", ephemeral=True)
 
 # --- COMMAND RESET ---
-@bot.tree.command(name="reset", description="Xóa lịch sử chat kênh này")
+@bot.tree.command(name="reset", description="Xóa lịch sử chat (Hỗ trợ cả DM)")
 async def reset_command(interaction: discord.Interaction):
-    channel_id = interaction.channel_id
-    if channel_id in chat_history:
-        del chat_history[channel_id]
-    await interaction.response.send_message("Đã reset memory kênh này 🧹", ephemeral=True)
+    ctx_key = get_context_key(interaction)
+    if ctx_key in chat_history:
+        del chat_history[ctx_key]
+    await interaction.response.send_message("Đã reset memory cho khu vực này 🧹", ephemeral=True)
 
 # --- XỬ LÝ CHAT ---
 @bot.event
@@ -425,12 +418,14 @@ async def on_message(message):
         gid = message.guild.id
         MSG_COUNTERS[gid] = MSG_COUNTERS.get(gid, 0) + 1
 
-    # FIX: Chỉ rep khi bị tag @GenA-Bot hoặc reply tin nhắn của bot
+    # FIX: Rep khi bị tag, reply bot, HOẶC là tin nhắn DM (nhắn riêng)
+    is_dm = message.guild is None
     is_reply_to_bot = message.reference and message.reference.resolved and message.reference.resolved.author == bot.user
-    if bot.user not in message.mentions and not is_reply_to_bot:
+    
+    if not is_dm and bot.user not in message.mentions and not is_reply_to_bot:
         return
 
-    # ⚡ SỬA: Nếu chat tắt → dừng luôn, kể cả owner (owner vẫn có thể dùng /setting để bật)
+    # ⚡ SỬA: Nếu chat tắt → dừng luôn
     if not IS_CHAT_ENABLED:
         return
 
@@ -445,7 +440,6 @@ async def on_message(message):
         if now < data["blocked_until"]:
             return
 
-        # Check trùng lặp (4 tin giống nhau trong 10s)
         if message.content == data["last_content"] and (now - data.get("last_time", 0) < 10):
             data["dup_count"] += 1
         else:
@@ -454,7 +448,6 @@ async def on_message(message):
         data["last_content"] = message.content
         data["last_time"] = now
 
-        # Lọc tin nhắn trong 7 giây qua
         data["last_msgs"] = [t for t in data["last_msgs"] if now - t < 7]
         data["last_msgs"].append(now)
         
@@ -465,13 +458,16 @@ async def on_message(message):
             await message.channel.send(f"<@{uid}> Spam clm, cút 30s! 🤡", delete_after=10)
             return
 
-    state = get_guild_state(message.guild.id)
+    # --- XỬ LÝ PROMPT THEO CONTEXT ---
+    ctx_key = get_context_key(message)
+    state = get_context_state(ctx_key)
+    
     if state["active"]:
         system_instruction = f"{state['config']['prompt']}\n\n{META_ROLEPLAY_PROMPT}"
     else:
-        system_instruction = DEFAULT_SYSTEM_PROMPT
+        system_instruction = DEFAULT_SYSTEM_PROMPT 
 
-    # Xử lý ảnh từ attachments ONLY (không xử lý embed)
+    # Xử lý ảnh
     image_parts = []
     for att in message.attachments:
         if att.content_type and att.content_type.startswith('image/'):
@@ -485,21 +481,18 @@ async def on_message(message):
         async with message.channel.typing():
             model = get_model(CURRENT_MODEL_ID)
             
-            # Xóa tag bot khỏi content để AI đỡ ngu
             clean_content = message.content.replace(f'<@{BOT_USER_ID}>', '').strip()
             
-            # Khởi tạo chat_history cho kênh nếu chưa có
-            channel_id = message.channel.id
-            if channel_id not in chat_history:
-                chat_history[channel_id] = []
+            # Khởi tạo history
+            if ctx_key not in chat_history:
+                chat_history[ctx_key] = []
             
-            # Lấy thông tin user
             user_id = message.author.id
             user_display_name = message.author.display_name or message.author.name
             user_mention = f"<@{user_id}>"
             
-            # Lưu tin nhắn user vào chat_history (chỉ text, không lưu ảnh)
-            chat_history[channel_id].append({
+            # Lưu tin nhắn user
+            chat_history[ctx_key].append({
                 "role": "user",
                 "parts": [clean_content],
                 "user_id": user_id,
@@ -507,35 +500,28 @@ async def on_message(message):
                 "user_mention": user_mention
             })
             
-            # Giữ tối đa 15 tin nhắn (user + model kết hợp)
-            if len(chat_history[channel_id]) > 15:
-                chat_history[channel_id] = chat_history[channel_id][-15:]
+            if len(chat_history[ctx_key]) > 15:
+                chat_history[ctx_key] = chat_history[ctx_key][-15:]
             
-            # Xây dựng parts để gửi lên Gemini:
-            # - System instruction đầu tiên
-            # - Rồi toàn bộ lịch sử chat (chỉ text)
-            # - Sau cùng là ảnh hiện tại (không lưu vào history)
+            # Xây dựng parts
             parts = [system_instruction]
             
-            # Thêm toàn bộ lịch sử chat vào parts (text only)
-            for hist_item in chat_history[channel_id]:
+            # Sửa lỗi: Dùng ctx_key thay vì channel_id
+            for hist_item in chat_history[ctx_key]:
                 if hist_item["role"] == "user":
                     display_name = hist_item.get("display_name", "User")
                     parts.append(f"{display_name} (ID: {hist_item.get('user_id')}): {hist_item['parts'][0]}")
                 elif hist_item["role"] == "model":
                     parts.append(f"Model: {hist_item['parts'][0]}")
             
-            # Thêm ảnh hiện tại vào parts (KHÔNG lưu vào history)
             if image_parts:
                 parts.extend(image_parts)
             
             response = await model.generate_content_async(parts)
             response_text = response.text[:2000]
             
-            # Kiểm tra xem có [avatar] tag không
             if has_avatar_tag(response_text):
                 response_text = remove_avatar_tag(response_text)
-                # Gửi avatar của bot
                 if bot.user.avatar:
                     avatar_url = bot.user.avatar.url
                     embed = discord.Embed(color=0x00f0ff)
@@ -546,15 +532,14 @@ async def on_message(message):
             else:
                 await message.reply(response_text, mention_author=False)
         
-        # Lưu câu trả lời của bot vào chat_history (KHÔNG lưu ảnh)
-        chat_history[channel_id].append({
+        # Lưu câu trả lời của bot
+        chat_history[ctx_key].append({
             "role": "model",
             "parts": [response_text]
         })
         
-        # Giữ tối đa 15 tin nhắn sau khi lưu response
-        if len(chat_history[channel_id]) > 15:
-            chat_history[channel_id] = chat_history[channel_id][-15:]
+        if len(chat_history[ctx_key]) > 15:
+            chat_history[ctx_key] = chat_history[ctx_key][-15:]
         
     except Exception as e:
         print(f"Lỗi API: {e}")
