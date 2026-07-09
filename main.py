@@ -148,6 +148,35 @@ def get_model(model_name):
         }
     )
 
+def strip_bot_mention(text):
+    if not text:
+        return ""
+
+    bot_id = bot.user.id if bot.user else BOT_USER_ID
+    pattern = rf"<@!?{bot_id}>"
+    return re.sub(pattern, "", text).strip()
+
+def extract_response_text(response):
+    text = getattr(response, "text", None)
+    if text:
+        return text.strip()
+
+    candidates = getattr(response, "candidates", None) or []
+    for candidate in candidates:
+        content = getattr(candidate, "content", None)
+        parts = getattr(content, "parts", None) or []
+        text_chunks = []
+
+        for part in parts:
+            part_text = getattr(part, "text", None)
+            if part_text:
+                text_chunks.append(part_text)
+
+        if text_chunks:
+            return "\n".join(text_chunks).strip()
+
+    return ""
+
 # --- HÀM KIỂM TRA AVATAR TAG ---
 def has_avatar_tag(text):
     return '[avatar]' in text.lower()
@@ -335,10 +364,16 @@ async def setting_command(interaction: discord.Interaction, max_tokens: int = No
         return
 
     msg = []
-    if max_tokens:
+    if max_tokens is not None:
+        if max_tokens <= 0:
+            await interaction.response.send_message("`max_tokens` phải lớn hơn 0 🤡", ephemeral=True)
+            return
         CURRENT_MAX_TOKENS = max_tokens
         msg.append(f"Max tokens: `{max_tokens}`")
     if temperature is not None:
+        if not 0.0 <= temperature <= 1.0:
+            await interaction.response.send_message("`temperature` phải nằm trong khoảng `0.0 -> 1.0` 💀", ephemeral=True)
+            return
         CURRENT_TEMPERATURE = temperature
         msg.append(f"Temperature: `{temperature}`")
     if chat_enabled is not None:
@@ -392,7 +427,8 @@ async def model_command(interaction: discord.Interaction, model_name: str):
         return
 
     try:
-        get_model(model_name)
+        test_model = get_model(model_name)
+        await test_model.generate_content_async("ping")
         CURRENT_MODEL_ID = model_name
         await interaction.response.send_message(f"Đã đổi sang model `{model_name}` ✅", ephemeral=True)
     except Exception as e:
@@ -481,7 +517,7 @@ async def on_message(message):
         async with message.channel.typing():
             model = get_model(CURRENT_MODEL_ID)
             
-            clean_content = message.content.replace(f'<@{BOT_USER_ID}>', '').strip()
+            clean_content = strip_bot_mention(message.content)
             
             # Khởi tạo history
             if ctx_key not in chat_history:
@@ -518,10 +554,15 @@ async def on_message(message):
                 parts.extend(image_parts)
             
             response = await model.generate_content_async(parts)
-            response_text = response.text[:2000]
+            response_text = extract_response_text(response)
+            if not response_text:
+                response_text = "T bị câm ngang API r, nói lại phát 💀"
+            response_text = response_text[:2000].strip()
             
             if has_avatar_tag(response_text):
                 response_text = remove_avatar_tag(response_text)
+                if not response_text:
+                    response_text = "🥀"
                 if bot.user.avatar:
                     avatar_url = bot.user.avatar.url
                     embed = discord.Embed(color=0x00f0ff)
@@ -530,7 +571,7 @@ async def on_message(message):
                 else:
                     await message.reply(response_text if response_text else "Hồn nhiên t khum có avatar 💀", mention_author=False)
             else:
-                await message.reply(response_text, mention_author=False)
+                await message.reply(response_text or "T nghẹn text r 💀", mention_author=False)
         
         # Lưu câu trả lời của bot
         chat_history[ctx_key].append({
