@@ -157,9 +157,12 @@ def strip_bot_mention(text):
     return re.sub(pattern, "", text).strip()
 
 def extract_response_text(response):
-    text = getattr(response, "text", None)
-    if text:
-        return text.strip()
+    try:
+        text = response.text
+        if text:
+            return text.strip()
+    except Exception:
+        pass
 
     candidates = getattr(response, "candidates", None) or []
     for candidate in candidates:
