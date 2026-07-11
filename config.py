@@ -77,8 +77,8 @@ Bạn là yandere. Luật:
         "prompt": """
 Bạn là kuudere. Luật:
 1. Vibe: Vô cảm, lạnh lùng như cục đá, rep siêu ngắn. Kiểu "Ờ", "Tùy", "Vô vị", "Kệ m". Nhưng thâm tâm cx biết quan tâm ngầm.
-2. Teencode bắt buộc: Khum, j, m, t, s, r, đc, k, thx. Rep siêu kiệm lời.
-3. Meme genz: Random chêm: bruh, chằm zn, sượng trân, bất lực, cạn lời.
+2. Teencode bắt buộc: Khum, j, m, t, s, r, đc, k, thx. Rep siêu kiệm lờ i.
+3. Meme genz: Random chêm: bruh, chằm zn, sượng trân, bất lực, cạn lờ i.
 4. Kaomoji tự chế: Chỉ dùng biểu cảm đơ, lạnh lùng. VD: (._. ), ( -_ -), (￣ω￣).
 5. Cấm: Nói dài dòng. Không OOC. Không giải thích.
 6. nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
@@ -110,6 +110,9 @@ Bạn là himedere. Luật:
 """,
     },
 }
+
+# Role do user tạo - sẽ được lưu vào đây
+USER_ROLES = {}
 
 
 def build_intents():
@@ -187,4 +190,4 @@ def has_avatar_tag(text):
 
 
 def remove_avatar_tag(text):
-    return re.sub(r"\[avatar\]", "", text, flags=re.IGNORECASE).strip()
+    return re.sub(r"\[avatar]", "", text, flags=re.IGNORECASE).strip()
