@@ -33,9 +33,9 @@ BOT_USER_ID = int(os.getenv("BOT_USER_ID", 1458799287910535324))
 OWNER_ID = int(os.getenv("OWNER_ID", 1155129530122510376))
 
 # Cấu hình mặc định
-DEFAULT_MODEL_ID = "gemini-2.0-flash-exp"  # Update lên model mới nhất
+DEFAULT_MODEL_ID = "gemini-3.1-flash-lite"  # Update lên model mới nhất
 DEFAULT_MAX_TOKENS = 2048
-DEFAULT_TEMPERATURE = 0.9
+DEFAULT_TEMPERATURE = 0.7
 DEFAULT_HISTORY_LIMIT = 15  # Số tin nhắn nhớ trong channel
 DEFAULT_CONTEXT_LIMIT = 15  # Số tin nhắn nhớ trong chat_history
 
