@@ -17,7 +17,7 @@ load_dotenv()
 
 # Bắt buộc phải có
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # Kiểm tra token ngay khi import
 if not DISCORD_TOKEN:
