@@ -112,151 +112,167 @@ def register_commands(bot):
 
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai (Hỗ trợ cả DM)")
-    @app_commands.choices(
-        action=[
-            app_commands.Choice(name="🎭 Chọn vai có sẵn", value="select"),
-            app_commands.Choice(name="✏️ Tạo vai mới", value="custom"),
-            app_commands.Choice(name="🗑️ Xoá vai đã tạo", value="delete"),
-            app_commands.Choice(name="📋 Xem vai hiện tại", value="status"),
-            app_commands.Choice(name="❌ Tắt nhập vai", value="off"),
+@bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai (Hỗ trợ cả DM)")
+@app_commands.choices(
+    action=[
+        app_commands.Choice(name="🎭 Chọn vai có sẵn", value="select"),
+        app_commands.Choice(name="✏️ Tạo vai mới", value="custom"),
+        app_commands.Choice(name="🗑️ Xoá vai đã tạo", value="delete"),
+        app_commands.Choice(name="📋 Xem vai hiện tại", value="status"),
+        app_commands.Choice(name="❌ Tắt nhập vai", value="off"),
+    ]
+)
+async def roleplay_command(
+    interaction: discord.Interaction,
+    action: app_commands.Choice[str],
+):
+    ctx_key = config.get_context_key(interaction)
+
+    if interaction.guild_id:
+        has_mod_rights = (
+            interaction.user.guild_permissions.manage_guild
+            or interaction.user.guild_permissions.moderate_members
+        )
+        if interaction.user.id != config.OWNER_ID and not has_mod_rights:
+            await interaction.response.send_message(
+                "M k có quyền chỉnh setting, cút! 🔪",
+                ephemeral=True,
+            )
+            return
+
+    if action.value == "off":
+        config.set_context_state(ctx_key, False, None)
+        # ✅ PUBLIC - Gửi ra channel cho mọi người thấy
+        await interaction.channel.send(
+            f"❌ **{interaction.user.display_name}** đã tắt nhập vai. Về lại GenZ gốc 😎"
+        )
+        await interaction.response.send_message(
+            "Đã tắt nhập vai.",  # Reply riêng cho người dùng
+            ephemeral=True,
+        )
+        return
+
+    if action.value == "status":
+        state = config.get_context_state(ctx_key)
+        if state["active"]:
+            embed = discord.Embed(
+                title="🎭 Đang nhập vai",
+                description=f"**Vai:** {state['config']['name']}",
+                color=0x00FF00,
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            await interaction.response.send_message(
+                "Bot đang ở chế độ GenZ gốc.",
+                ephemeral=True,
+            )
+        return
+
+    if action.value == "select":
+        all_roles = {**config.SAMPLE_ROLES, **config.USER_ROLES}
+        if not all_roles:
+            await interaction.response.send_message(
+                "Chưa có vai nào cả! Tạo vai mới đi bro 💀",
+                ephemeral=True,
+            )
+            return
+
+        options = [
+            discord.SelectOption(label=role["name"], value=role_key)
+            for role_key, role in all_roles.items()
         ]
-    )
-    async def roleplay_command(
-        interaction: discord.Interaction,
-        action: app_commands.Choice[str],
-    ):
-        ctx_key = config.get_context_key(interaction)
+        select = discord.ui.Select(placeholder="Chọn 1 vai...", options=options)
 
-        if interaction.guild_id:
-            has_mod_rights = (
-                interaction.user.guild_permissions.manage_guild
-                or interaction.user.guild_permissions.moderate_members
+        async def select_callback(select_interaction: discord.Interaction):
+            chosen = all_roles[select.values[0]]
+            config.set_context_state(ctx_key, True, chosen)
+            
+            # ✅ PUBLIC - Gửi ra channel cho mọi người thấy
+            await select_interaction.channel.send(
+                f"🎭 **{select_interaction.user.display_name}** vừa bật vai **{chosen['name']}**! Chuẩn bị tinh thần đi các ní 🤡"
             )
-            if interaction.user.id != config.OWNER_ID and not has_mod_rights:
-                await interaction.response.send_message(
-                    "M k có quyền chỉnh setting, cút! 🔪",
+            await select_interaction.response.send_message(
+                f"Đã bật vai **{chosen['name']}** 🔥",
+                ephemeral=True,  # Vẫn giữ ephemeral cho người dùng
+            )
+
+        select.callback = select_callback
+        view = discord.ui.View()
+        view.add_item(select)
+        await interaction.response.send_message("Chọn vai:", view=view, ephemeral=True)
+        return
+
+    if action.value == "custom":
+        class CustomModal(discord.ui.Modal, title="Tạo vai mới"):
+            name = discord.ui.TextInput(label="Tên vai")
+            prompt = discord.ui.TextInput(
+                label="Prompt",
+                style=discord.TextStyle.paragraph,
+                max_length=2000,
+            )
+
+            async def on_submit(self, modal_inter: discord.Interaction):
+                role_key = self.name.value.lower().strip().replace(" ", "_")
+                role_config = {"name": self.name.value, "prompt": self.prompt.value}
+                
+                config.USER_ROLES[role_key] = role_config
+                config.set_context_state(ctx_key, True, role_config)
+                
+                # ✅ PUBLIC - Gửi ra channel cho mọi người thấy
+                await modal_inter.channel.send(
+                    f"✨ **{modal_inter.user.display_name}** vừa tạo và bật role **{self.name.value}**! Chắc sẽ vui đây 🤣"
+                )
+                await modal_inter.response.send_message(
+                    f"Đã tạo và bật vai **{self.name.value}** ✅\n"
+                    f"Vai này đã được lưu vào 'Role có sẵn' để dùng sau nha! 🔥",
                     ephemeral=True,
                 )
-                return
 
-        if action.value == "off":
-            config.set_context_state(ctx_key, False, None)
+        await interaction.response.send_modal(CustomModal())
+        return
+
+    if action.value == "delete":
+        if not config.USER_ROLES:
             await interaction.response.send_message(
-                "Đã tắt nhập vai. Về lại GenZ gốc 😎",
+                "Chưa có vai nào do bạn tạo cả! 🤡\n"
+                "(Chỉ có thể xoá vai do user tạo, ko xoá đc role hệ thống)",
                 ephemeral=True,
             )
             return
 
-        if action.value == "status":
-            state = config.get_context_state(ctx_key)
-            if state["active"]:
-                embed = discord.Embed(
-                    title="🎭 Đang nhập vai",
-                    description=f"**Vai:** {state['config']['name']}",
-                    color=0x00FF00,
+        options = [
+            discord.SelectOption(label=role["name"], value=role_key)
+            for role_key, role in config.USER_ROLES.items()
+        ]
+        select = discord.ui.Select(placeholder="Chọn vai để xoá...", options=options)
+
+        async def delete_callback(delete_interaction: discord.Interaction):
+            role_key = select.values[0]
+            deleted_role = config.USER_ROLES.pop(role_key, None)
+            if deleted_role:
+                # ✅ PUBLIC - Gửi ra channel cho mọi người thấy
+                await delete_interaction.channel.send(
+                    f"🗑️ **{delete_interaction.user.display_name}** đã xoá role **{deleted_role['name']}**"
                 )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await delete_interaction.response.send_message(
+                    f"Đã xoá vai **{deleted_role['name']}** 🗑️",
+                    ephemeral=True,
+                )
             else:
-                await interaction.response.send_message(
-                    "Bot đang ở chế độ GenZ gốc.",
-                    ephemeral=True,
-                )
-            return
-
-        if action.value == "select":
-            all_roles = {**config.SAMPLE_ROLES, **config.USER_ROLES}
-            if not all_roles:
-                await interaction.response.send_message(
-                    "Chưa có vai nào cả! Tạo vai mới đi bro 💀",
-                    ephemeral=True,
-                )
-                return
-
-            options = [
-                discord.SelectOption(label=role["name"], value=role_key)
-                for role_key, role in all_roles.items()
-            ]
-            select = discord.ui.Select(placeholder="Chọn 1 vai...", options=options)
-
-            async def select_callback(select_interaction: discord.Interaction):
-                chosen = all_roles[select.values[0]]
-                config.set_context_state(ctx_key, True, chosen)
-                await select_interaction.response.send_message(
-                    f"Đã bật vai **{chosen['name']}** 🔥",
+                await delete_interaction.response.send_message(
+                    "Xoá thất bại, thử lại đi 💀",
                     ephemeral=True,
                 )
 
-            select.callback = select_callback
-            view = discord.ui.View()
-            view.add_item(select)
-            await interaction.response.send_message("Chọn vai:", view=view, ephemeral=True)
-            return
-
-        if action.value == "custom":
-            class CustomModal(discord.ui.Modal, title="Tạo vai mới"):
-                name = discord.ui.TextInput(label="Tên vai")
-                prompt = discord.ui.TextInput(
-                    label="Prompt",
-                    style=discord.TextStyle.paragraph,
-                    max_length=2000,
-                )
-
-                async def on_submit(self, modal_inter: discord.Interaction):
-                    role_key = self.name.value.lower().strip().replace(" ", "_")
-                    role_config = {"name": self.name.value, "prompt": self.prompt.value}
-                    
-                    # Lưu vào USER_ROLES để hiển thị trong "Chọn vai có sẵn"
-                    config.USER_ROLES[role_key] = role_config
-                    config.set_context_state(ctx_key, True, role_config)
-                    
-                    await modal_inter.response.send_message(
-                        f"Đã tạo và bật vai **{self.name.value}** ✅\n"
-                        f"Vai này đã được lưu vào 'Role có sẵn' để dùng sau nha! 🔥",
-                        ephemeral=True,
-                    )
-
-            await interaction.response.send_modal(CustomModal())
-            return
-
-        if action.value == "delete":
-            if not config.USER_ROLES:
-                await interaction.response.send_message(
-                    "Chưa có vai nào do bạn tạo cả! 🤡\n"
-                    "(Chỉ có thể xoá vai do user tạo, ko xoá đc role hệ thống)",
-                    ephemeral=True,
-                )
-                return
-
-            options = [
-                discord.SelectOption(label=role["name"], value=role_key)
-                for role_key, role in config.USER_ROLES.items()
-            ]
-            select = discord.ui.Select(placeholder="Chọn vai để xoá...", options=options)
-
-            async def delete_callback(delete_interaction: discord.Interaction):
-                role_key = select.values[0]
-                deleted_role = config.USER_ROLES.pop(role_key, None)
-                if deleted_role:
-                    await delete_interaction.response.send_message(
-                        f"Đã xoá vai **{deleted_role['name']}** 🗑️",
-                        ephemeral=True,
-                    )
-                else:
-                    await delete_interaction.response.send_message(
-                        "Xoá thất bại, thử lại đi 💀",
-                        ephemeral=True,
-                    )
-
-            select.callback = delete_callback
-            view = discord.ui.View()
-            view.add_item(select)
-            await interaction.response.send_message(
-                "Chọn vai muốn xoá:\n*(Chỉ hiện vai do bạn tạo)*",
-                view=view,
-                ephemeral=True,
-            )
-            return
+        select.callback = delete_callback
+        view = discord.ui.View()
+        view.add_item(select)
+        await interaction.response.send_message(
+            "Chọn vai muốn xoá:\n*(Chỉ hiện vai do bạn tạo)*",
+            view=view,
+            ephemeral=True,
+        )
+        return
 
     @bot.tree.command(name="setting", description="Chỉnh config bot - Chỉ Owner")
     @app_commands.describe(
