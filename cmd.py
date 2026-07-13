@@ -1,153 +1,181 @@
 import discord
 from discord import app_commands
-
+from discord.ext import commands
 import config
+import datetime
 
+# Branding màu sắc cho Embed
+BRAND_COLOR = 0x00F0FF
+ERROR_COLOR = 0xFF0040
+SUCCESS_COLOR = 0x00FF88
 
 def register_commands(bot):
-    @bot.tree.command(name="getlink", description="Lấy link vào server - Chỉ Owner")
-    @app_commands.describe(server_id="ID của server cần lấy link")
-    async def getlink_command(interaction: discord.Interaction, server_id: str):
-        if interaction.user.id != config.OWNER_ID:
-            await interaction.response.send_message("M k phải owner, cút! 🔪", ephemeral=True)
-            return
-
-        try:
-            guild_id = int(server_id)
-            guild = bot.get_guild(guild_id)
-
-            if not guild:
-                await interaction.response.send_message(
-                    f"Không tìm thấy server với ID: `{guild_id}` 💀",
-                    ephemeral=True,
-                )
-                return
-
-            invite_url = None
-            try:
-                for channel in guild.channels:
-                    can_invite = (
-                        isinstance(channel, discord.TextChannel)
-                        and channel.permissions_for(guild.me).create_instant_invite
-                    )
-                    if can_invite:
-                        invite = await channel.create_invite(max_age=0, max_uses=0)
-                        invite_url = invite.url
-                        break
-            except Exception:
-                pass
-
-            if not invite_url:
-                await interaction.response.send_message(
-                    f"Không thể tạo link cho server `{guild.name}` 💀",
-                    ephemeral=True,
-                )
-                return
-
+    # --- GLOBAL ERROR HANDLER FOR PERMISSIONS ---
+    @bot.tree.error
+    async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+        if isinstance(error, app_commands.CheckFailure):
             embed = discord.Embed(
-                title=f"🔗 Link vào server: {guild.name}",
-                color=0x00F0FF,
-                description=(
-                    f"**Server ID:** {guild_id}\n"
-                    f"**Số thành viên:** {guild.member_count}\n\n"
-                    f"**Link:** {invite_url}"
-                ),
+                title="🚫 Access Denied",
+                description="Bạn không có quyền **Administrator** để thực hiện lệnh này.",
+                color=ERROR_COLOR
             )
-            embed.set_thumbnail(url=guild.icon.url if guild.icon else "")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        else:
+            # Fallback for other errors
+            embed = discord.Embed(
+                title="💀 Lỗi hệ thống",
+                description=f"Đã xảy ra lỗi: `{str(error)}`",
+                color=ERROR_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
-            await interaction.user.send(embed=embed)
-            await interaction.response.send_message(
-                "✅ Đã gửi link vào DM của bạn 🥀",
-                ephemeral=True,
-            )
+    # --- SERVER MANAGEMENT GROUP ---
+    server_group = app_commands.Group(name="server_setting", description="Hệ thống quản lý server tối thượng")
 
-        except ValueError:
-            await interaction.response.send_message(
-                "Server ID phải là số nha! 🤡",
-                ephemeral=True,
-            )
-        except Exception as error:
-            await interaction.response.send_message(
-                f"Lỗi: `{error}` 💀",
-                ephemeral=True,
-            )
+    # --- CONFIGURATION SUBCOMMANDS ---
+    @server_group.command(name="add_role", description="Tạo vai mới với màu sắc tùy chỉnh")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def add_role(interaction: discord.Interaction, name: str, color: str = "#FFFFFF", hoist: bool = False):
+        try:
+            # Convert hex color
+            color_obj = discord.Color.from_str(color)
+            role = await interaction.guild.create_role(name=name, color=color_obj, hoist=hoist)
+            
+            embed = discord.Embed(title="✅ Vai đã được tạo", description=f"Vai **{name}** đã được thêm vào server.", color=SUCCESS_COLOR)
+            embed.add_field(name="Màu sắc", value=color, inline=True)
+            embed.add_field(name="Hiển thị riêng", value=str(hoist), inline=True)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi tạo vai: {e}", ephemeral=True)
 
-    @bot.tree.command(
-        name="server_list",
-        description="Xem toàn bộ thông tin các server bot đang ở - Chỉ Owner",
-    )
-    async def server_list_command(interaction: discord.Interaction):
-        if interaction.user.id != config.OWNER_ID:
-            await interaction.response.send_message("M k phải owner, cút! 🔪", ephemeral=True)
+    @server_group.command(name="edit_role", description="Chỉnh sửa tên hoặc màu của vai")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def edit_role(interaction: discord.Interaction, role: discord.Role, new_name: str = None, new_color: str = None):
+        try:
+            updates = {}
+            if new_name: updates['name'] = new_name
+            if new_color: updates['color'] = discord.Color.from_str(new_color)
+            
+            await role.edit(**updates)
+            embed = discord.Embed(title="✏️ Vai đã được cập nhật", description=f"Vai **{role.name}** đã được thay đổi.", color=SUCCESS_COLOR)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi chỉnh sửa: {e}", ephemeral=True)
+
+    @server_group.command(name="delete_role", description="Xóa vĩnh viễn một vai khỏi server")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def delete_role(interaction: discord.Interaction, role: discord.Role):
+        if role.position >= interaction.guild.me.top_role.position:
+            await interaction.response.send_message("Bot không đủ quyền hạn để xóa vai này (vai cao hơn hoặc bằng bot).", ephemeral=True)
             return
+        try:
+            await role.delete()
+            embed = discord.Embed(title="🗑️ Vai đã bị xóa", description=f"Vai **{role.name}** đã biến mất khỏi vũ trụ.", color=ERROR_COLOR)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi xóa vai: {e}", ephemeral=True)
 
-        guilds = bot.guilds
-        if not guilds:
-            await interaction.response.send_message(
-                "Bot chưa join server nào hết á đại ca! 🥀",
-                ephemeral=True,
-            )
+    @server_group.command(name="new_channel", description="Tạo kênh văn bản hoặc thoại mới")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def new_channel(interaction: discord.Interaction, name: str, category: discord.CategoryChannel = None, type: str = "text"):
+        try:
+            channel_type = discord.ChannelType.text if type == "text" else discord.ChannelType.voice
+            await interaction.guild.create_text_channel(name=name, category=category) if type == "text" else await interaction.guild.create_voice_channel(name=name, category=category)
+            embed = discord.Embed(title="📢 Kênh mới đã sẵn sàng", description=f"Kênh **{name}** đã được tạo thành công.", color=SUCCESS_COLOR)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi tạo kênh: {e}", ephemeral=True)
+
+    # --- MODERATION SUBCOMMANDS ---
+    @server_group.command(name="kick", description="Đuổi cổ thành viên ra khỏi server")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def kick(interaction: discord.Interaction, member: discord.Member, reason: str = "Vi phạm nội quy"):
+        if member.top_role.position >= interaction.guild.me.top_role.position:
+            await interaction.response.send_message("Bot không đủ quyền để đuổi người này.", ephemeral=True)
             return
+        try:
+            await member.kick(reason=reason)
+            embed = discord.Embed(title="👢 Member đã bị đá", description=f"**{member.name}** đã bị đuổi vì: {reason}
+Người thực hiện: {interaction.user.name}", color=ERROR_COLOR)
+            embed.set_footer(text=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi kick: {e}", ephemeral=True)
 
-        embed = discord.Embed(
-            title=f"📊 Danh sách các server ({len(guilds)} server)",
-            color=0x00F0FF,
-        )
-        sorted_guilds = sorted(guilds, key=lambda guild: guild.member_count, reverse=True)
-        total_members = sum(guild.member_count for guild in guilds)
-        embed.set_footer(text=f"Tổng cộng: {total_members} thành viên")
-
-        for guild in sorted_guilds[:25]:
-            field_value = (
-                f"**ID:** {guild.id}\n"
-                f"**Thành viên:** {guild.member_count}\n"
-                f"**Owner:** <@{guild.owner_id}>"
-            )
-            embed.add_field(name=guild.name, value=field_value, inline=False)
-
-        if len(sorted_guilds) > 25:
-            embed.description = (
-                f"*Đang hiển thị 25 server đầu tiên, tổng cộng {len(sorted_guilds)} server*"
-            )
-
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-@bot.tree.command(name="roleplay", description="Quản lý chế độ nhập vai (Hỗ trợ cả DM)")
-@app_commands.choices(
-    action=[
-        app_commands.Choice(name="🎭 Chọn vai có sẵn", value="select"),
-        app_commands.Choice(name="✏️ Tạo vai mới", value="custom"),
-        app_commands.Choice(name="🗑️ Xoá vai đã tạo", value="delete"),
-        app_commands.Choice(name="📋 Xem vai hiện tại", value="status"),
-        app_commands.Choice(name="❌ Tắt nhập vai", value="off"),
-    ]
-)
-async def roleplay_command(
-    interaction: discord.Interaction,
-    action: app_commands.Choice[str],
-):
-    ctx_key = config.get_context_key(interaction)
-
-    if interaction.guild_id:
-        has_mod_rights = (
-            interaction.user.guild_permissions.manage_guild
-            or interaction.user.guild_permissions.moderate_members
-        )
-        if interaction.user.id != config.OWNER_ID and not has_mod_rights:
-            await interaction.response.send_message(
-                "M k có quyền chỉnh setting, cút! 🔪",
-                ephemeral=True,
-            )
+    @server_group.command(name="ban", description="Cấm cửa vĩnh viễn và xóa tin nhắn")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def ban(interaction: discord.Interaction, member: discord.Member, reason: str = "Nguy hiểm", delete_message_days: int = 1):
+        if member.top_role.position >= interaction.guild.me.top_role.position:
+            await interaction.response.send_message("Bot không đủ quyền để ban người này.", ephemeral=True)
             return
+        try:
+            await member.ban(reason=reason, delete_message_days=delete_message_days)
+            embed = discord.Embed(title="🔨 Member đã bị Ban", description=f"**{member.name}** đã bị cấm vĩnh viễn.
+Lý do: {reason}
+Xóa tin nhắn: {delete_message_days} ngày gần nhất.", color=ERROR_COLOR)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi ban: {e}", ephemeral=True)
 
-    if action.value == "off":
-        config.set_context_state(ctx_key, False, None)
-        # ✅ PUBLIC - Gửi ra channel cho mọi người thấy
-        await interaction.channel.send(
-            f"❌ **{interaction.user.display_name}** đã tắt nhập vai. Về lại GenZ gốc 😎"
-        )
-        await interaction.response.send_message(
-            "Đã tắt nhập vai.",  # Reply riêng cho người dùng
+    @server_group.command(name="timeout", description="Bịt miệng tạm thời (Timeout)")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def timeout(interaction: discord.Interaction, member: discord.Member, duration_minutes: int, reason: str = "Nói nhiều quá"):
+        if member.top_role.position >= interaction.guild.me.top_role.position:
+            await interaction.response.send_message("Bot không đủ quyền để timeout người này.", ephemeral=True)
+            return
+        try:
+            duration = datetime.timedelta(minutes=duration_minutes)
+            await member.timeout(duration, reason=reason)
+            embed = discord.Embed(title="🤐 Member đã bị Bịt miệng", description=f"**{member.name}** bị câm trong {duration_minutes} phút.
+Lý do: {reason}", color=0xFFA500)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi timeout: {e}", ephemeral=True)
+
+    # --- UTILITY SUBCOMMANDS ---
+    @server_group.command(name="slowmode", description="Cài đặt tốc độ chat chậm")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def slowmode(interaction: discord.Interaction, channel: discord.TextChannel = None, seconds: int = 0):
+        target_channel = channel or interaction.channel
+        try:
+            await target_channel.edit(slowmode_delay=seconds)
+            msg = f"Slowmode đã được đặt thành {seconds}s." if seconds > 0 else "Slowmode đã bị tắt."
+            embed = discord.Embed(title="⏱️ Slowmode Updated", description=msg, color=BRAND_COLOR)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi slowmode: {e}", ephemeral=True)
+
+    @server_group.command(name="clear_messages", description="Xóa hàng loạt tin nhắn")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def clear_messages(interaction: discord.Interaction, amount: int = 10):
+        if amount > 100: amount = 100
+        try:
+            deleted = await interaction.channel.purge(limit=amount)
+            embed = discord.Embed(title="🧹 Dọn dẹp hoàn tất", description=f"Đã xóa {len(deleted)} tin nhắn.", color=SUCCESS_COLOR)
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"Lỗi xóa tin nhắn: {e}", ephemeral=True)
+
+    @server_group.command(name="info", description="Xem thông tin chi tiết về server")
+    @app_commands.checks.has_permissions(administrator=True)
+    async def server_info(interaction: discord.Interaction):
+        guild = interaction.guild
+        humans = sum(not m.bot for m in guild.members)
+        bots = sum(m.bot for m in guild.members)
+        
+        embed = discord.Embed(title=f"📊 Thông tin Server: {guild.name}", color=BRAND_COLOR)
+        embed.set_thumbnail(url=guild.icon.url if guild.icon else None)
+        embed.add_field(name="👑 Owner", value=f"<@{guild.owner_id}>", inline=True)
+        embed.add_field(name="🆔 Server ID", value=str(guild.id), inline=True)
+        embed.add_field(name="📅 Thành lập", value=guild.created_at.strftime("%d/%m/%Y"), inline=True)
+        embed.add_field(name="👥 Thành viên", value=f"Total: {guild.member_count}\nHumans: {humans}\nBots: {bots}", inline=True)
+        embed.add_field(name="🛡️ Cấp độ xác minh", value=str(guild.verification_level), inline=True)
+        embed.add_field(name="📢 Kênh", value=f"Text: {len(guild.text_channels)}\nVoice: {len(guild.voice_channels)}", inline=True)
+        
+        await interaction.response.send_message(embed=embed)
+
+    # Register the group to the bot's tree
+    bot.tree.add_command(server_group)
             ephemeral=True,
         )
         return
