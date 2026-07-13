@@ -281,3 +281,4 @@ def register_commands(bot):
     async def ping(interaction: discord.Interaction):
         latency = round(bot.latency * 1000)
         await interaction.response.send_message(f"Pong! 🏓 Độ trễ: {latency}ms")
+        
