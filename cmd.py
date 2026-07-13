@@ -29,6 +29,63 @@ def register_commands(bot):
                 color=ERROR_COLOR
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
+# --- ROLEPLAY COMMAND (DỄ DÙNG CHO MỌI NGƯỜI) ---
+    @bot.tree.command(name="roleplay", description="Bật/Tắt chế độ nhập vai với các tính cách có sẵn")
+    async def roleplay(interaction: discord.Interaction, action: str = "list", character: str = None):
+        """
+        action: 'list' (xem danh sách), 'start' (bắt đầu), 'stop' (dừng)
+        character: tên nhân vật (chỉ cần khi action là 'start')
+        """
+        ctx_key = config.get_context_key(interaction)
+        
+        # 1. Xem danh sách nhân vật
+        if action == "list":
+            roles_list = "\n".join([f"- **{k}**: {v['name']}" for k, v in config.SAMPLE_ROLES.items()])
+            embed = discord.Embed(
+                title="🎭 Danh sách tính cách có sẵn",
+                description=f"Dùng lệnh `/roleplay start <tên>` để bắt đầu.\n\n{roles_list}",
+                color=BRAND_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # 2. Dừng nhập vai
+        if action == "stop":
+            config.set_context_state(ctx_key, False, None)
+            embed = discord.Embed(
+                title="🛑 Đã tắt chế độ nhập vai",
+                description="Bot đã trở về trạng thái GenZ bình thường.",
+                color=ERROR_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # 3. Bắt đầu nhập vai
+        if action == "start":
+            if not character or character.lower() not in config.SAMPLE_ROLES:
+                available = ", ".join(config.SAMPLE_ROLES.keys())
+                await interaction.response.send_message(
+                    f"❌ Sai tên nhân vật rồi bro! Chọn 1 trong mấy cái này: `{available}`",
+                    ephemeral=True
+                )
+                return
+            
+            selected_role = config.SAMPLE_ROLES[character.lower()]
+            config.set_context_state(ctx_key, True, selected_role)
+            
+            embed = discord.Embed(
+                title=f"🎭 Đang nhập vai: {selected_role['name']}",
+                description="Từ giờ t sẽ nói chuyện đúng tính cách này. Thử tag t xem nào!",
+                color=SUCCESS_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=False) # Public để mọi người cùng thấy và chơi chung
+            return
+
+        # Fallback nếu nhập sai action
+        await interaction.response.send_message("❌ Lệnh không hợp lệ. Dùng `/roleplay list` để xem hướng dẫn.", ephemeral=True)
+
+    # ĐĂNG KÝ GROUP SERVER_SETTING (SỬA LỖI CŨ)
+    bot.tree.add_command(server_group)
 
     # --- MAIN SERVER SETTINGS GROUP ---
     @bot.tree.command(name="server_setting", description="Hệ thống quản lý server tối thượng")
