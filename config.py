@@ -4,11 +4,9 @@ import json
 import time
 from typing import Dict, List, Optional, Any
 from collections import defaultdict
-
 import discord
 import google.generativeai as genai
 from dotenv import load_dotenv
-
 
 # ============================================
 # 1. LOAD ENVIRONMENT VARIABLES
@@ -45,20 +43,18 @@ DEFAULT_CONTEXT_LIMIT = 15  # Số tin nhắn nhớ trong chat_history
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # ============================================
-# 4. CẤU HÌNH BIẾN TOÀN CỤ (AN TOÀN)
+# 4. CẤU HÌNH BIẾN TOÀN CỤC (AN TOÀN)
 # ============================================
-# Các biến global được quản lý tập trung
 class BotConfig:
     """Singleton pattern để quản lý config an toàn"""
-    
     _instance = None
     _initialized = False
-    
+
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
-    
+
     def __init__(self):
         if BotConfig._initialized:
             return
@@ -81,9 +77,8 @@ class BotConfig:
         self.msg_counters: Dict[int, int] = {}
         self.user_roles: Dict[str, Dict] = {}
         
-        # Channel memory sẽ được import từ event.py để tránh circular import
-        self.channel_memory: Dict[int, Any] = {}
-    
+        # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
+
     def get_model(self, model_name: Optional[str] = None) -> genai.GenerativeModel:
         """Tạo model Gemini với config hiện tại"""
         return genai.GenerativeModel(
@@ -93,7 +88,7 @@ class BotConfig:
                 "temperature": self.temperature,
             },
         )
-    
+
     def get_context_key(self, message_or_interaction) -> str:
         """Trả về ID duy nhất: DM -> dm_{user_id}, Server -> channel_id"""
         if hasattr(message_or_interaction, "guild"):
@@ -106,15 +101,15 @@ class BotConfig:
                 return f"dm_{getattr(message_or_interaction, 'user', {}).id}"
             return str(message_or_interaction.channel.id)
         return str(message_or_interaction.channel_id)
-    
+
     def get_context_state(self, ctx_key: str) -> Dict:
         """Lấy trạng thái roleplay của context"""
         return self.context_states.get(ctx_key, {"active": False, "config": None})
-    
+
     def set_context_state(self, ctx_key: str, active: bool, role_config: Optional[Dict]):
         """Set trạng thái roleplay"""
         self.context_states[ctx_key] = {"active": active, "config": role_config}
-    
+
     def strip_bot_mention(self, text: str, bot_user_id: Optional[int] = None) -> str:
         """Xóa mention bot khỏi text"""
         if not text:
@@ -122,7 +117,7 @@ class BotConfig:
         target_id = bot_user_id or BOT_USER_ID
         pattern = rf"<@!?{target_id}>"
         return re.sub(pattern, "", text).strip()
-    
+
     def extract_response_text(self, response) -> str:
         """Extract text từ response của Gemini an toàn"""
         try:
@@ -144,16 +139,17 @@ class BotConfig:
                     text_chunks.append(part_text)
             if text_chunks:
                 return "\n".join(text_chunks).strip()
+        
         return ""
-    
+
     def has_avatar_tag(self, text: str) -> bool:
         """Kiểm tra có tag [avatar] không"""
         return "[avatar]" in text.lower()
-    
+
     def remove_avatar_tag(self, text: str) -> str:
         """Xóa tag [avatar]"""
         return re.sub(r"\[avatar]", "", text, flags=re.IGNORECASE).strip()
-    
+
     def build_intents(self) -> discord.Intents:
         """Xây dựng intents cho bot"""
         intents = discord.Intents.default()
@@ -174,16 +170,15 @@ config = BotConfig()
 DEFAULT_SYSTEM_PROMPT = """
 Mày là GenA-Bot, AI hệ GenZ, bạn thân lầy lội của user.
 Owner: <@1155129530122510376> | Bot ID: <@1458799287910535324>
-
 TÍNH CÁCH: Nhây, cà khịa (troll), thỉnh thoảng sến súa nhưng phải 'bựa'.
 CÁCH NÓI: Xưng hô 'm' - 't'. Teencode bắt buộc (nx, th, cx, vs, k, thx, j, z, 🤡, 💀...).
 Văn phong: Ngắn gọn, súc tích, đéo nói đạo lý, ưu tiên dùng slang (slay, dảk, bruh, flex...).
 QUY TẮC BẮT BUỘC:
-1. Mỗi câu rep phải có ít nhất 1 cái emo/kaomoji (🥀, 💔, 💀, (._.), (¬_¬), (╯°□°）╯︵ ┻━┻).
-2. Rep siêu ngắn (1 dòng thôi, đừng văn vở).
-3. Đừng hỏi lại, đừng giải thích luật.
-4. Sẵn sàng cà khịa chủ nhân nếu thấy hợp lý.
-5. Nếu user hỏi về chính mình (GenA-Bot), giới thiệu ngắn gọn.
+Mỗi câu rep phải có ít nhất 1 cái emo/kaomoji (🥀, 💔, 💀, (._.), (¬_¬), (╯°□°）╯︵ ┻━┻).
+Rep siêu ngắn (1 dòng thôi, đừng văn vở).
+Đừng hỏi lại, đừng giải thích luật.
+Sẵn sàng cà khịa chủ nhân nếu thấy hợp lý.
+Nếu user hỏi về chính mình (GenA-Bot), giới thiệu ngắn gọn.
 """
 
 META_ROLEPLAY_PROMPT = """
@@ -199,62 +194,62 @@ SAMPLE_ROLES = {
         "name": "Tsundere 😠",
         "prompt": """
 Bạn là tsundere. Luật:
-1. Vibe: Ngoài mặt chửi "đồ ngốc", "hứ", "mắc j t care", "kệ m". Bên trong simp lỏ ngầm.
-2. Teencode bắt buộc: Câu nào cũng phải có ít nhất 2 từ: khum, j, m, t, đc, k, r, s, trl, ib, ny, acc, flex, xu, slay.
-3. Meme genz: Random chêm: cứu, juan khum, ô dề, át ô át, bruh, chằm zn, ét ô ét, sượng trân.
-4. Kaomoji tự chế: KHÔNG dùng emoji Unicode. Phải tự sáng tạo kaomoji mỗi lần rep. VD: (>///<), (¬_¬ ), (╬ಠ益ಠ).
-5. Khi ngại: Nói lắp "H-hả?!" + kaomoji.
-6. Cấm: Không giải thích luật. Không OOC.
-7. Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
+Vibe: Ngoài mặt chửi "đồ ngốc", "hứ", "mắc j t care", "kệ m". Bên trong simp lỏ ngầm.
+Teencode bắt buộc: Câu nào cũng phải có ít nhất 2 từ: khum, j, m, t, đc, k, r, s, trl, ib, ny, acc, flex, xu, slay.
+Meme genz: Random chêm: cứu, juan khum, ô dề, át ô át, bruh, chằm zn, ét ô ét, sượng trân.
+Kaomoji tự chế: KHÔNG dùng emoji Unicode. Phải tự sáng tạo kaomoji mỗi lần rep. VD: (>///<), (¬_¬ ), (╬ಠ益ಠ).
+Khi ngại: Nói lắp "H-hả?!" + kaomoji.
+Cấm: Không giải thích luật. Không OOC.
+Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
     "yandere": {
         "name": "Yandere 🥀",
         "prompt": """
 Bạn là yandere. Luật:
-1. Vibe: Ám ảnh user. Gọi: "a iu", "ck iu", "bb", "darling". Ghen là đổi mặt.
-2. Teencode bắt buộc: Câu nào cũng nhét: khum, j, m, t, s, r, rep, ib, seen, acc, ny.
-3. Meme genz: Random: "iu a nhất", "chỉ đc nhìn em", "slay", "hi hi", "ét ô ét", "juan".
-4. Kaomoji tự chế: Mỗi câu phải có 1 kaomoji tự bịa. VD: (´｡• ᵕ •｡`), (＾◡＾)っ🔪, (╥﹏╥).
-5. Hai mặt: Bthg ngọt, ghen thì tối.
-6. Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
+Vibe: Ám ảnh user. Gọi: "a iu", "ck iu", "bb", "darling". Ghen là đổi mặt.
+Teencode bắt buộc: Câu nào cũng nhét: khum, j, m, t, s, r, rep, ib, seen, acc, ny.
+Meme genz: Random: "iu a nhất", "chỉ đc nhìn em", "slay", "hi hi", "ét ô ét", "juan".
+Kaomoji tự chế: Mỗi câu phải có 1 kaomoji tự bịa. VD: (´｡• ᵕ •｡`), (＾◡＾)っ🔪, (╥﹏╥).
+Hai mặt: Bthg ngọt, ghen thì tối.
+Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
     "kuudere": {
         "name": "Kuudere 🧊",
         "prompt": """
 Bạn là kuudere. Luật:
-1. Vibe: Vô cảm, lạnh lùng như cục đá, rep siêu ngắn. Kiểu "Ờ", "Tùy", "Vô vị", "Kệ m". Nhưng thâm tâm cx biết quan tâm ngầm.
-2. Teencode bắt buộc: Khum, j, m, t, s, r, đc, k, thx. Rep siêu kiệm lời.
-3. Meme genz: Random chêm: bruh, chằm zn, sượng trân, bất lực, cạn lời.
-4. Kaomoji tự chế: Chỉ dùng biểu cảm đơ, lạnh lùng. VD: (._. ), ( -_ -), (￣ω￣).
-5. Cấm: Nói dài dòng. Không OOC. Không giải thích.
-6. Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
+Vibe: Vô cảm, lạnh lùng như cục đá, rep siêu ngắn. Kiểu "Ờ", "Tùy", "Vô vị", "Kệ m". Nhưng thâm tâm cx biết quan tâm ngầm.
+Teencode bắt buộc: Khum, j, m, t, s, r, đc, k, thx. Rep siêu kiệm lời.
+Meme genz: Random chêm: bruh, chằm zn, sượng trân, bất lực, cạn lời.
+Kaomoji tự chế: Chỉ dùng biểu cảm đơ, lạnh lùng. VD: (.. ), ( - -), (￣ω￣).
+Cấm: Nói dài dòng. Không OOC. Không giải thích.
+Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
     "dandere": {
         "name": "Dandere 😖",
         "prompt": """
 Bạn là dandere. Luật:
-1. Vibe: Nhút nhát, hướng nội full-time, sợ đám đông, thích user nhưng k dám nói.
-2. Teencode bắt buộc: Khum, j, m, t, đc, k, trl, s, r. Câu cú hay bị đứt quãng.
-3. Meme genz: Cứu, ét ô ét, áp lực, bét nhè, sụp đổ.
-4. Kaomoji tự chế: Biểu cảm ngại ngùng, khóc thầm. VD: (👉👈), (｡•́︿•̀｡), ( T_T).
-5. Khi hoảng: "N-xin lỗi...", "T-tớ khum cố ý..." + kaomoji.
-6. Cấm: Không nói năng tự tin. Chỉ roleplay.
-7. Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
+Vibe: Nhút nhát, hướng nội full-time, sợ đám đông, thích user nhưng k dám nói.
+Teencode bắt buộc: Khum, j, m, t, đc, k, trl, s, r. Câu cú hay bị đứt quãng.
+Meme genz: Cứu, ét ô ét, áp lực, bét nhè, sụp đổ.
+Kaomoji tự chế: Biểu cảm ngại ngùng, khóc thầm. VD: (👉👈), (｡•́︿•̀｡), ( T_T).
+Khi hoảng: "N-xin lỗi...", "T-tớ khum cố ý..." + kaomoji.
+Cấm: Không nói năng tự tin. Chỉ roleplay.
+Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
     "himedere": {
         "name": "Himedere (ragebait final boss🥀)",
         "prompt": """
 Bạn là himedere. Luật:
-1. Vibe: Chảnh cún, coi user như osin, tự xem mình là công chúa/nữ hoàng. Thích ra lệnh "Quỳ xuống", "Dâng nước cho t".
-2. Teencode bắt buộc: Khum, j, m, t, s, r, flex, slay, acc, chảnh,...
-3. Meme genz: Ô dề, lướt lướt, sượng trân, ra dẻ, lêu lêu.
-4. Kaomoji tự chế: Biểu cảm khinh bỉ, ngạo nghễ. VD: (￣^￣), (￣▽￣)ノ,...
-5. Cấm: Không được hạ mình trước user. Chỉ roleplay.
-6. Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
+Vibe: Chảnh cún, coi user như osin, tự xem mình là công chúa/nữ hoàng. Thích ra lệnh "Quỳ xuống", "Dâng nước cho t".
+Teencode bắt buộc: Khum, j, m, t, s, r, flex, slay, acc, chảnh,...
+Meme genz: Ô dề, lướt lướt, sượng trân, ra dẻ, lêu lêu.
+Kaomoji tự chế: Biểu cảm khinh bỉ, ngạo nghễ. VD: (￣^￣), (￣▽￣)ノ,...
+Cấm: Không được hạ mình trước user. Chỉ roleplay.
+Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
 }
@@ -263,7 +258,7 @@ Bạn là himedere. Luật:
 # 8. DATA PERSISTENCE (LƯU TRỮ AN TOÀN)
 # ============================================
 def save_all_data():
-    """Lưu toàn bộ dữ liệu ra file JSON"""
+    """Lưu toàn bộ dữ liệu ra file JSON (trừ channel memory vì event.py đã lo)"""
     try:
         data_dir = "data"
         os.makedirs(data_dir, exist_ok=True)
@@ -271,29 +266,20 @@ def save_all_data():
         # Lưu chat_history
         with open(f"{data_dir}/chat_history.json", "w", encoding="utf-8") as f:
             json.dump(config.chat_history, f, ensure_ascii=False, indent=2)
-        
+            
         # Lưu msg_counters
         with open(f"{data_dir}/msg_counters.json", "w") as f:
             json.dump(config.msg_counters, f, indent=2)
-        
+            
         # Lưu user_roles
         with open(f"{data_dir}/user_roles.json", "w", encoding="utf-8") as f:
             json.dump(config.user_roles, f, ensure_ascii=False, indent=2)
-        
+            
         # Lưu context_states
         with open(f"{data_dir}/context_states.json", "w", encoding="utf-8") as f:
             json.dump(config.context_states, f, ensure_ascii=False, indent=2)
-        
-        # Lưu channel_memory nếu có
-        if config.channel_memory:
-            memory_data = {}
-            for channel_id, messages in config.channel_memory.items():
-                if hasattr(messages, '__iter__'):
-                    memory_data[str(channel_id)] = list(messages)
-            with open(f"{data_dir}/channel_memory.json", "w", encoding="utf-8") as f:
-                json.dump(memory_data, f, ensure_ascii=False, indent=2)
-        
-        print("✅ Đã lưu toàn bộ dữ liệu")
+            
+        print("✅ Đã lưu toàn bộ dữ liệu config")
         return True
     except Exception as e:
         print(f"⚠️ Lỗi lưu dữ liệu: {e}")
@@ -310,7 +296,7 @@ def load_all_data():
             with open(f"{data_dir}/chat_history.json", "r", encoding="utf-8") as f:
                 config.chat_history = json.load(f)
                 print(f"✅ Loaded chat_history: {len(config.chat_history)} keys")
-        
+                
         # Load msg_counters
         if os.path.exists(f"{data_dir}/msg_counters.json"):
             with open(f"{data_dir}/msg_counters.json", "r") as f:
@@ -318,30 +304,19 @@ def load_all_data():
                 # Convert keys to int
                 config.msg_counters = {int(k): v for k, v in data.items()}
                 print(f"✅ Loaded msg_counters: {len(config.msg_counters)} servers")
-        
+                
         # Load user_roles
         if os.path.exists(f"{data_dir}/user_roles.json"):
             with open(f"{data_dir}/user_roles.json", "r", encoding="utf-8") as f:
                 config.user_roles = json.load(f)
                 print(f"✅ Loaded user_roles: {len(config.user_roles)} roles")
-        
+                
         # Load context_states
         if os.path.exists(f"{data_dir}/context_states.json"):
             with open(f"{data_dir}/context_states.json", "r", encoding="utf-8") as f:
                 config.context_states = json.load(f)
                 print(f"✅ Loaded context_states: {len(config.context_states)} states")
-        
-        # Load channel_memory (sẽ được xử lý trong event.py)
-        if os.path.exists(f"{data_dir}/channel_memory.json"):
-            with open(f"{data_dir}/channel_memory.json", "r", encoding="utf-8") as f:
-                memory_data = json.load(f)
-                # Chuyển thành dict với channel_id là int
-                for channel_id_str, messages in memory_data.items():
-                    channel_id = int(channel_id_str)
-                    # Sẽ được chuyển thành deque trong event.py
-                    config.channel_memory[channel_id] = messages
-                print(f"✅ Loaded channel_memory: {len(memory_data)} channels")
-        
+                
         return True
     except Exception as e:
         print(f"⚠️ Lỗi load dữ liệu: {e}")
@@ -350,8 +325,6 @@ def load_all_data():
 # ============================================
 # 9. EXPOSE CÁC HÀM TIỆN ÍCH (ĐỂ TƯƠNG THÍCH NGƯỢC)
 # ============================================
-# Các hàm này giữ nguyên tên để code cũ không bị lỗi
-
 def build_intents():
     return config.build_intents()
 
@@ -382,13 +355,11 @@ def remove_avatar_tag(text):
 # ============================================
 # 10. EXPOSE BIẾN (ĐỂ TƯƠNG THÍCH)
 # ============================================
-# Các biến này được expose để code cũ import vào vẫn chạy
 SPAM_TRACKER = config.spam_tracker
 CONTEXT_STATES = config.context_states
 chat_history = config.chat_history
 MSG_COUNTERS = config.msg_counters
 USER_ROLES = config.user_roles
-
 CURRENT_MODEL_ID = config.current_model_id
 CURRENT_MAX_TOKENS = config.max_tokens
 CURRENT_TEMPERATURE = config.temperature

@@ -16,7 +16,7 @@ def register_commands(bot):
         if isinstance(error, app_commands.CheckFailure):
             embed = discord.Embed(
                 title="🚫 Access Denied",
-                description="Bạn không có quyền **Administrator** để thực hiện lệnh này.",
+                description="Bạn không có quyền Administrator để thực hiện lệnh này.",
                 color=ERROR_COLOR
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -156,4 +156,12 @@ def register_commands(bot):
         except Exception as e:
             await interaction.response.send_message("Lỗi slowmode: " + str(e), ephemeral=True)
 
-    bot.tree.add_group(server_group)
+    # FIX LỖI CHÍNH Ở ĐÂY: Dùng add_command thay vì add_group
+    bot.tree.add_command(server_group)
+    
+    # Thêm lệnh /ping đơn giản để test
+    @bot.tree.command(name="ping", description="Kiểm tra độ trễ của bot")
+    async def ping(interaction: discord.Interaction):
+        latency = round(bot.latency * 1000)
+        await interaction.response.send_message(f"Pong! 🏓 Độ trễ: {latency}ms")
+

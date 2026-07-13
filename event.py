@@ -3,10 +3,8 @@ import json
 import os
 from collections import deque
 from typing import Dict, Optional
-
 import discord
 import config
-
 
 # --- BỘ NHỚ THÔNG MINH CHO KOYEB ---
 # CHANNEL_MEMORY: lưu 15 tin nhắn gần nhất mỗi channel
@@ -23,9 +21,9 @@ def load_memory():
         try:
             with open(MEMORY_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                for channel_id_str, messages in data.items():
-                    channel_id = int(channel_id_str)
-                    CHANNEL_MEMORY[channel_id] = deque(messages, maxlen=15)
+            for channel_id_str, messages in data.items():
+                channel_id = int(channel_id_str)
+                CHANNEL_MEMORY[channel_id] = deque(messages, maxlen=15)
             print(f"✅ Đã load memory cho {len(CHANNEL_MEMORY)} channel")
         except Exception as e:
             print(f"⚠️ Lỗi load memory: {e}")
@@ -62,7 +60,6 @@ def format_message_for_memory(msg: discord.Message) -> str:
     
     # Xử lý nội dung tin nhắn
     content = msg.content or ""
-    
     # Nếu tin nhắn chỉ có ảnh/sticker
     if not content and msg.attachments:
         content = "[📷 Ảnh]"
@@ -70,11 +67,11 @@ def format_message_for_memory(msg: discord.Message) -> str:
         content = "[🎨 Sticker]"
     elif not content:
         content = "[💬 Tin nhắn trống]"
-    
+        
     # Cắt ngắn nội dung nếu quá dài (tiết kiệm token)
     if len(content) > 200:
         content = content[:197] + "..."
-    
+        
     # Xử lý reply (quan trọng để hiểu ngữ cảnh)
     reply_context = ""
     if msg.reference and msg.reference.resolved:
@@ -85,21 +82,17 @@ def format_message_for_memory(msg: discord.Message) -> str:
             if len(replied_content) > 50:
                 replied_content = replied_content[:47] + "..."
             reply_context = f" (→ {replied_name}: {replied_content})"
-    
+            
     return f"{author_name}: {content}{reply_context}"
-
 
 # --- HÀM ON_MESSAGE NÂNG CẤP (TỐI ƯU CHO KOYEB) ---
 def register_events(bot):
-    
     @bot.event
     async def on_ready():
         print(f"Bot đã đăng nhập với tên: {bot.user.name}")
         print(f"Default Model: {config.DEFAULT_MODEL_ID}")
-        
         # Load memory từ file
         load_memory()
-        
         try:
             synced = await bot.tree.sync()
             print(f"Đã đồng bộ {len(synced)} lệnh.")
@@ -108,16 +101,13 @@ def register_events(bot):
 
     @bot.event
     async def on_guild_join(guild: discord.Guild):
-        # ... (giữ nguyên code cũ)
         try:
             owner = await bot.fetch_user(config.OWNER_ID)
             if not owner:
                 return
-
             invite_url = await _build_invite_url(guild)
             if not invite_url:
                 invite_url = "https://discord.gg/invalid"
-
             embed = discord.Embed(
                 title="✅ Bot vừa join 1 server mới!",
                 color=0x00F0FF,
@@ -143,7 +133,6 @@ def register_events(bot):
         # --- 1. LƯU TIN NHẮN VÀO MEMORY (LUÔN LUÔN) ---
         if message.guild:
             channel_id = message.channel.id
-            
             # Khởi tạo memory cho channel nếu chưa có
             if channel_id not in CHANNEL_MEMORY:
                 CHANNEL_MEMORY[channel_id] = deque(maxlen=15)
@@ -156,7 +145,7 @@ def register_events(bot):
             guild_id = message.guild.id
             config.MSG_COUNTERS[guild_id] = config.MSG_COUNTERS.get(guild_id, 0) + 1
             
-            # Lưu memory sau mỗi 10 tin nhắn (tránh ghi file quá nhiều)
+            # Lưu memory sau mỗi 5 tin nhắn (tránh ghi file quá nhiều)
             if len(CHANNEL_MEMORY[channel_id]) % 5 == 0:
                 save_memory()
 
@@ -172,7 +161,7 @@ def register_events(bot):
         # Nếu không tag, không reply, không DM -> không xử lý
         if not is_dm and not is_mentioned and not is_reply_to_bot:
             return
-
+            
         if not config.IS_CHAT_ENABLED:
             return
 
@@ -187,32 +176,35 @@ def register_events(bot):
                     "last_content": "",
                     "dup_count": 0,
                 }
-
             user_spam_data = config.SPAM_TRACKER[user_id]
+            
             if now < user_spam_data["blocked_until"]:
                 return
-
+                
             is_duplicate = (
                 message.content == user_spam_data["last_content"]
                 and (now - user_spam_data.get("last_time", 0) < 10)
             )
+            
             if is_duplicate:
                 user_spam_data["dup_count"] += 1
             else:
                 user_spam_data["dup_count"] = 1
-
+                
             user_spam_data["last_content"] = message.content
             user_spam_data["last_time"] = now
+            
             user_spam_data["last_msgs"] = [
                 timestamp for timestamp in user_spam_data["last_msgs"]
                 if now - timestamp < 7
             ]
             user_spam_data["last_msgs"].append(now)
-
+            
             hit_rate_limit = (
                 len(user_spam_data["last_msgs"]) > 5
                 or user_spam_data["dup_count"] >= 4
             )
+            
             if hit_rate_limit:
                 user_spam_data["blocked_until"] = now + 30
                 user_spam_data["last_msgs"] = []
@@ -255,7 +247,7 @@ def register_events(bot):
                     message.content,
                     bot.user.id if bot.user else None,
                 )
-
+                
                 # Lấy thông tin user
                 author_name = message.author.display_name or message.author.name
                 
@@ -265,8 +257,8 @@ def register_events(bot):
                 # Lấy lịch sử chat cũ (để bot nhớ tương tác trước đó)
                 if ctx_key not in config.chat_history:
                     config.chat_history[ctx_key] = []
-                
                 old_history = config.chat_history[ctx_key]
+                
                 old_history_text = ""
                 if old_history:
                     history_lines = []
@@ -277,7 +269,7 @@ def register_events(bot):
                         else:
                             history_lines.append(f"Bot: {item['parts'][0]}")
                     old_history_text = "\n".join(history_lines)
-                
+
                 # Kiểm tra reply
                 reply_info = ""
                 if message.reference and message.reference.resolved:
@@ -288,7 +280,7 @@ def register_events(bot):
                         if len(replied_content) > 100:
                             replied_content = replied_content[:97] + "..."
                         reply_info = f"\n[💬 {author_name} đang trả lời {replied_name}: \"{replied_content}\"]"
-                
+
                 # --- TẠO PROMPT CHUẨN (TỐI ƯU) ---
                 prompt_parts = [system_instruction]
                 
@@ -318,13 +310,14 @@ def register_events(bot):
                 # Thêm ảnh nếu có
                 if image_parts:
                     prompt_parts.extend(image_parts)
-                
+
                 # --- GỌI API ---
                 response = await model.generate_content_async(prompt_parts)
                 response_text = config.extract_response_text(response)
                 
                 if not response_text:
                     response_text = "T bị câm ngang API r, nói lại phát 💀"
+                    
                 response_text = response_text[:2000].strip()
 
                 # --- GỬI REPLY ---
@@ -369,14 +362,13 @@ def register_events(bot):
                 )
                 if len(config.chat_history[ctx_key]) > 15:
                     config.chat_history[ctx_key] = config.chat_history[ctx_key][-15:]
-
+                    
         except Exception as error:
             print(f"Lỗi API: {error}")
             if message.author.id == config.OWNER_ID:
                 await message.channel.send(f"Lỗi nè đại ca: `{error}` 💀")
-
+                
         await bot.process_commands(message)
-
 
 # --- HÀM PHỤ TRỢ (GIỮ NGUYÊN) ---
 async def _build_invite_url(guild: discord.Guild):
