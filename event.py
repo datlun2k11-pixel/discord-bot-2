@@ -162,7 +162,12 @@ def register_events(bot):
         if not is_dm and not is_mentioned and not is_reply_to_bot:
             return
             
-        if not config.IS_CHAT_ENABLED:
+        # Check guild-specific chat_enabled (nếu server đã cài đặt)
+        if message.guild:
+            guild_settings = config.GUILD_SETTINGS.get(str(message.guild.id), {})
+            if guild_settings.get("chat_enabled") is False:
+                return
+        elif not config.IS_CHAT_ENABLED:
             return
 
         # --- 3. ANTI-SPAM (GIỮ NGUYÊN) ---
@@ -242,7 +247,14 @@ def register_events(bot):
         # --- 6. TẠO PROMPT THÔNG MINH (TỐI ƯU TOKEN) ---
         try:
             async with message.channel.typing():
-                model = config.get_model(config.CURRENT_MODEL_ID)
+                # Sử dụng guild-specific settings nếu có
+                if message.guild:
+                    guild_settings = config.GUILD_SETTINGS.get(str(message.guild.id), {})
+                    g_max_tokens = guild_settings.get("max_tokens", config.DEFAULT_MAX_TOKENS)
+                    g_temperature = guild_settings.get("temperature", config.DEFAULT_TEMPERATURE)
+                    model = config.get_model_for_guild(g_max_tokens, g_temperature)
+                else:
+                    model = config.get_model(config.CURRENT_MODEL_ID)
                 clean_content = config.strip_bot_mention(
                     message.content,
                     bot.user.id if bot.user else None,

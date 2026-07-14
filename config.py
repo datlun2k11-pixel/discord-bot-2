@@ -76,6 +76,7 @@ class BotConfig:
         self.chat_history: Dict[str, List[Dict]] = {}
         self.msg_counters: Dict[int, int] = {}
         self.user_roles: Dict[str, Dict] = {}
+        self.guild_settings: Dict[str, Dict] = {}  # guild_id_str -> {max_tokens, temperature, chat_enabled}
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
@@ -86,6 +87,16 @@ class BotConfig:
             generation_config={
                 "max_output_tokens": self.max_tokens,
                 "temperature": self.temperature,
+            },
+        )
+
+    def get_model_for_guild(self, max_tokens: int, temperature: float) -> genai.GenerativeModel:
+        """Tạo model Gemini với config riêng cho từng guild"""
+        return genai.GenerativeModel(
+            model_name=self.current_model_id,
+            generation_config={
+                "max_output_tokens": max_tokens,
+                "temperature": temperature,
             },
         )
 
@@ -282,6 +293,10 @@ def save_all_data():
         with open(f"{data_dir}/context_states.json", "w", encoding="utf-8") as f:
             json.dump(config.context_states, f, ensure_ascii=False, indent=2)
             
+        # Lưu guild_settings
+        with open(f"{data_dir}/guild_settings.json", "w", encoding="utf-8") as f:
+            json.dump(config.guild_settings, f, ensure_ascii=False, indent=2)
+            
         print("✅ Đã lưu toàn bộ dữ liệu config")
         return True
     except Exception as e:
@@ -320,6 +335,12 @@ def load_all_data():
                 config.context_states = json.load(f)
                 print(f"✅ Loaded context_states: {len(config.context_states)} states")
                 
+        # Load guild_settings
+        if os.path.exists(f"{data_dir}/guild_settings.json"):
+            with open(f"{data_dir}/guild_settings.json", "r", encoding="utf-8") as f:
+                config.guild_settings = json.load(f)
+                print(f"✅ Loaded guild_settings: {len(config.guild_settings)} guilds")
+                
         return True
     except Exception as e:
         print(f"⚠️ Lỗi load dữ liệu: {e}")
@@ -343,6 +364,9 @@ def set_context_state(ctx_key, active, role_config):
 def get_model(model_name):
     return config.get_model(model_name)
 
+def get_model_for_guild(max_tokens, temperature):
+    return config.get_model_for_guild(max_tokens, temperature)
+
 def strip_bot_mention(text, bot_user_id=None):
     return config.strip_bot_mention(text, bot_user_id)
 
@@ -363,6 +387,7 @@ CONTEXT_STATES = config.context_states
 chat_history = config.chat_history
 MSG_COUNTERS = config.msg_counters
 USER_ROLES = config.user_roles
+GUILD_SETTINGS = config.guild_settings
 CURRENT_MODEL_ID = config.current_model_id
 CURRENT_MAX_TOKENS = config.max_tokens
 CURRENT_TEMPERATURE = config.temperature
