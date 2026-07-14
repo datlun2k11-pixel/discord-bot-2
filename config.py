@@ -31,7 +31,7 @@ BOT_USER_ID = int(os.getenv("BOT_USER_ID", 1458799287910535324))
 OWNER_ID = int(os.getenv("OWNER_ID", 1155129530122510376))
 
 # Cấu hình mặc định
-DEFAULT_MODEL_ID = "gemini-3.1-flash-lite"  # Update lên model mới nhất
+DEFAULT_MODEL_ID = "gemini-3.1-flash-lite"  # Model Gemini mới nhất
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_HISTORY_LIMIT = 15  # Số tin nhắn nhớ trong channel
@@ -93,12 +93,15 @@ class BotConfig:
         """Trả về ID duy nhất: DM -> dm_{user_id}, Server -> channel_id"""
         if hasattr(message_or_interaction, "guild"):
             if message_or_interaction.guild is None:
-                user_id = getattr(message_or_interaction, "author", None)
-                if not user_id:
-                    user_id = getattr(message_or_interaction, "user", None)
+                # Xử lý DM - ưu tiên author (message), fallback user (interaction)
+                user = getattr(message_or_interaction, "author", None) or getattr(message_or_interaction, "user", None)
+                if user:
+                    return f"dm_{user.id}"
+                # Fallback an toàn: dùng id của người gửi nếu có
+                user_id = getattr(getattr(message_or_interaction, "user", None), "id", None)
                 if user_id:
-                    return f"dm_{user_id.id}"
-                return f"dm_{getattr(message_or_interaction, 'user', {}).id}"
+                    return f"dm_{user_id}"
+                return "dm_unknown"
             return str(message_or_interaction.channel.id)
         return str(message_or_interaction.channel_id)
 
