@@ -1,0 +1,15 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Data files
+data/
+channel_memory.json
+
+# IDE
+.vscode/
+.idea/
