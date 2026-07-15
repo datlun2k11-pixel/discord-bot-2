@@ -14,8 +14,8 @@ RATE_LIMIT_MAX_REQUESTS = 20  # Tối đa 20 request mỗi 60 giây
 MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024  # 5MB
 
 # --- BỘ NHỚ THÔNG MINH CHO KOYEB ---
-# CHANNEL_MEMORY: lưu 15 tin nhắn gần nhất mỗi channel
-# Cấu trúc: {channel_id: deque(maxlen=15)}
+# CHANNEL_MEMORY: lưu 17 tin nhắn gần nhất mỗi channel
+# Cấu trúc: {channel_id: deque(maxlen=17)}
 CHANNEL_MEMORY: Dict[int, deque] = {}
 
 # File lưu memory (để khi restart bot vẫn nhớ)

@@ -39,8 +39,8 @@ OWNER_ID = int(os.getenv("OWNER_ID", 1155129530122510376))
 DEFAULT_MODEL_ID = "gemini-3.1-flash-lite"  # Model Gemini mới nhất
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_TEMPERATURE = 0.7
-DEFAULT_HISTORY_LIMIT = 15  # Số tin nhắn nhớ trong channel
-DEFAULT_CONTEXT_LIMIT = 15  # Số tin nhắn nhớ trong chat_history
+DEFAULT_HISTORY_LIMIT = 17  # Số tin nhắn nhớ trong channel
+DEFAULT_CONTEXT_LIMIT = 17  # Số tin nhắn nhớ trong chat_history
 
 # Daily usage limits
 DAILY_LIMIT_PER_USER = 50  # Số lần gọi AI tối đa mỗi ngày cho mỗi user
