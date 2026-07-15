@@ -13,3 +13,4 @@ channel_memory.json
 # IDE
 .vscode/
 .idea/
+.aider*

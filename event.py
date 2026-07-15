@@ -1,6 +1,8 @@
 import time
 import json
 import os
+import tempfile
+import shutil
 from collections import deque
 from typing import Dict, Optional
 import discord
@@ -29,13 +31,24 @@ def load_memory():
             print(f"⚠️ Lỗi load memory: {e}")
 
 def save_memory():
-    """Lưu memory ra file JSON"""
+    """Lưu memory ra file JSON (atomic write)"""
     try:
         data = {}
         for channel_id, messages in CHANNEL_MEMORY.items():
             data[str(channel_id)] = list(messages)
-        with open(MEMORY_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        
+        # Atomic write: ghi vào temp file trước, rename sau
+        temp_fd, temp_path = tempfile.mkstemp(dir=".")
+        try:
+            with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            shutil.move(temp_path, MEMORY_FILE)
+        except Exception:
+            try:
+                os.unlink(temp_path)
+            except Exception:
+                pass
+            raise
     except Exception as e:
         print(f"⚠️ Lỗi save memory: {e}")
 
@@ -84,6 +97,52 @@ def format_message_for_memory(msg: discord.Message) -> str:
             reply_context = f" (→ {replied_name}: {replied_content})"
             
     return f"{author_name}: {content}{reply_context}"
+
+# === HÀM TÍNH XP KHI CHAT ===
+async def _process_xp_and_level(message: discord.Message):
+    """Thêm XP khi user chat, thông báo nếu lên level"""
+    if not message.guild or message.author.bot:
+        return
+    
+    guild_id = message.guild.id
+    user_id = message.author.id
+    
+    # Owner không tính XP (tránh gian lận)
+    if user_id == config.OWNER_ID:
+        return
+    
+    xp_gained, level_up = config.add_xp(guild_id, user_id)
+    
+    if level_up:
+        data = config.get_xp_data(guild_id, user_id)
+        await message.channel.send(
+            f"🎉 **{message.author.display_name}** vừa lên **Level {data['level']}**! (Total: {data['xp']} XP)",
+            delete_after=10,
+        )
+
+# === KIỂM TRA DAILY LIMIT ===
+async def _check_daily_limit_and_reply(message: discord.Message) -> bool:
+    """Kiểm tra daily limit, trả về True nếu còn lượt, False nếu hết"""
+    user_id = message.author.id
+    # Owner không bị giới hạn
+    if user_id == config.OWNER_ID:
+        return True
+    
+    has_remaining, remaining = config.check_daily_limit(user_id)
+    if not has_remaining:
+        embed = discord.Embed(
+            title="😴 Hết lượt chat hôm nay rồi!",
+            description=(
+                f"Bạn đã dùng hết **{config.DAILY_LIMIT_PER_USER}** lượt chat với bot hôm nay rồi! 🥀\n\n"
+                f"Quay lại vào ngày mai nha! ⏰\n"
+                f"(Lượt sẽ reset lúc **0:00** theo giờ Việt Nam)"
+            ),
+            color=0xFFA500,
+        )
+        embed.set_footer(text="=)) lên rank để được tăng limit nha bro")
+        await message.reply(embed=embed, mention_author=False)
+        return False
+    return True
 
 # --- HÀM ON_MESSAGE NÂNG CẤP (TỐI ƯU CHO KOYEB) ---
 def register_events(bot):
@@ -145,9 +204,12 @@ def register_events(bot):
             guild_id = message.guild.id
             config.MSG_COUNTERS[guild_id] = config.MSG_COUNTERS.get(guild_id, 0) + 1
             
-            # Lưu memory sau mỗi 5 tin nhắn (tránh ghi file quá nhiều)
-            if len(CHANNEL_MEMORY[channel_id]) % 5 == 0:
+            # Lưu memory sau mỗi 20 tin nhắn (giảm I/O, tối ưu cho Koyeb)
+            if len(CHANNEL_MEMORY[channel_id]) % 20 == 0:
                 save_memory()
+            
+            # === ADD XP KHI CHAT ===
+            await _process_xp_and_level(message)
 
         # --- 2. KIỂM TRA CÓ CẦN REPLY KHÔNG ---
         is_dm = message.guild is None
@@ -168,6 +230,10 @@ def register_events(bot):
             if guild_settings.get("chat_enabled") is False:
                 return
         elif not config.IS_CHAT_ENABLED:
+            return
+
+        # === KIỂM TRA DAILY LIMIT ===
+        if not await _check_daily_limit_and_reply(message):
             return
 
         # --- 3. ANTI-SPAM (GIỮ NGUYÊN) ---
@@ -356,7 +422,7 @@ def register_events(bot):
                         mention_author=False,
                     )
 
-                # --- LƯU VÀO CHAT_HISTORY (GIỮ NGUYÊN) ---
+                # Lưu vào chat_history
                 config.chat_history[ctx_key].append(
                     {
                         "role": "user",
@@ -374,10 +440,29 @@ def register_events(bot):
                 )
                 if len(config.chat_history[ctx_key]) > 15:
                     config.chat_history[ctx_key] = config.chat_history[ctx_key][-15:]
+                
+                # Increment daily usage sau khi gọi API thành công
+                config.increment_daily_usage(user_id)
                     
         except Exception as error:
+            error_str = str(error).lower()
             print(f"Lỗi API: {error}")
-            if message.author.id == config.OWNER_ID:
+            
+            # === BẮT LỖI RATE LIMIT (429) ===
+            if "429" in error_str or "rate" in error_str or "quota" in error_str or "resource exhausted" in error_str:
+                embed = discord.Embed(
+                    title="😴 API hết quota hôm nay rồi!",
+                    description=(
+                        f"**Gemini API** đã hết lượt sử dụng trong hôm nay! 💀\n\n"
+                        f"• Bot sẽ không trả lời được cho tới khi **reset vào 0:00** 🕐\n"
+                        f"• Các tính năng khác (lệnh, XP, level) vẫn hoạt động bình thường ✅\n\n"
+                        f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
+                    ),
+                    color=0xFF0040,
+                )
+                embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
+                await message.reply(embed=embed, mention_author=False)
+            elif message.author.id == config.OWNER_ID:
                 await message.channel.send(f"Lỗi nè đại ca: `{error}` 💀")
                 
         await bot.process_commands(message)
