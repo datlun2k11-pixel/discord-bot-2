@@ -167,10 +167,18 @@ def register_events(bot):
 
     @bot.event
     async def on_message(message: discord.Message):
-        # Bỏ qua tin nhắn của bot và lệnh
-        if message.author == bot.user or message.content.startswith("/"):
-            await bot.process_commands(message)
+        # Bỏ qua tin nhắn của chính bot
+        if message.author == bot.user:
             return
+
+        # Xử lý lệnh nếu tin nhắn bắt đầu bằng "/" và là lệnh hợp lệ
+        if message.content.startswith("/"):
+            ctx = await bot.get_context(message)
+            if ctx.command is not None:
+                await bot.process_commands(message)
+                return
+            # Nếu không phải lệnh hợp lệ, vẫn tiếp tục xử lý reply nếu có mention
+            # (không return ở đây)
 
         # --- 1. LƯU TIN NHẮN VÀO MEMORY (LUÔN LUÔN) ---
         if message.guild:
