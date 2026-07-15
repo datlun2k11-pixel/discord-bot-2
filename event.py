@@ -117,7 +117,7 @@ async def _check_daily_limit_and_reply(message: discord.Message) -> bool:
             ),
             color=0xFFA500,
         )
-        embed.set_footer(text="=)) lên rank để được tăng limit nha bro")
+        embed.set_footer(text="=)) chat ít thôi để còn lượt nha bro")
         await message.reply(embed=embed, mention_author=False)
         return False
     return True
@@ -430,7 +430,7 @@ def register_events(bot):
                     description=(
                         f"**Gemini API** đã hết lượt sử dụng trong hôm nay! 💀\n\n"
                         f"• Bot sẽ không trả lời được cho tới khi **reset vào 0:00** 🕐\n"
-                        f"• Các tính năng khác (lệnh, XP, level) vẫn hoạt động bình thường ✅\n\n"
+                        f"• Các tính năng khác (lệnh, roleplay) vẫn hoạt động bình thường ✅\n\n"
                         f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
                     ),
                     color=0xFF0040,
