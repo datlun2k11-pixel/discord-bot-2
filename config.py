@@ -92,6 +92,25 @@ class BotConfig:
         self.daily_usage: Dict[int, Dict] = {}
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
+        
+        # --- MEMORY CLEANUP ---
+        def cleanup_old_chat_history(self):
+            """Dọn dẹp chat_history quá dài (giới hạn 15 items)"""
+            for ctx_key, history in self.chat_history.items():
+                if len(history) > 15:
+                    self.chat_history[ctx_key] = history[-15:]
+        
+        def cleanup_old_guild_settings(self):
+            """Dọn dẹp guild_settings cũ (nếu cần)"""
+            # Guild settings không cần cleanup thường xuyên, giữ nguyên
+            pass
+        
+        def cleanup_old_daily_usage(self):
+            """Dọn dẹp daily_usage cũ (trước 30 ngày) để tránh memory leak"""
+            cutoff_date = time.strftime("%Y-%m-%d", time.time() - 30*24*60*60)
+            keys_to_remove = [uid for uid, data in self.daily_usage.items() if data["date"] < cutoff_date]
+            for uid in keys_to_remove:
+                del self.daily_usage[uid]
 
     # --- DAILY USAGE METHODS ---
     def _today(self) -> str:
@@ -119,6 +138,24 @@ class BotConfig:
             usage["count"] += 1
         else:
             self.daily_usage[user_id] = {"date": self._today(), "count": 1}
+    
+    def check_daily_limit(self, user_id: int) -> Tuple[bool, int]:
+        """Kiểm tra xem user còn lượt chat không. Trả về (còn_lượt_không?, số_lượt_còn_lại)"""
+        today = self._today()
+        if user_id not in self.daily_usage:
+            self.daily_usage[user_id] = {"date": today, "count": 0}
+        
+        usage = self.daily_usage[user_id]
+        # Reset nếu sang ngày mới
+        if usage["date"] != today:
+            usage["date"] = today
+            usage["count"] = 0
+        
+        # Dọn dẹp usage cũ (trước 30 ngày)
+        self.cleanup_old_daily_usage()
+        
+        remaining = DAILY_LIMIT_PER_USER - usage["count"]
+        return remaining > 0, max(0, remaining)
 
     # --- MODEL METHODS ---
     def get_model(self, model_name: Optional[str] = None) -> "GeminiModelWrapper":
@@ -368,6 +405,9 @@ def save_all_data():
         data_dir = "data"
         os.makedirs(data_dir, exist_ok=True)
         
+        # Cleanup memory leaks trước khi lưu
+        config.cleanup_old_chat_history()
+        
         # Atomic write từng file
         _atomic_write(f"{data_dir}/chat_history.json", config.chat_history)
         _atomic_write(f"{data_dir}/msg_counters.json", config.msg_counters)
@@ -376,12 +416,51 @@ def save_all_data():
         _atomic_write(f"{data_dir}/guild_settings.json", config.guild_settings)
         # Convert int keys to str for JSON serialization
         _atomic_write(f"{data_dir}/daily_usage.json", {str(k): v for k, v in config.daily_usage.items()})
+        
+        # Backup mechanism - lưu backup mỗi 10 lần save
+        if not hasattr(save_all_data, "save_count"):
+            save_all_data.save_count = 0
+        save_all_data.save_count += 1
+        if save_all_data.save_count % 10 == 0:
+            _backup_data(data_dir)
             
         print("✅ Đã lưu toàn bộ dữ liệu config")
         return True
     except Exception as e:
         print(f"⚠️ Lỗi lưu dữ liệu: {e}")
         return False
+
+def _backup_data(data_dir: str):
+    """Tạo backup của dữ liệu (giảm rủi ro mất data khi file corrupt)"""
+    try:
+        backup_dir = os.path.join(data_dir, "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        backup_files = [
+            "chat_history.json",
+            "msg_counters.json",
+            "user_roles.json",
+            "context_states.json",
+            "guild_settings.json",
+            "daily_usage.json",
+        ]
+        
+        for filename in backup_files:
+            src = os.path.join(data_dir, filename)
+            if os.path.exists(src):
+                dst = os.path.join(backup_dir, f"{filename}.backup_{timestamp}")
+                shutil.copy2(src, dst)
+                # Giữ tối đa 10 backup mỗi file
+                backup_list = [f for f in os.listdir(backup_dir) if f.startswith(filename)]
+                if len(backup_list) > 10:
+                    backup_list.sort()
+                    for old_backup in backup_list[:-10]:
+                        os.unlink(os.path.join(backup_dir, old_backup))
+        
+        print(f"✅ Đã tạo backup tại {backup_dir}")
+    except Exception as e:
+        print(f"⚠️ Lỗi tạo backup: {e}")
 
 def load_all_data():
     """Load toàn bộ dữ liệu từ file JSON"""

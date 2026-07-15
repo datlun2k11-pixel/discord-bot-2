@@ -8,6 +8,11 @@ from typing import Dict, Optional
 import discord
 import config
 
+# === RATE LIMITING CONFIG ===
+RATE_LIMIT_WINDOW = 60  # 60 giây
+RATE_LIMIT_MAX_REQUESTS = 20  # Tối đa 20 request mỗi 60 giây
+MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024  # 5MB
+
 # --- BỘ NHỚ THÔNG MINH CHO KOYEB ---
 # CHANNEL_MEMORY: lưu 15 tin nhắn gần nhất mỗi channel
 # Cấu trúc: {channel_id: deque(maxlen=15)}
@@ -247,7 +252,7 @@ def register_events(bot):
             user_spam_data["last_msgs"].append(now)
             
             hit_rate_limit = (
-                len(user_spam_data["last_msgs"]) > 5
+                len(user_spam_data["last_msgs"]) > 20
                 or user_spam_data["dup_count"] >= 4
             )
             
@@ -271,19 +276,28 @@ def register_events(bot):
         else:
             system_instruction = config.DEFAULT_SYSTEM_PROMPT
 
-        # --- 5. XỬ LÝ ẢNH (GIỮ NGUYÊN) ---
+        # --- 5. XỬ LÝ ẢNH (AN TOÀN) ---
         image_parts = []
         for attachment in message.attachments:
+            # Kiểm tra kích thước (giới hạn 5MB)
+            if attachment.size > MAX_ATTACHMENT_SIZE:
+                print(f"⚠️ Bỏ qua attachment quá lớn: {attachment.filename} ({attachment.size} bytes)")
+                continue
+                
             is_image = attachment.content_type and attachment.content_type.startswith("image/")
             if not is_image:
                 continue
             try:
                 image_bytes = await attachment.read()
+                # Kiểm tra lại kích thước sau khi đọc
+                if len(image_bytes) > MAX_ATTACHMENT_SIZE:
+                    print(f"⚠️ Bỏ qua attachment sau khi đọc: {attachment.filename} ({len(image_bytes)} bytes)")
+                    continue
                 image_parts.append(
                     {"mime_type": attachment.content_type, "data": image_bytes}
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"⚠️ Lỗi đọc attachment: {e}")
 
         # --- 6. TẠO PROMPT THÔNG MINH (TỐI ƯU TOKEN) ---
         try:

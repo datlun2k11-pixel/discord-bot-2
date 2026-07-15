@@ -2,6 +2,7 @@ import asyncio
 import signal
 import atexit
 import threading
+import time
 from flask import Flask
 from discord.ext import commands
 
@@ -21,7 +22,24 @@ app = Flask("")
 
 @app.route("/")
 def home():
-    return "GenA-Bot is alive! 🚀"
+    """Health check endpoint - kiểm tra cả bot và Flask"""
+    bot_status = "running" if not bot.is_closed() else "closed"
+    return f"GenA-Bot is alive! 🚀 (Bot: {bot_status})"
+
+@app.route("/health")
+def health():
+    """Health check chi tiết - kiểm tra cả bot và Flask"""
+    bot_status = "running" if not bot.is_closed() else "closed"
+    flask_status = "ok"
+    
+    response_data = {
+        "status": "healthy" if bot_status == "running" else "unhealthy",
+        "bot": bot_status,
+        "flask": flask_status,
+        "timestamp": time.time()
+    }
+    
+    return response_data
 
 def start_keep_alive():
     """Chạy Flask health-check endpoint cho Koyeb"""
@@ -36,23 +54,47 @@ def start_keep_alive():
     )
     thread.start()
 
+# Flag để ngăn chặn shutdown loop
+_shutdown_in_progress = False
+
 def shutdown_handler():
-    """Lưu data khi bot tắt"""
+    """Lưu data khi bot tắt (được gọi nhiều lần an toàn)"""
+    global _shutdown_in_progress
+    if _shutdown_in_progress:
+        return
+    _shutdown_in_progress = True
     print("🔄 Đang lưu dữ liệu...")
-    config.save_all_data()
-    save_memory()
-    print("✅ Đã lưu xong!")
+    try:
+        config.save_all_data()
+        save_memory()
+        print("✅ Đã lưu xong!")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi lưu dữ liệu: {e}")
 
 # Đăng ký atexit handler (dự phòng khi crash)
 atexit.register(shutdown_handler)
 
 async def shutdown(sig_name: str = "SIGNAL"):
     """Graceful shutdown khi nhận SIGTERM/SIGINT (Koyeb deploy mới)"""
+    global _shutdown_in_progress
+    if _shutdown_in_progress:
+        print(f"⚠️ Shutdown đã được gọi rồi, bỏ qua lần thứ {sig_name}")
+        return
+    _shutdown_in_progress = True
+    
     print(f"\n🛑 Nhận tín hiệu {sig_name}, đang dọn dẹp...")
-    config.save_all_data()
-    save_memory()
-    await bot.close()
-    print("✅ Bot đã ngắt kết nối Discord an toàn!")
+    try:
+        config.save_all_data()
+        save_memory()
+        print("✅ Đã lưu dữ liệu thành công!")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi lưu dữ liệu: {e}")
+    
+    try:
+        await bot.close()
+        print("✅ Bot đã ngắt kết nối Discord an toàn!")
+    except Exception as e:
+        print(f"⚠️ Lỗi khi đóng bot: {e}")
 
 async def main():
     loop = asyncio.get_running_loop()
@@ -77,10 +119,19 @@ async def main():
     try:
         # Dùng bot.start() thay vì bot.run() để không block event loop
         await bot.start(config.DISCORD_TOKEN)
+    except KeyboardInterrupt:
+        print("\n🛑 Bot đã bị tắt thủ công (Ctrl+C)")
     except Exception as e:
         print(f"❌ Lỗi bot: {e}")
-        config.save_all_data()
-        save_memory()
+        # Ghi log chi tiết hơn
+        import traceback
+        traceback.print_exc()
+        # Cố gắng lưu dữ liệu trước khi thoát
+        try:
+            config.save_all_data()
+            save_memory()
+        except:
+            pass
 
 if __name__ == "__main__":
     asyncio.run(main())
