@@ -1,4 +1,5 @@
-import threading
+import asyncio
+import signal
 import atexit
 from flask import Flask
 from discord.ext import commands
@@ -19,9 +20,11 @@ app = Flask("")
 
 @app.route("/")
 def home():
-    return "GenA-Bot is alive! \U0001f680"
+    return "GenA-Bot is alive! 🚀"
 
 def start_keep_alive():
+    """Chạy Flask health-check endpoint cho Koyeb"""
+    import threading
     thread = threading.Thread(
         target=lambda: app.run(host="0.0.0.0", port=config.PORT),
         daemon=True,
@@ -29,21 +32,39 @@ def start_keep_alive():
     thread.start()
 
 def shutdown_handler():
-    """Luu data khi bot tat"""
-    print("\U0001f504 Dang luu du lieu...")
+    """Lưu data khi bot tắt"""
+    print("🔄 Đang lưu dữ liệu...")
     config.save_all_data()
-    print("\u2705 Da luu xong!")
+    print("✅ Đã lưu xong!")
 
-# Dang ky handler
+# Đăng ký atexit handler (dự phòng)
 atexit.register(shutdown_handler)
 
-def main():
+async def shutdown():
+    """Graceful shutdown khi nhận SIGTERM/SIGINT (Koyeb deploy mới)"""
+    print("\n🛑 Nhận tín hiệu tắt máy, đang dọn dẹp...")
+    config.save_all_data()
+    await bot.close()
+    print("✅ Bot đã ngắt kết nối Discord an toàn!")
+
+async def main():
+    loop = asyncio.get_running_loop()
+    
+    # === BẮT SIGTERM/SIGINT ĐỂ GRACEFUL SHUTDOWN ===
+    # Khi Koyeb deploy phiên bản mới, nó gửi SIGTERM → ta đóng bot.connect
+    # → bot cũ disconnect → Discord cho phép instance mới connect
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(shutdown()))
+    
+    # Chạy Flask health-check (Koyeb cần endpoint / để biết app còn sống)
     start_keep_alive()
+    
     try:
-        bot.run(config.DISCORD_TOKEN)
+        # Dùng bot.start() thay vì bot.run() để không block event loop
+        await bot.start(config.DISCORD_TOKEN)
     except Exception as e:
-        print(f"\u274c Loi bot: {e}")
+        print(f"❌ Lỗi bot: {e}")
         config.save_all_data()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
