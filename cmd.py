@@ -4,13 +4,10 @@ from discord.ext import commands
 import config
 import datetime
 from typing import Optional
-
 # Branding màu sắc cho Embed
 BRAND_COLOR = 0x00F0FF
 ERROR_COLOR = 0xFF0040
 SUCCESS_COLOR = 0x00FF88
-LEVEL_COLOR = 0x9B59B6  # Màu tím cho level
-
 def register_commands(bot):
     # --- GLOBAL ERROR HANDLER FOR PERMISSIONS ---
     @bot.tree.error
@@ -85,112 +82,6 @@ def register_commands(bot):
 
         # Fallback nếu nhập sai action
         await interaction.response.send_message("❌ Lệnh không hợp lệ. Dùng `/roleplay list` để xem hướng dẫn.", ephemeral=True)
-
-    # --- RANK COMMAND ---
-    @bot.tree.command(name="rank", description="Xem level và XP của bạn (hoặc người khác)")
-    async def rank(interaction: discord.Interaction, user: Optional[discord.Member] = None):
-        """Xem level/XP của bản thân hoặc người khác"""
-        target = user or interaction.user
-        
-        # Nếu là DM thì không có guild
-        if not interaction.guild:
-            await interaction.response.send_message("❌ Lệnh này chỉ dùng được trong server!", ephemeral=True)
-            return
-        
-        guild_id = interaction.guild.id
-        data = config.get_xp_data(guild_id, target.id)
-        xp = data["xp"]
-        level = data["level"]
-        
-        # Tính XP cần cho level hiện tại và level tiếp theo
-        xp_for_current_level = config.get_level_xp_required(level)
-        xp_for_next_level = config.get_level_xp_required(level + 1)
-        xp_current_level_start = config.get_level_xp_required(level)
-        xp_progress = xp - xp_current_level_start
-        xp_needed = xp_for_next_level - xp_current_level_start
-        
-        # Progress bar
-        if xp_needed > 0:
-            progress_pct = min(xp_progress / xp_needed, 1.0)
-            bar_length = 10
-            filled = int(progress_pct * bar_length)
-            bar = "🟪" * filled + "⬜" * (bar_length - filled)
-        else:
-            bar = "🟪" * 10
-        
-        # Tạo embed
-        embed = discord.Embed(
-            title=f"📊 Level & XP",
-            color=LEVEL_COLOR,
-            description=f"**{target.display_name}**"
-        )
-        embed.set_thumbnail(url=target.display_avatar.url)
-        embed.add_field(name="🎯 Level", value=str(level), inline=True)
-        embed.add_field(name="✨ XP", value=f"{xp:,}", inline=True)
-        embed.add_field(name="📈 Tiến độ", value=f"{bar} `{xp_progress}/{xp_needed}`", inline=False)
-        
-        # Tính rank trong server
-        all_users = config.get_xp_for_guild(guild_id)
-        rank_position = 1
-        for i, (uid, uxp, ulevel) in enumerate(all_users):
-            if int(uid) == target.id:
-                rank_position = i + 1
-                break
-        embed.set_footer(text=f"Rank #{rank_position} trong server • Chat nhiều để lên level!")
-        
-        await interaction.response.send_message(embed=embed)
-
-    # --- LEADERBOARD COMMAND ---
-    @bot.tree.command(name="leaderboard", description="Xem bảng xếp hạng level trong server")
-    async def leaderboard(interaction: discord.Interaction):
-        """Xem top 10 người có level/XP cao nhất server"""
-        if not interaction.guild:
-            await interaction.response.send_message("❌ Lệnh này chỉ dùng được trong server!", ephemeral=True)
-            return
-        
-        guild_id = interaction.guild.id
-        all_users = config.get_xp_for_guild(guild_id)
-        
-        if not all_users:
-            embed = discord.Embed(
-                title="🏆 Leaderboard",
-                description="Chưa có ai có XP trong server này! Hãy chat với bot để kiếm XP nhé! 🎯",
-                color=LEVEL_COLOR
-            )
-            await interaction.response.send_message(embed=embed)
-            return
-        
-        # Lấy top 10
-        top_users = all_users[:10]
-        
-        # Medal emojis
-        medals = ["🥇", "🥈", "🥉"]
-        
-        embed = discord.Embed(
-            title=f"🏆 Bảng xếp hạng • {interaction.guild.name}",
-            description="Top 10 người chăm chỉ nhất server!",
-            color=LEVEL_COLOR
-        )
-        
-        lines = []
-        for i, (user_id_str, xp, level) in enumerate(top_users):
-            rank_icon = medals[i] if i < 3 else f"**#{i+1}**"
-            try:
-                member = interaction.guild.get_member(int(user_id_str))
-                name = member.display_name if member else f"<@{user_id_str}>"
-            except Exception:
-                name = f"<@{user_id_str}>"
-            
-            # Format XP
-            xp_str = f"{xp:,}"
-            lines.append(f"{rank_icon} **Level {level}** • {name} `({xp_str} XP)`")
-        
-        embed.description = "\n".join(lines)
-        
-        # Tính total users
-        embed.set_footer(text=f"Tổng số: {len(all_users)} người tham gia")
-        
-        await interaction.response.send_message(embed=embed)
 
     # --- SETTING COMMAND (ADMIN/OWNER) ---
     @bot.tree.command(name="setting", description="[Admin] Tùy chỉnh cấu hình bot cho server")

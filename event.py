@@ -98,28 +98,6 @@ def format_message_for_memory(msg: discord.Message) -> str:
             
     return f"{author_name}: {content}{reply_context}"
 
-# === HÀM TÍNH XP KHI CHAT ===
-async def _process_xp_and_level(message: discord.Message):
-    """Thêm XP khi user chat, thông báo nếu lên level"""
-    if not message.guild or message.author.bot:
-        return
-    
-    guild_id = message.guild.id
-    user_id = message.author.id
-    
-    # Owner không tính XP (tránh gian lận)
-    if user_id == config.OWNER_ID:
-        return
-    
-    xp_gained, level_up = config.add_xp(guild_id, user_id)
-    
-    if level_up:
-        data = config.get_xp_data(guild_id, user_id)
-        await message.channel.send(
-            f"🎉 **{message.author.display_name}** vừa lên **Level {data['level']}**! (Total: {data['xp']} XP)",
-            delete_after=10,
-        )
-
 # === KIỂM TRA DAILY LIMIT ===
 async def _check_daily_limit_and_reply(message: discord.Message) -> bool:
     """Kiểm tra daily limit, trả về True nếu còn lượt, False nếu hết"""
@@ -208,9 +186,6 @@ def register_events(bot):
             if len(CHANNEL_MEMORY[channel_id]) % 20 == 0:
                 save_memory()
             
-            # === ADD XP KHI CHAT ===
-            await _process_xp_and_level(message)
-
         # --- 2. KIỂM TRA CÓ CẦN REPLY KHÔNG ---
         is_dm = message.guild is None
         is_reply_to_bot = (

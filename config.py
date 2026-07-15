@@ -42,13 +42,6 @@ DEFAULT_TEMPERATURE = 0.7
 DEFAULT_HISTORY_LIMIT = 15  # Số tin nhắn nhớ trong channel
 DEFAULT_CONTEXT_LIMIT = 15  # Số tin nhắn nhớ trong chat_history
 
-# XP/Level configuration
-XP_PER_MESSAGE_MIN = 10
-XP_PER_MESSAGE_MAX = 20
-XP_COOLDOWN_SECONDS = 10  # Tránh spam XP bằng cách gửi liên tục
-XP_BONUS_TAG_BOT = 5      # Bonus thêm khi tag bot
-XP_LEVEL_MULTIPLIER = 5   # XP cần để lên level = level * XP_LEVEL_MULTIPLIER
-
 # Daily usage limits
 DAILY_LIMIT_PER_USER = 50  # Số lần gọi AI tối đa mỗi ngày cho mỗi user
 
@@ -95,63 +88,10 @@ class BotConfig:
         self.user_roles: Dict[str, Dict] = {}
         self.guild_settings: Dict[str, Dict] = {}  # guild_id_str -> {max_tokens, temperature, chat_enabled}
         
-        # XP/Level data: key = "{guild_id}_{user_id}", value = {"xp": int, "level": int, "last_msg_time": float}
-        self.user_xp: Dict[str, Dict] = {}
-        
         # Daily usage tracking: key = user_id, value = {"date": "YYYY-MM-DD", "count": int}
         self.daily_usage: Dict[int, Dict] = {}
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
-
-    # --- XP/LEVEL METHODS ---
-    def _xp_key(self, guild_id: int, user_id: int) -> str:
-        return f"{guild_id}_{user_id}"
-
-    def get_xp_data(self, guild_id: int, user_id: int) -> Dict:
-        """Lấy XP data của user trong guild"""
-        key = self._xp_key(guild_id, user_id)
-        if key not in self.user_xp:
-            self.user_xp[key] = {"xp": 0, "level": 1, "last_msg_time": 0}
-        return self.user_xp[key]
-
-    def add_xp(self, guild_id: int, user_id: int, amount: int = None) -> Tuple[int, bool]:
-        """Thêm XP cho user, trả về (xp_mới, có_level_up_không)"""
-        data = self.get_xp_data(guild_id, user_id)
-        now = time.time()
-        
-        # Cooldown check: tránh spam XP
-        if now - data["last_msg_time"] < XP_COOLDOWN_SECONDS:
-            return data["xp"], False
-        
-        data["last_msg_time"] = now
-        if amount is None:
-            amount = random.randint(XP_PER_MESSAGE_MIN, XP_PER_MESSAGE_MAX)
-        
-        data["xp"] += amount
-        old_level = data["level"]
-        new_level = self._calc_level(data["xp"])
-        data["level"] = new_level
-        
-        return data["xp"], new_level > old_level
-
-    def _calc_level(self, xp: int) -> int:
-        """Tính level từ XP: level = floor(xp / XP_LEVEL_MULTIPLIER) + 1"""
-        return (xp // XP_LEVEL_MULTIPLIER) + 1
-
-    def get_level_xp_required(self, level: int) -> int:
-        """XP cần để đạt được level này"""
-        return level * XP_LEVEL_MULTIPLIER
-
-    def get_xp_for_guild(self, guild_id: int) -> List[Tuple[str, int, int]]:
-        """Lấy top XP của guild, trả về list [(user_id_str, xp, level)] (sắp xếp theo XP)"""
-        prefix = f"{guild_id}_"
-        results = []
-        for key, data in self.user_xp.items():
-            if key.startswith(prefix):
-                user_id_str = key.split("_", 1)[1]
-                results.append((user_id_str, data["xp"], data["level"]))
-        results.sort(key=lambda x: x[1], reverse=True)
-        return results
 
     # --- DAILY USAGE METHODS ---
     def _today(self) -> str:
@@ -434,7 +374,6 @@ def save_all_data():
         _atomic_write(f"{data_dir}/user_roles.json", config.user_roles)
         _atomic_write(f"{data_dir}/context_states.json", config.context_states)
         _atomic_write(f"{data_dir}/guild_settings.json", config.guild_settings)
-        _atomic_write(f"{data_dir}/user_xp.json", config.user_xp)
         # Convert int keys to str for JSON serialization
         _atomic_write(f"{data_dir}/daily_usage.json", {str(k): v for k, v in config.daily_usage.items()})
             
@@ -482,12 +421,6 @@ def load_all_data():
                 config.guild_settings = json.load(f)
                 print(f"✅ Loaded guild_settings: {len(config.guild_settings)} guilds")
                 
-        # Load user_xp
-        if os.path.exists(f"{data_dir}/user_xp.json"):
-            with open(f"{data_dir}/user_xp.json", "r", encoding="utf-8") as f:
-                config.user_xp = json.load(f)
-                print(f"✅ Loaded user_xp: {len(config.user_xp)} users")
-                
         # Load daily_usage
         if os.path.exists(f"{data_dir}/daily_usage.json"):
             with open(f"{data_dir}/daily_usage.json", "r", encoding="utf-8") as f:
@@ -534,16 +467,6 @@ def has_avatar_tag(text):
 def remove_avatar_tag(text):
     return config.remove_avatar_tag(text)
 
-# XP convenience functions
-def get_xp_data(guild_id, user_id):
-    return config.get_xp_data(guild_id, user_id)
-
-def add_xp(guild_id, user_id, amount=None):
-    return config.add_xp(guild_id, user_id, amount)
-
-def get_xp_for_guild(guild_id):
-    return config.get_xp_for_guild(guild_id)
-
 def check_daily_limit(user_id):
     return config.check_daily_limit(user_id)
 
@@ -563,7 +486,6 @@ CURRENT_MODEL_ID = config.current_model_id
 CURRENT_MAX_TOKENS = config.max_tokens
 CURRENT_TEMPERATURE = config.temperature
 IS_CHAT_ENABLED = config.is_chat_enabled
-USER_XP = config.user_xp
 DAILY_USAGE = config.daily_usage
 
 # ============================================
@@ -572,4 +494,3 @@ DAILY_USAGE = config.daily_usage
 print("✅ Config loaded successfully!")
 print(f"   - Bot: {BOT_USER_ID} | Owner: {OWNER_ID} | Model: {DEFAULT_MODEL_ID}")
 print(f"   - Port: {PORT} | History: {DEFAULT_HISTORY_LIMIT} | Daily: {DAILY_LIMIT_PER_USER}")
-print(f"   - XP: {XP_PER_MESSAGE_MIN}-{XP_PER_MESSAGE_MAX} per message")
