@@ -7,7 +7,7 @@ from discord.ext import commands
 
 import config
 from cmd import register_commands
-from event import register_events
+from event import register_events, save_memory
 
 # Load data khi khởi động
 config.load_all_data()
@@ -40,7 +40,6 @@ def shutdown_handler():
     """Lưu data khi bot tắt"""
     print("🔄 Đang lưu dữ liệu...")
     config.save_all_data()
-    from event import save_memory
     save_memory()
     print("✅ Đã lưu xong!")
 
@@ -51,7 +50,6 @@ async def shutdown(sig_name: str = "SIGNAL"):
     """Graceful shutdown khi nhận SIGTERM/SIGINT (Koyeb deploy mới)"""
     print(f"\n🛑 Nhận tín hiệu {sig_name}, đang dọn dẹp...")
     config.save_all_data()
-    from event import save_memory
     save_memory()
     await bot.close()
     print("✅ Bot đã ngắt kết nối Discord an toàn!")
@@ -82,7 +80,6 @@ async def main():
     except Exception as e:
         print(f"❌ Lỗi bot: {e}")
         config.save_all_data()
-        from event import save_memory
         save_memory()
 
 if __name__ == "__main__":

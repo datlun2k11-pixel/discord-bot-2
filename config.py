@@ -316,7 +316,7 @@ class GeminiModelWrapper:
 config = BotConfig()
 
 # ============================================
-# 6. SYSTEM PROMPTS (TÁCH RIÊNG DỄ QUẢN LÝ)
+# 7. SYSTEM PROMPTS
 # ============================================
 DEFAULT_SYSTEM_PROMPT = """
 Mày là GenA-Bot, AI hệ GenZ, bạn thân lầy lội của user.
@@ -338,7 +338,7 @@ Tuyệt đối KHÔNG phá vỡ role, KHÔNG nói về việc bạn là AI.
 """
 
 # ============================================
-# 7. ROLEPLAY SAMPLES
+# 8. ROLEPLAY SAMPLES
 # ============================================
 SAMPLE_ROLES = {
     "tsundere": {
@@ -406,7 +406,7 @@ Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 }
 
 # ============================================
-# 8. DATA PERSISTENCE (LƯU TRỮ AN TOÀN)
+# 9. DATA PERSISTENCE
 # ============================================
 def _atomic_write(filepath: str, data: object):
     """Ghi file an toàn: ghi vào temp → rename, tránh corrupt data nếu crash giữa chừng"""
@@ -502,7 +502,7 @@ def load_all_data():
         return False
 
 # ============================================
-# 9. EXPOSE CÁC HÀM TIỆN ÍCH (ĐỂ TƯƠNG THÍCH NGƯỢC)
+# 10. EXPOSE FUNCTIONS (COMPATIBILITY LAYER)
 # ============================================
 def build_intents():
     return config.build_intents()
@@ -551,7 +551,7 @@ def increment_daily_usage(user_id):
     config.increment_daily_usage(user_id)
 
 # ============================================
-# 10. EXPOSE BIẾN (ĐỂ TƯƠNG THÍCH)
+# 11. EXPOSE VARIABLES (COMPATIBILITY LAYER)
 # ============================================
 SPAM_TRACKER = config.spam_tracker
 CONTEXT_STATES = config.context_states
@@ -567,13 +567,9 @@ USER_XP = config.user_xp
 DAILY_USAGE = config.daily_usage
 
 # ============================================
-# 11. VALIDATION KHI IMPORT
+# 12. VALIDATION
 # ============================================
 print("✅ Config loaded successfully!")
-print(f"   - Bot User ID: {BOT_USER_ID}")
-print(f"   - Owner ID: {OWNER_ID}")
-print(f"   - Default Model: {DEFAULT_MODEL_ID}")
-print(f"   - Port: {PORT}")
-print(f"   - History Limit: {DEFAULT_HISTORY_LIMIT} messages")
-print(f"   - Daily Limit: {DAILY_LIMIT_PER_USER} calls/user")
-print(f"   - XP per message: {XP_PER_MESSAGE_MIN}-{XP_PER_MESSAGE_MAX}")
+print(f"   - Bot: {BOT_USER_ID} | Owner: {OWNER_ID} | Model: {DEFAULT_MODEL_ID}")
+print(f"   - Port: {PORT} | History: {DEFAULT_HISTORY_LIMIT} | Daily: {DAILY_LIMIT_PER_USER}")
+print(f"   - XP: {XP_PER_MESSAGE_MIN}-{XP_PER_MESSAGE_MAX} per message")
