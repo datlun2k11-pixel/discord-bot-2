@@ -5,7 +5,8 @@ import time
 from typing import Dict, List, Optional, Any
 from collections import defaultdict
 import discord
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 
 # ============================================
@@ -40,7 +41,9 @@ DEFAULT_CONTEXT_LIMIT = 15  # Số tin nhắn nhớ trong chat_history
 # ============================================
 # 3. KHỞI TẠO GEMINI
 # ============================================
-genai.configure(api_key=GOOGLE_API_KEY)
+# Khởi tạo client (sync + async)
+_client = genai.Client(api_key=GOOGLE_API_KEY)
+_async_client = _client.aio
 
 # ============================================
 # 4. CẤU HÌNH BIẾN TOÀN CỤC (AN TOÀN)
@@ -80,9 +83,9 @@ class BotConfig:
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
-    def get_model(self, model_name: Optional[str] = None) -> genai.GenerativeModel:
+    def get_model(self, model_name: Optional[str] = None) -> "GeminiModelWrapper":
         """Tạo model Gemini với config hiện tại"""
-        return genai.GenerativeModel(
+        return GeminiModelWrapper(
             model_name=model_name or self.current_model_id,
             generation_config={
                 "max_output_tokens": self.max_tokens,
@@ -90,9 +93,9 @@ class BotConfig:
             },
         )
 
-    def get_model_for_guild(self, max_tokens: int, temperature: float) -> genai.GenerativeModel:
+    def get_model_for_guild(self, max_tokens: int, temperature: float) -> "GeminiModelWrapper":
         """Tạo model Gemini với config riêng cho từng guild"""
-        return genai.GenerativeModel(
+        return GeminiModelWrapper(
             model_name=self.current_model_id,
             generation_config={
                 "max_output_tokens": max_tokens,
@@ -174,7 +177,43 @@ class BotConfig:
         return intents
 
 # ============================================
-# 5. SINGLETON INSTANCE
+# 5. MODEL WRAPPER (TƯƠNG THÍCH VỚI API MỚI)
+# ============================================
+class GeminiModelWrapper:
+    """Wrapper class để giữ interface tương thích với code cũ"""
+    def __init__(self, model_name: str, generation_config: dict):
+        self.model_name = model_name
+        self.generation_config = generation_config
+
+    async def generate_content_async(self, contents: list) -> object:
+        """Gọi API generate content bất đồng bộ (tương thích interface cũ)
+        
+        Chuyển đổi image dict thành types.Part objects vì API mới
+        không chấp nhận dict raw như google.generativeai cũ.
+        """
+        processed = []
+        for item in contents:
+            if isinstance(item, dict) and 'mime_type' in item and 'data' in item:
+                processed.append(
+                    types.Part(
+                        inline_data=types.Blob(
+                            mime_type=item['mime_type'],
+                            data=item['data'],
+                        )
+                    )
+                )
+            else:
+                processed.append(item)
+
+        response = await _async_client.models.generate_content(
+            model=self.model_name,
+            contents=processed,
+            config=self.generation_config,
+        )
+        return response
+
+# ============================================
+# 6. SINGLETON INSTANCE
 # ============================================
 config = BotConfig()
 
