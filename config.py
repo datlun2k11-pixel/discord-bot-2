@@ -92,25 +92,20 @@ class BotConfig:
         self.daily_usage: Dict[int, Dict] = {}
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
-        
-        # --- MEMORY CLEANUP ---
-        def cleanup_old_chat_history(self):
-            """Dọn dẹp chat_history quá dài (giới hạn 15 items)"""
-            for ctx_key, history in self.chat_history.items():
-                if len(history) > 15:
-                    self.chat_history[ctx_key] = history[-15:]
-        
-        def cleanup_old_guild_settings(self):
-            """Dọn dẹp guild_settings cũ (nếu cần)"""
-            # Guild settings không cần cleanup thường xuyên, giữ nguyên
-            pass
-        
-        def cleanup_old_daily_usage(self):
-            """Dọn dẹp daily_usage cũ (trước 30 ngày) để tránh memory leak"""
-            cutoff_date = time.strftime("%Y-%m-%d", time.time() - 30*24*60*60)
-            keys_to_remove = [uid for uid, data in self.daily_usage.items() if data["date"] < cutoff_date]
-            for uid in keys_to_remove:
-                del self.daily_usage[uid]
+
+    # --- CLEANUP METHODS ---
+    def cleanup_old_chat_history(self):
+        """Dọn dẹp chat_history quá dài (giới hạn 15 items)"""
+        for ctx_key, history in self.chat_history.items():
+            if len(history) > 15:
+                self.chat_history[ctx_key] = history[-15:]
+
+    def cleanup_old_daily_usage(self):
+        """Dọn dẹp daily_usage cũ (trước 30 ngày) để tránh memory leak"""
+        cutoff_date = time.strftime("%Y-%m-%d", time.localtime(time.time() - 30*24*60*60))
+        keys_to_remove = [uid for uid, data in self.daily_usage.items() if data["date"] < cutoff_date]
+        for uid in keys_to_remove:
+            del self.daily_usage[uid]
 
     # --- DAILY USAGE METHODS ---
     def _today(self) -> str:
@@ -138,24 +133,6 @@ class BotConfig:
             usage["count"] += 1
         else:
             self.daily_usage[user_id] = {"date": self._today(), "count": 1}
-    
-    def check_daily_limit(self, user_id: int) -> Tuple[bool, int]:
-        """Kiểm tra xem user còn lượt chat không. Trả về (còn_lượt_không?, số_lượt_còn_lại)"""
-        today = self._today()
-        if user_id not in self.daily_usage:
-            self.daily_usage[user_id] = {"date": today, "count": 0}
-        
-        usage = self.daily_usage[user_id]
-        # Reset nếu sang ngày mới
-        if usage["date"] != today:
-            usage["date"] = today
-            usage["count"] = 0
-        
-        # Dọn dẹp usage cũ (trước 30 ngày)
-        self.cleanup_old_daily_usage()
-        
-        remaining = DAILY_LIMIT_PER_USER - usage["count"]
-        return remaining > 0, max(0, remaining)
 
     # --- MODEL METHODS ---
     def get_model(self, model_name: Optional[str] = None) -> "GeminiModelWrapper":
@@ -258,7 +235,11 @@ class GeminiModelWrapper:
     """Wrapper class để giữ interface tương thích với code cũ"""
     def __init__(self, model_name: str, generation_config: dict):
         self.model_name = model_name
-        self.generation_config = generation_config
+        # Chuyển dict config thành types.GenerateContentConfig cho API google-genai mới
+        self._generation_config = types.GenerateContentConfig(
+            max_output_tokens=generation_config.get("max_output_tokens", 2048),
+            temperature=generation_config.get("temperature", 0.7),
+        )
 
     async def generate_content_async(self, contents: list) -> object:
         """Gọi API generate content bất đồng bộ (tương thích interface cũ)
@@ -283,7 +264,7 @@ class GeminiModelWrapper:
         response = await _async_client.models.generate_content(
             model=self.model_name,
             contents=processed,
-            config=self.generation_config,
+            config=self._generation_config,
         )
         return response
 
