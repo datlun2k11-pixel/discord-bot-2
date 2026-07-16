@@ -56,14 +56,15 @@ def start_keep_alive():
 
 # Flag để ngăn chặn shutdown loop
 _shutdown_in_progress = False
+_shutdown_event = None  # Event để main() biết khi nào shutdown xong
 
 def shutdown_handler():
-    """Lưu data khi bot tắt (được gọi nhiều lần an toàn)"""
+    """Lưu data khi bot tắt (được gọi nhiều lần an toàn) - chạy sync, gọi từ atexit"""
     global _shutdown_in_progress
     if _shutdown_in_progress:
         return
     _shutdown_in_progress = True
-    print("🔄 Đang lưu dữ liệu...")
+    print("🔄 Đang lưu dữ liệu (shutdown_handler)...")
     try:
         config.save_all_data()
         save_memory()
@@ -95,6 +96,10 @@ async def shutdown(sig_name: str = "SIGNAL"):
         print("✅ Bot đã ngắt kết nối Discord an toàn!")
     except Exception as e:
         print(f"⚠️ Lỗi khi đóng bot: {e}")
+    
+    # Báo hiệu cho main() biết shutdown đã xong
+    if _shutdown_event:
+        _shutdown_event.set()
 
 async def main():
     loop = asyncio.get_running_loop()
@@ -106,9 +111,9 @@ async def main():
         # Dùng closure+default argument để capture đúng giá trị sig
         def _make_handler(sig_name: str):
             def _callback():
-                future = asyncio.run_coroutine_threadsafe(
-                    shutdown(sig_name), loop
-                )
+                # Schedule shutdown - không dùng future.result() tránh deadlock
+                # vì signal handler chạy trên event loop thread
+                asyncio.ensure_future(shutdown(sig_name), loop=loop)
             return _callback
 
         loop.add_signal_handler(sig, _make_handler(sig.name))
@@ -116,11 +121,17 @@ async def main():
     # Chạy Flask health-check (Koyeb cần endpoint / để biết app còn sống)
     start_keep_alive()
 
+    # Tạo event để chờ shutdown signal
+    global _shutdown_event
+    _shutdown_event = asyncio.Event()
+
     try:
         # Dùng bot.start() thay vì bot.run() để không block event loop
         await bot.start(config.DISCORD_TOKEN)
     except KeyboardInterrupt:
         print("\n🛑 Bot đã bị tắt thủ công (Ctrl+C)")
+        # Gọi shutdown thủ công
+        await shutdown("Ctrl+C")
     except Exception as e:
         print(f"❌ Lỗi bot: {e}")
         # Ghi log chi tiết hơn
@@ -132,6 +143,10 @@ async def main():
             save_memory()
         except:
             pass
+    
+    # Nếu shutdown signal được gửi, chờ bot đóng xong
+    if _shutdown_event:
+        await _shutdown_event.wait()
 
 if __name__ == "__main__":
     asyncio.run(main())

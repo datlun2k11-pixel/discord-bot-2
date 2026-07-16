@@ -179,7 +179,7 @@ def register_commands(bot):
                         f"Quay lại vào ngày mai nha! ⏰\n"
                         f"(Lượt sẽ reset lúc **0:00** theo giờ Việt Nam)"
                     ),
-                    color=config.ERROR_COLOR
+                    color=ERROR_COLOR
                 )
                 embed.set_footer(text="=)) chat ít thôi để còn lượt nha bro")
                 await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -221,7 +221,7 @@ Joke phải:
                 embed = discord.Embed(
                     title="😂 Joke Hài Hước",
                     description=f"**Joke về {target_name}:**\n\n{joke_text}",
-                    color=config.BRAND_COLOR
+                    color=BRAND_COLOR
                 )
                 embed.set_footer(text="Được tạo bởi GenA-Bot với Gemini AI")
                 
@@ -243,7 +243,7 @@ Joke phải:
                         f"• Các tính năng khác (lệnh, roleplay) vẫn hoạt động bình thường ✅\n\n"
                         f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
                     ),
-                    color=config.ERROR_COLOR,
+                    color=ERROR_COLOR,
                 )
                 embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
                 await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -252,7 +252,7 @@ Joke phải:
                 embed = discord.Embed(
                     title="💀 Lỗi hệ thống",
                     description=f"Đã xảy ra lỗi khi tạo joke: `{error}`",
-                    color=config.ERROR_COLOR
+                    color=ERROR_COLOR
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
     

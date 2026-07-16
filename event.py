@@ -171,14 +171,8 @@ def register_events(bot):
         if message.author == bot.user:
             return
 
-        # Xử lý lệnh nếu tin nhắn bắt đầu bằng "/" và là lệnh hợp lệ
-        if message.content.startswith("/"):
-            ctx = await bot.get_context(message)
-            if ctx.command is not None:
-                await bot.process_commands(message)
-                return
-            # Nếu không phải lệnh hợp lệ, vẫn tiếp tục xử lý reply nếu có mention
-            # (không return ở đây)
+        # Bot dùng slash commands (app_commands), không dùng prefix commands
+        # Nếu tin nhắn bắt đầu bằng "/" và không phải lệnh hợp lệ, vẫn xử lý reply nếu có mention
 
         # --- 1. LƯU TIN NHẮN VÀO MEMORY (LUÔN LUÔN) ---
         if message.guild:
@@ -195,8 +189,12 @@ def register_events(bot):
             guild_id = message.guild.id
             config.MSG_COUNTERS[guild_id] = config.MSG_COUNTERS.get(guild_id, 0) + 1
             
-            # Lưu memory sau mỗi 20 tin nhắn (giảm I/O, tối ưu cho Koyeb)
-            if len(CHANNEL_MEMORY[channel_id]) % 20 == 0:
+            # Lưu memory sau mỗi 10 tin nhắn mới (giảm I/O, tối ưu cho Koyeb)
+            # Dùng bộ đếm riêng vì deque maxlen=15 không bao giờ đạt 20
+            if not hasattr(save_memory, "_save_counter"):
+                save_memory._save_counter = 0
+            save_memory._save_counter += 1
+            if save_memory._save_counter % 10 == 0:
                 save_memory()
             
         # --- 2. KIỂM TRA CÓ CẦN REPLY KHÔNG ---
@@ -462,7 +460,7 @@ def register_events(bot):
             elif message.author.id == config.OWNER_ID:
                 await message.channel.send(f"Lỗi nè đại ca: `{error}` 💀")
                 
-        await bot.process_commands(message)
+        # Không cần process_commands vì bot dùng slash commands (app_commands)
 
 # --- HÀM PHỤ TRỢ (GIỮ NGUYÊN) ---
 async def _build_invite_url(guild: discord.Guild):
