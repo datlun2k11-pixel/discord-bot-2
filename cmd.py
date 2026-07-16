@@ -159,6 +159,103 @@ def register_commands(bot):
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
     
+    # Thêm lệnh /joke để tạo joke bằng AI
+    @bot.tree.command(name="joke", description="Tạo joke hài hước với username và chủ đề")
+    async def joke(interaction: discord.Interaction, username: discord.Member, topic: str = None):
+        """
+        Tạo joke bằng AI với username và chủ đề được chỉ định
+        - username: @mention của user (bắt buộc)
+        - topic: chủ đề của joke (tùy chọn)
+        """
+        # Kiểm tra daily limit
+        user_id = interaction.user.id
+        if user_id != config.OWNER_ID:
+            has_remaining, remaining = config.check_daily_limit(user_id)
+            if not has_remaining:
+                embed = discord.Embed(
+                    title="😴 Hết lượt chat hôm nay rồi!",
+                    description=(
+                        f"Bạn đã dùng hết **{config.DAILY_LIMIT_PER_USER}** lượt chat với bot hôm nay rồi! 🥀\n\n"
+                        f"Quay lại vào ngày mai nha! ⏰\n"
+                        f"(Lượt sẽ reset lúc **0:00** theo giờ Việt Nam)"
+                    ),
+                    color=config.ERROR_COLOR
+                )
+                embed.set_footer(text="=)) chat ít thôi để còn lượt nha bro")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+        
+        # Lấy display name của user
+        target_name = username.display_name or username.name
+        
+        # Tạo prompt cho Gemini
+        prompt = f"""
+Hãy tạo một joke hài hước, hài hước về người tên là "{target_name}".
+Joke phải:
+- Ngắn gọn, hài hước, dễ hiểu
+- Có liên quan đến display name của người này
+- Dùng ngôn ngữ GenZ, teencode (nx, th, cx, vs, k, thx, j, z, 🤡, 💀...)
+- Có ít nhất 1 emoji/kaomoji (🥀, 💔, 💀, (._.), (¬_¬), (╯°□°）╯︵ ┻━┻)
+"""
+        
+        if topic:
+            prompt += f"\n- Chủ đề của joke là: {topic}"
+        
+        prompt += """
+\nChỉ trả về joke duy nhất, không giải thích, không giới thiệu gì cả."""
+        
+        try:
+            # Kiểm tra typing indicator
+            async with interaction.channel.typing():
+                # Lấy model từ config
+                model = config.get_model(config.CURRENT_MODEL_ID)
+                
+                # Gọi Gemini API
+                response = await model.generate_content_async([prompt])
+                joke_text = config.extract_response_text(response)
+                
+                if not joke_text:
+                    joke_text = "API bị mù rồi, nói lại phát 💀"
+                
+                # Tạo embed
+                embed = discord.Embed(
+                    title="😂 Joke Hài Hước",
+                    description=f"**Joke về {target_name}:**\n\n{joke_text}",
+                    color=config.BRAND_COLOR
+                )
+                embed.set_footer(text="Được tạo bởi GenA-Bot với Gemini AI")
+                
+                await interaction.response.send_message(embed=embed)
+                
+                # Tăng daily usage
+                config.increment_daily_usage(user_id)
+                
+        except Exception as error:
+            error_str = str(error).lower()
+            
+            # Xử lý rate limit
+            if "429" in error_str or "rate" in error_str or "quota" in error_str or "resource exhausted" in error_str:
+                embed = discord.Embed(
+                    title="😴 API hết quota hôm nay rồi!",
+                    description=(
+                        f"**Gemini API** đã hết lượt sử dụng trong hôm nay! 💀\n\n"
+                        f"• Bot sẽ không trả lời được cho tới khi **reset vào 0:00** 🕐\n"
+                        f"• Các tính năng khác (lệnh, roleplay) vẫn hoạt động bình thường ✅\n\n"
+                        f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
+                    ),
+                    color=config.ERROR_COLOR,
+                )
+                embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                # Xử lý lỗi khác
+                embed = discord.Embed(
+                    title="💀 Lỗi hệ thống",
+                    description=f"Đã xảy ra lỗi khi tạo joke: `{error}`",
+                    color=config.ERROR_COLOR
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+    
     # Thêm lệnh /ping đơn giản để test
     @bot.tree.command(name="ping", description="Kiểm tra độ trễ của bot")
     async def ping(interaction: discord.Interaction):
