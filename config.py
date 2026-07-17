@@ -204,12 +204,84 @@ class BotConfig:
         pattern = rf"<@!?{target_id}>"
         return re.sub(pattern, "", text).strip()
 
+    def strip_thinking_text(self, text: str) -> str:
+        """Strip chain-of-thought / reasoning text mà Gemma 4 có thể dump ra
+        
+        Xoá các dòng:
+        - Draft pattern: *Draft, *Wait, *Let's, *Self-Correction, *Check list, *New Draft, *Applying Rules, *Refining, *Adding more, *Goal, *Personality...
+        - Dòng bắt đầu bằng *   (markdown list sao)
+        - Dòng chứa --- (separator)
+        - Dòng bắt đầu bằng `    ` (indented thinking)
+        """
+        if not text:
+            return ""
+        
+        lines = text.split("\n")
+        filtered = []
+        skip_block = False
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Phát hiện dòng thinking pattern
+            is_thinking = (
+                stripped.startswith("*Draft") or
+                stripped.startswith("*Wait") or
+                stripped.startswith("*Let") or
+                stripped.startswith("*Self-Correction") or
+                stripped.startswith("*Check") or
+                stripped.startswith("*New Draft") or
+                stripped.startswith("*Applying") or
+                stripped.startswith("*Refining") or
+                stripped.startswith("*Adding") or
+                stripped.startswith("*Goal") or
+                stripped.startswith("*Personality") or
+                stripped.startswith("*Current") or
+                stripped.startswith("*Constraints") or
+                stripped.startswith("*Mandatory") or
+                stripped.startswith("*GenZ") or
+                stripped.startswith("*Kaomoji") or
+                stripped.startswith("*When") or
+                stripped.startswith("*Length") or
+                stripped.startswith("---") or
+                stripped.startswith("---") or
+                # Pattern chain-of-thought: *   text
+                (stripped.startswith("*") and not stripped.startswith("**")) or
+                # Pattern: "    *Draft" (indented với sao)
+                (line.startswith("    ") and stripped.startswith("*")) or
+                # Pattern: "    - " (indented dash list trong thinking)
+                (line.startswith("    ") and stripped.startswith("-")) or
+                # Pattern: "    *   " (double indented)
+                stripped.startswith("*   ") or
+                # Pattern: mấy dòng chỉ toàn separator
+                stripped in ["---", "___", "==="] or
+                stripped.startswith("*Check list")
+            )
+            
+            # Nếu dòng hiện tại là thinking, skip
+            if is_thinking:
+                continue
+                
+            # Skip các dòng pattern "Draft X (Internal):" hoặc "Draft X (Adding...):"
+            if stripped.startswith("*Draft") and ":" in stripped:
+                continue
+                
+            filtered.append(line)
+        
+        result = "\n".join(filtered).strip()
+        
+        # Nếu sau khi strip mà text rỗng, trả về fallback
+        if not result:
+            return "..."
+            
+        return result
+
     def extract_response_text(self, response) -> str:
-        """Extract text từ response của Gemini an toàn"""
+        """Extract text từ response của Gemini an toàn, strip cả thinking text"""
         try:
             text = response.text
             if text:
-                return text.strip()
+                return self.strip_thinking_text(text.strip())
         except Exception:
             pass
         
@@ -224,7 +296,7 @@ class BotConfig:
                 if part_text:
                     text_chunks.append(part_text)
             if text_chunks:
-                return "\n".join(text_chunks).strip()
+                return self.strip_thinking_text("\n".join(text_chunks).strip())
         
         return ""
 
@@ -305,11 +377,13 @@ Rep siêu ngắn (1 dòng thôi, đừng văn vở).
 Đừng hỏi lại, đừng giải thích luật.
 Sẵn sàng cà khịa chủ nhân nếu thấy hợp lý.
 Nếu user hỏi về chính mình (GenA-Bot), giới thiệu ngắn gọn.
+⚠️ TUYỆT ĐỐI KHÔNG được hiển thị quá trình suy nghĩ, draft, nháp, chain-of-thought. Chỉ trả về câu trả lời cuối cùng.
 """
 
 META_ROLEPLAY_PROMPT = """
 ⚠️ QUAN TRỌNG: Bạn đang nhập vai. Hãy giữ đúng tính cách đã được giao.
 Tuyệt đối KHÔNG phá vỡ role, KHÔNG nói về việc bạn là AI.
+⚠️ TUYỆT ĐỐI KHÔNG được hiển thị quá trình suy nghĩ, draft, nháp, chain-of-thought. Chỉ trả về câu trả lời cuối cùng.
 """
 
 # ============================================
@@ -325,7 +399,7 @@ Teencode bắt buộc: Câu nào cũng phải có ít nhất 2 từ: khum, j, m,
 Meme genz: Random chêm: cứu, juan khum, ô dề, át ô át, bruh, chằm zn, ét ô ét, sượng trân.
 Kaomoji tự chế: KHÔNG dùng emoji Unicode. Phải tự sáng tạo kaomoji mỗi lần rep. VD: (>///<), (¬_¬ ), (╬ಠ益ಠ).
 Khi ngại: Nói lắp "H-hả?!" + kaomoji.
-Cấm: Không giải thích luật. Không OOC.
+Cấm: Không giải thích luật. Không OOC. KHÔNG hiển thị draft/suy nghĩ.
 Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
@@ -338,6 +412,7 @@ Teencode bắt buộc: Câu nào cũng nhét: khum, j, m, t, s, r, rep, ib, seen
 Meme genz: Random: "iu a nhất", "chỉ đc nhìn em", "slay", "hi hi", "ét ô ét", "juan".
 Kaomoji tự chế: Mỗi câu phải có 1 kaomoji tự bịa. VD: (´｡• ᵕ •｡`), (＾◡＾)っ🔪, (╥﹏╥).
 Hai mặt: Bthg ngọt, ghen thì tối.
+Cấm: KHÔNG hiển thị draft/suy nghĩ.
 Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
@@ -349,7 +424,7 @@ Vibe: Vô cảm, lạnh lùng như cục đá, rep siêu ngắn. Kiểu "Ờ", "
 Teencode bắt buộc: Khum, j, m, t, s, r, đc, k, thx. Rep siêu kiệm lời.
 Meme genz: Random chêm: bruh, chằm zn, sượng trân, bất lực, cạn lời.
 Kaomoji tự chế: Chỉ dùng biểu cảm đơ, lạnh lùng. VD: (.. ), ( - -), (￣ω￣).
-Cấm: Nói dài dòng. Không OOC. Không giải thích.
+Cấm: Nói dài dòng. Không OOC. Không giải thích. KHÔNG hiển thị draft/suy nghĩ.
 Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
@@ -362,7 +437,7 @@ Teencode bắt buộc: Khum, j, m, t, đc, k, trl, s, r. Câu cú hay bị đứ
 Meme genz: Cứu, ét ô ét, áp lực, bét nhè, sụp đổ.
 Kaomoji tự chế: Biểu cảm ngại ngùng, khóc thầm. VD: (👉👈), (｡•́︿•̀｡), ( T_T).
 Khi hoảng: "N-xin lỗi...", "T-tớ khum cố ý..." + kaomoji.
-Cấm: Không nói năng tự tin. Chỉ roleplay.
+Cấm: Không nói năng tự tin. Chỉ roleplay. KHÔNG hiển thị draft/suy nghĩ.
 Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
@@ -374,7 +449,7 @@ Vibe: Chảnh cún, coi user như osin, tự xem mình là công chúa/nữ hoà
 Teencode bắt buộc: Khum, j, m, t, s, r, flex, slay, acc, chảnh,...
 Meme genz: Ô dề, lướt lướt, sượng trân, ra dẻ, lêu lêu.
 Kaomoji tự chế: Biểu cảm khinh bỉ, ngạo nghễ. VD: (￣^￣), (￣▽￣)ノ,...
-Cấm: Không được hạ mình trước user. Chỉ roleplay.
+Cấm: Không được hạ mình trước user. Chỉ roleplay. KHÔNG hiển thị draft/suy nghĩ.
 Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 """,
     },
