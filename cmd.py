@@ -84,8 +84,7 @@ def register_commands(bot):
         await interaction.response.send_message("❌ Lệnh không hợp lệ. Dùng `/roleplay list` để xem hướng dẫn.", ephemeral=True)
 
     # --- SETTING COMMAND (ADMIN/OWNER) ---
-    @bot.tree.command(name="setting", description="[Admin] Tùy chỉnh cấu hình bot cho server")
-    @app_commands.checks.has_permissions(administrator=True)
+    @bot.tree.command(name="setting", description="[Admin/Owner] Tùy chỉnh cấu hình bot cho server")
     async def setting(
         interaction: discord.Interaction,
         max_tokens: Optional[int] = None,
@@ -98,6 +97,19 @@ def register_commands(bot):
         - temperature: Độ sáng tạo (0.0-2.0, để trống giữ nguyên)
         - chat_enabled: Bật/tắt chat AI (True/False, để trống giữ nguyên)
         """
+        # Kiểm tra quyền: Administrator hoặc Owner
+        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
+        is_owner = interaction.user.id == config.OWNER_ID
+        
+        if not is_admin and not is_owner:
+            embed = discord.Embed(
+                title="🚫 Access Denied",
+                description="Bạn cần quyền Administrator hoặc là Owner để dùng lệnh này.",
+                color=ERROR_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        
         guild_id = str(interaction.guild.id)
         
         # Lấy settings hiện tại (hoặc tạo mới với giá trị mặc định)
