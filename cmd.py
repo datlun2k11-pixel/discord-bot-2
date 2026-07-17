@@ -261,3 +261,105 @@ Joke phải:
     async def ping(interaction: discord.Interaction):
         latency = round(bot.latency * 1000)
         await interaction.response.send_message(f"Pong! 🏓 Độ trễ: {latency}ms")
+
+    # --- MODEL COMMAND (OWNER ONLY) ---
+    @bot.tree.command(name="model", description="[Owner] Xem/đổi model Gemini đang dùng")
+    @app_commands.describe(
+        action="list (xem danh sách), current (xem model hiện tại), set (đổi model)",
+        model_id="Model ID cần đổi (chỉ cần khi action='set')"
+    )
+    async def model(
+        interaction: discord.Interaction,
+        action: str,
+        model_id: Optional[str] = None
+    ):
+        """
+        Quản lý model Gemini.
+        - action="list": Hiển thị danh sách model có sẵn + highlight model đang dùng
+        - action="current": Hiển thị model hiện tại
+        - action="set": Đổi model (chỉ OWNER mới được)
+        """
+        # Chỉ OWNER được dùng lệnh này
+        if interaction.user.id != config.OWNER_ID:
+            embed = discord.Embed(
+                title="🚫 Access Denied",
+                description="Chỉ Owner mới được quản lý model Gemini.",
+                color=ERROR_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # === ACTION: LIST ===
+        if action == "list":
+            lines = ["**Danh sách model Gemini chính hãng:**\n"]
+            for m in config.AVAILABLE_MODELS:
+                marker = " ✅ **ĐANG DÙNG**" if m == config.config.current_model_id else ""
+                lines.append(f"• `{m}`{marker}")
+            
+            embed = discord.Embed(
+                title="🤖 Danh sách Model Gemini",
+                description="\n".join(lines),
+                color=BRAND_COLOR
+            )
+            embed.set_footer(text=f"Model hiện tại: {config.config.current_model_id}")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # === ACTION: CURRENT ===
+        if action == "current":
+            embed = discord.Embed(
+                title="🤖 Model hiện tại",
+                description=f"Bot đang dùng model: `{config.config.current_model_id}`",
+                color=SUCCESS_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # === ACTION: SET ===
+        if action == "set":
+            if not model_id:
+                await interaction.response.send_message(
+                    "❌ Thiếu `model_id`! Dùng `/model set <model_id>`",
+                    ephemeral=True
+                )
+                return
+            
+            # Validate model_id
+            if model_id not in config.AVAILABLE_MODELS:
+                available = ", ".join(f"`{m}`" for m in config.AVAILABLE_MODELS)
+                await interaction.response.send_message(
+                    f"❌ Model `{model_id}` không hợp lệ!\n\nModel có sẵn: {available}",
+                    ephemeral=True
+                )
+                return
+            
+            # Đổi model
+            old_model = config.config.current_model_id
+            success = config.set_current_model(model_id)
+            
+            if success:
+                # Lưu ngay
+                config.save_all_data()
+                
+                embed = discord.Embed(
+                    title="✅ Đã đổi model",
+                    color=SUCCESS_COLOR,
+                    description=(
+                        f"**Model cũ:** `{old_model}`\n"
+                        f"**Model mới:** `{model_id}`\n\n"
+                        f"Lưu ý: Model mới sẽ được áp dụng cho tất cả chat từ bây giờ."
+                    )
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+            else:
+                await interaction.response.send_message(
+                    f"❌ Không thể đổi sang model `{model_id}`!",
+                    ephemeral=True
+                )
+            return
+
+        # Fallback: action không hợp lệ
+        await interaction.response.send_message(
+            "❌ Action không hợp lệ. Dùng: `list`, `current`, hoặc `set`",
+            ephemeral=True
+        )

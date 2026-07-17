@@ -42,6 +42,13 @@ DEFAULT_TEMPERATURE = 0.7
 DEFAULT_HISTORY_LIMIT = 17  # Số tin nhắn nhớ trong channel
 DEFAULT_CONTEXT_LIMIT = 17  # Số tin nhắn nhớ trong chat_history
 
+# Danh sách model Gemini chính hãng (cập nhật từ Google Docs)
+AVAILABLE_MODELS = [
+    "gemma-4-26b-a4b-it",
+    "gemma-4-31b-it",
+    "gemini-3.1-flash-lite",
+]
+
 # Daily usage limits
 DAILY_LIMIT_PER_USER = 50  # Số lần gọi AI tối đa mỗi ngày cho mỗi user
 
@@ -154,6 +161,16 @@ class BotConfig:
                 "temperature": temperature,
             },
         )
+
+    def set_current_model(self, model_id: str) -> bool:
+        """Đổi model Gemini hiện tại. Trả về True nếu thành công, False nếu model_id không hợp lệ"""
+        if model_id not in AVAILABLE_MODELS:
+            return False
+        self.current_model_id = model_id
+        # Cập nhật module-level variable để các file khác (cmd.py, event.py) thấy được
+        import sys
+        sys.modules[__name__].CURRENT_MODEL_ID = model_id
+        return True
 
     def get_context_key(self, message_or_interaction) -> str:
         """Trả về ID duy nhất: DM -> dm_{user_id}, Server -> channel_id"""
@@ -397,6 +414,10 @@ def save_all_data():
         _atomic_write(f"{data_dir}/guild_settings.json", config.guild_settings)
         # Convert int keys to str for JSON serialization
         _atomic_write(f"{data_dir}/daily_usage.json", {str(k): v for k, v in config.daily_usage.items()})
+        # Lưu current_model_id
+        _atomic_write(f"{data_dir}/model_config.json", {
+            "current_model_id": config.config.current_model_id
+        })
         
         # Backup mechanism - lưu backup mỗi 10 lần save
         if not hasattr(save_all_data, "save_count"):
@@ -488,7 +509,18 @@ def load_all_data():
                 # Convert string keys back to int
                 config.daily_usage = {int(k): v for k, v in config.daily_usage.items()}
                 print(f"✅ Loaded daily_usage: {len(config.daily_usage)} users")
-                
+        
+        # Load current_model_id
+        if os.path.exists(f"{data_dir}/model_config.json"):
+            with open(f"{data_dir}/model_config.json", "r", encoding="utf-8") as f:
+                model_data = json.load(f)
+                saved_model_id = model_data.get("current_model_id")
+                if saved_model_id in AVAILABLE_MODELS:
+                    config.config.current_model_id = saved_model_id
+                    print(f"✅ Loaded model config: {saved_model_id}")
+                else:
+                    print(f"⚠️ Model '{saved_model_id}' không hợp lệ, dùng default: {DEFAULT_MODEL_ID}")
+                    
         return True
     except Exception as e:
         print(f"⚠️ Lỗi load dữ liệu: {e}")
@@ -514,6 +546,9 @@ def get_model(model_name):
 
 def get_model_for_guild(max_tokens, temperature):
     return config.get_model_for_guild(max_tokens, temperature)
+
+def set_current_model(model_id):
+    return config.set_current_model(model_id)
 
 def strip_bot_mention(text, bot_user_id=None):
     return config.strip_bot_mention(text, bot_user_id)
@@ -542,7 +577,7 @@ chat_history = config.chat_history
 MSG_COUNTERS = config.msg_counters
 USER_ROLES = config.user_roles
 GUILD_SETTINGS = config.guild_settings
-CURRENT_MODEL_ID = config.current_model_id
+CURRENT_MODEL_ID = DEFAULT_MODEL_ID  # Sẽ được cập nhật bởi load_all_data() hoặc set_current_model()
 CURRENT_MAX_TOKENS = config.max_tokens
 CURRENT_TEMPERATURE = config.temperature
 IS_CHAT_ENABLED = config.is_chat_enabled
