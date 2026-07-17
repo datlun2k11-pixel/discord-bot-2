@@ -3,11 +3,23 @@ from discord import app_commands
 from discord.ext import commands
 import config
 import datetime
-from typing import Optional
+from typing import Optional, List
 # Branding màu sắc cho Embed
 BRAND_COLOR = 0x00F0FF
 ERROR_COLOR = 0xFF0040
 SUCCESS_COLOR = 0x00FF88
+
+# --- AUTOCOMPLETE CHO ROLEPLAY CHARACTERS ---
+async def autocomplete_characters(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """Autocomplete gợi ý tên nhân vật khi gõ /roleplay start"""
+    choices = []
+    for key, role in config.SAMPLE_ROLES.items():
+        # Nếu chưa gõ gì thì hiện full list, nếu có gõ thì filter
+        if not current or current.lower() in key.lower() or current.lower() in role["name"].lower():
+            choices.append(app_commands.Choice(name=f"{role['name']} ({key})", value=key))
+    # Giới hạn 25 choices (Discord limit)
+    return choices[:25]
+
 def register_commands(bot):
     # --- GLOBAL ERROR HANDLER FOR PERMISSIONS ---
     @bot.tree.error
@@ -28,9 +40,19 @@ def register_commands(bot):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # --- ROLEPLAY COMMAND (DỄ DÙNG CHO MỌI NGƯỜI) ---
-    @bot.tree.command(name="roleplay", description="Bật/Tắt chế độ nhập vai với các tính cách có sẵn")
-    async def roleplay(interaction: discord.Interaction, action: str = "list", character: str = None):
+    # --- ROLEPLAY COMMAND (NÂNG CẤP - DỄ DÙNG HƠN) ---
+    @bot.tree.command(name="roleplay", description="🎭 Bật/Tắt chế độ nhập vai với các tính cách có sẵn")
+    @app_commands.describe(
+        action="Chọn hành động muốn thực hiện",
+        character="Tên nhân vật (chỉ cần khi chọn Bắt đầu)",
+    )
+    @app_commands.choices(action=[
+        app_commands.Choice(name="📋 Xem danh sách nhân vật", value="list"),
+        app_commands.Choice(name="🎭 Bắt đầu nhập vai", value="start"),
+        app_commands.Choice(name="🛑 Dừng nhập vai", value="stop"),
+    ])
+    @app_commands.autocomplete(character=autocomplete_characters)
+    async def roleplay(interaction: discord.Interaction, action: str = "list", character: Optional[str] = None):
         """
         action: 'list' (xem danh sách), 'start' (bắt đầu), 'stop' (dừng)
         character: tên nhân vật (chỉ cần khi action là 'start')
@@ -45,6 +67,7 @@ def register_commands(bot):
                 description=f"Dùng lệnh `/roleplay start <tên>` để bắt đầu.\n\n{roles_list}",
                 color=BRAND_COLOR
             )
+            embed.set_footer(text="💡 Chọn action 'Bắt đầu' rồi chọn nhân vật từ dropdown!")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
@@ -63,10 +86,18 @@ def register_commands(bot):
         if action == "start":
             if not character or character.lower() not in config.SAMPLE_ROLES:
                 available = ", ".join(config.SAMPLE_ROLES.keys())
-                await interaction.response.send_message(
-                    f"❌ Sai tên nhân vật rồi bro! Chọn 1 trong mấy cái này: `{available}`",
-                    ephemeral=True
+                roles_display = "\n".join([f"• `{k}` - {v['name']}" for k, v in config.SAMPLE_ROLES.items()])
+                embed = discord.Embed(
+                    title="❌ Sai tên nhân vật",
+                    description=(
+                        f"Bro chưa chọn nhân vật kìa! 🤡\n\n"
+                        f"**Các nhân vật có sẵn:**\n"
+                        f"{roles_display}\n\n"
+                        f"📝 **Cách dùng:** Chọn action **Bắt đầu** → gõ tên nhân vật vào ô **character**"
+                    ),
+                    color=ERROR_COLOR
                 )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
             
             selected_role = config.SAMPLE_ROLES[character.lower()]
@@ -74,9 +105,14 @@ def register_commands(bot):
             
             embed = discord.Embed(
                 title=f"🎭 Đang nhập vai: {selected_role['name']}",
-                description="Từ giờ t sẽ nói chuyện đúng tính cách này. Thử tag t xem nào!",
+                description=(
+                    f"Từ giờ t sẽ nói chuyện như **{selected_role['name']}**! 🎭\n\n"
+                    f"📌 **Cách dùng:** Tag bot hoặc reply tin nhắn của bot để nói chuyện\n"
+                    f"🛑 **Tắt:** Dùng `/roleplay stop`"
+                ),
                 color=SUCCESS_COLOR
             )
+            embed.set_footer(text="=)) chuẩn bị tinh thần đi bro")
             await interaction.response.send_message(embed=embed, ephemeral=False) # Public để mọi người cùng thấy và chơi chung
             return
 
