@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import shutil
+import asyncio
 from collections import deque
 from typing import Dict, Optional
 import discord
@@ -18,13 +19,19 @@ MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024  # 5MB
 # Cấu trúc: {channel_id: deque(maxlen=15)}
 CHANNEL_MEMORY: Dict[int, deque] = {}
 
-# Lock cho thread-safe memory saving
-import asyncio
-_save_lock = asyncio.Lock()
+# Lock cho thread-safe memory saving (khởi tạo lazy để tránh lỗi event loop)
+_save_lock: asyncio.Lock = None
 _save_counter = 0
 
 # File lưu memory (để khi restart bot vẫn nhớ)
 MEMORY_FILE = "channel_memory.json"
+
+def _get_save_lock() -> asyncio.Lock:
+    """Lazy initialization of asyncio.Lock để tránh lỗi event loop chưa tồn tại"""
+    global _save_lock
+    if _save_lock is None:
+        _save_lock = asyncio.Lock()
+    return _save_lock
 
 def load_memory():
     """Load memory từ file JSON khi bot khởi động"""
@@ -197,7 +204,7 @@ def register_events(bot):
             # Lưu memory sau mỗi 10 tin nhắn mới (giảm I/O, tối ưu cho Koyeb)
             # Dùng module-level counter với lock cho thread-safety
             global _save_counter
-            async with _save_lock:
+            async with _get_save_lock():
                 _save_counter += 1
                 if _save_counter % 10 == 0:
                     save_memory()

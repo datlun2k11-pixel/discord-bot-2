@@ -383,7 +383,7 @@ Joke phải:
                 return
             
             # Đổi model
-            old_model = config.config.current_model_id
+            old_model = config.current_model_id
             success = config.set_current_model(model_id)
             
             if success:

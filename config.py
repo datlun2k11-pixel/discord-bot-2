@@ -36,7 +36,7 @@ BOT_USER_ID = int(os.getenv("BOT_USER_ID", 1458799287910535324))
 OWNER_ID = int(os.getenv("OWNER_ID", 1155129530122510376))
 
 # Cấu hình mặc định
-DEFAULT_MODEL_ID = "gemini-3.1-flash-lite"  # Model Gemini mới nhất
+DEFAULT_MODEL_ID = "gemini-1.5-flash"  # Model Gemini ổn định, miễn phí
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_HISTORY_LIMIT = 17  # Số tin nhắn nhớ trong channel
@@ -44,9 +44,10 @@ DEFAULT_CONTEXT_LIMIT = 17  # Số tin nhắn nhớ trong chat_history
 
 # Danh sách model Gemini chính hãng (cập nhật từ Google Docs)
 AVAILABLE_MODELS = [
-    "gemma-4-26b-a4b-it",
-    "gemma-4-31b-it",
-    "gemini-3.1-flash-lite",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+    "gemini-2.0-flash-thinking-exp",
 ]
 
 # Daily usage limits
@@ -167,8 +168,7 @@ class BotConfig:
         if model_id not in AVAILABLE_MODELS:
             return False
         self.current_model_id = model_id
-        import sys
-        sys.modules[__name__].CURRENT_MODEL_ID = model_id
+        _update_module_globals()
         return True
 
     def get_context_key(self, message_or_interaction) -> str:
@@ -617,7 +617,7 @@ def get_context_state(ctx_key):
 def set_context_state(ctx_key, active, role_config):
     config.set_context_state(ctx_key, active, role_config)
 
-def get_model(model_name):
+def get_model(model_name=None):
     return config.get_model(model_name)
 
 def get_model_for_guild(max_tokens, temperature):
@@ -653,14 +653,29 @@ chat_history = config.chat_history
 MSG_COUNTERS = config.msg_counters
 USER_ROLES = config.user_roles
 GUILD_SETTINGS = config.guild_settings
-CURRENT_MODEL_ID = DEFAULT_MODEL_ID  # Sẽ được cập nhật bởi load_all_data() hoặc set_current_model()
+
+# Dynamic properties - these will be accessed directly from config instance
 CURRENT_MAX_TOKENS = config.max_tokens
 CURRENT_TEMPERATURE = config.temperature
 IS_CHAT_ENABLED = config.is_chat_enabled
 DAILY_USAGE = config.daily_usage
 
 # ============================================
-# 12. VALIDATION
+# 12. DYNAMIC PROPERTIES (UPDATED BY SET_CURRENT_MODEL)
+# ============================================
+def _update_module_globals():
+    """Update module-level globals when config changes"""
+    global CURRENT_MODEL_ID, CURRENT_MAX_TOKENS, CURRENT_TEMPERATURE, IS_CHAT_ENABLED
+    CURRENT_MODEL_ID = config.current_model_id
+    CURRENT_MAX_TOKENS = config.max_tokens
+    CURRENT_TEMPERATURE = config.temperature
+    IS_CHAT_ENABLED = config.is_chat_enabled
+
+# Initialize
+CURRENT_MODEL_ID = config.current_model_id
+
+# ============================================
+# 13. VALIDATION
 # ============================================
 print("✅ Config loaded successfully!")
 print(f"   - Bot: {BOT_USER_ID} | Owner: {OWNER_ID} | Model: {DEFAULT_MODEL_ID}")
