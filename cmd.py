@@ -252,32 +252,33 @@ Joke phải:
         prompt += """
 \nChỉ trả về joke duy nhất, không giải thích, không giới thiệu gì cả."""
         
+        # Defer response vì gọi API có thể mất >3s
+        await interaction.response.defer()
+        
         try:
-            # Kiểm tra typing indicator
-            async with interaction.channel.typing():
-                # Lấy model từ config
-                model = config.get_model(config.CURRENT_MODEL_ID)
-                
-                # Gọi Gemini API
-                response = await model.generate_content_async([prompt])
-                joke_text = config.extract_response_text(response)
-                
-                if not joke_text:
-                    joke_text = "API bị mù rồi, nói lại phát 💀"
-                
-                # Tạo embed
-                embed = discord.Embed(
-                    title="😂 Joke Hài Hước",
-                    description=f"**Joke về {target_name}:**\n\n{joke_text}",
-                    color=BRAND_COLOR
-                )
-                embed.set_footer(text="Được tạo bởi GenA-Bot với Gemini AI")
-                
-                await interaction.response.send_message(embed=embed)
-                
-                # Tăng daily usage
-                config.increment_daily_usage(user_id)
-                
+            # Lấy model từ config (dùng instance method)
+            model = config.get_model()
+            
+            # Gọi Gemini API
+            response = await model.generate_content_async([prompt])
+            joke_text = config.extract_response_text(response)
+            
+            if not joke_text:
+                joke_text = "API bị mù rồi, nói lại phát 💀"
+            
+            # Tạo embed
+            embed = discord.Embed(
+                title="😂 Joke Hài Hước",
+                description=f"**Joke về {target_name}:**\n\n{joke_text}",
+                color=BRAND_COLOR
+            )
+            embed.set_footer(text="Được tạo bởi GenA-Bot với Gemini AI")
+            
+            await interaction.followup.send(embed=embed)
+            
+            # Tăng daily usage
+            config.increment_daily_usage(user_id)
+            
         except Exception as error:
             error_str = str(error).lower()
             
@@ -294,7 +295,7 @@ Joke phải:
                     color=ERROR_COLOR,
                 )
                 embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 # Xử lý lỗi khác
                 embed = discord.Embed(
@@ -302,7 +303,7 @@ Joke phải:
                     description=f"Đã xảy ra lỗi khi tạo joke: `{error}`",
                     color=ERROR_COLOR
                 )
-                await interaction.response.send_message(embed=embed, ephemeral=True)
+                await interaction.followup.send(embed=embed, ephemeral=True)
     
     # Thêm lệnh /ping đơn giản để test
     @bot.tree.command(name="ping", description="Kiểm tra độ trễ của bot")
@@ -341,7 +342,7 @@ Joke phải:
         if action == "list":
             lines = ["**Danh sách model Gemini chính hãng:**\n"]
             for m in config.AVAILABLE_MODELS:
-                marker = " ✅ **ĐANG DÙNG**" if m == config.config.current_model_id else ""
+                marker = " ✅ **ĐANG DÙNG**" if m == config.current_model_id else ""
                 lines.append(f"• `{m}`{marker}")
             
             embed = discord.Embed(
@@ -349,7 +350,7 @@ Joke phải:
                 description="\n".join(lines),
                 color=BRAND_COLOR
             )
-            embed.set_footer(text=f"Model hiện tại: {config.config.current_model_id}")
+            embed.set_footer(text=f"Model hiện tại: {config.current_model_id}")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
@@ -357,7 +358,7 @@ Joke phải:
         if action == "current":
             embed = discord.Embed(
                 title="🤖 Model hiện tại",
-                description=f"Bot đang dùng model: `{config.config.current_model_id}`",
+                description=f"Bot đang dùng model: `{config.current_model_id}`",
                 color=SUCCESS_COLOR
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)

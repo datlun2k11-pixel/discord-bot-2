@@ -14,9 +14,14 @@ RATE_LIMIT_MAX_REQUESTS = 20  # Tối đa 20 request mỗi 60 giây
 MAX_ATTACHMENT_SIZE = 5 * 1024 * 1024  # 5MB
 
 # --- BỘ NHỚ THÔNG MINH CHO KOYEB ---
-# CHANNEL_MEMORY: lưu 17 tin nhắn gần nhất mỗi channel
-# Cấu trúc: {channel_id: deque(maxlen=17)}
+# CHANNEL_MEMORY: lưu 15 tin nhắn gần nhất mỗi channel
+# Cấu trúc: {channel_id: deque(maxlen=15)}
 CHANNEL_MEMORY: Dict[int, deque] = {}
+
+# Lock cho thread-safe memory saving
+import asyncio
+_save_lock = asyncio.Lock()
+_save_counter = 0
 
 # File lưu memory (để khi restart bot vẫn nhớ)
 MEMORY_FILE = "channel_memory.json"
@@ -190,12 +195,12 @@ def register_events(bot):
             config.MSG_COUNTERS[guild_id] = config.MSG_COUNTERS.get(guild_id, 0) + 1
             
             # Lưu memory sau mỗi 10 tin nhắn mới (giảm I/O, tối ưu cho Koyeb)
-            # Dùng bộ đếm riêng vì deque maxlen=15 không bao giờ đạt 20
-            if not hasattr(save_memory, "_save_counter"):
-                save_memory._save_counter = 0
-            save_memory._save_counter += 1
-            if save_memory._save_counter % 10 == 0:
-                save_memory()
+            # Dùng module-level counter với lock cho thread-safety
+            global _save_counter
+            async with _save_lock:
+                _save_counter += 1
+                if _save_counter % 10 == 0:
+                    save_memory()
             
         # --- 2. KIỂM TRA CÓ CẦN REPLY KHÔNG ---
         is_dm = message.guild is None
@@ -215,7 +220,7 @@ def register_events(bot):
             guild_settings = config.GUILD_SETTINGS.get(str(message.guild.id), {})
             if guild_settings.get("chat_enabled") is False:
                 return
-        elif not config.IS_CHAT_ENABLED:
+        elif not config.is_chat_enabled:
             return
 
         # === KIỂM TRA DAILY LIMIT ===
@@ -272,6 +277,19 @@ def register_events(bot):
                 )
                 return
 
+            # Cleanup SPAM_TRACKER định kỳ (giảm memory leak)
+            if not hasattr(config, "_spam_cleanup_counter"):
+                config._spam_cleanup_counter = 0
+            config._spam_cleanup_counter += 1
+            if config._spam_cleanup_counter % 100 == 0:
+                cutoff = now - 3600  # 1 giờ
+                keys_to_del = [
+                    uid for uid, data in config.SPAM_TRACKER.items()
+                    if data["blocked_until"] < now and not data["last_msgs"]
+                ]
+                for uid in keys_to_del:
+                    del config.SPAM_TRACKER[uid]
+
         # --- 4. XÂY DỰNG CONTEXT CHO AI ---
         ctx_key = config.get_context_key(message)
         state = config.get_context_state(ctx_key)
@@ -315,7 +333,7 @@ def register_events(bot):
                     g_temperature = guild_settings.get("temperature", config.DEFAULT_TEMPERATURE)
                     model = config.get_model_for_guild(g_max_tokens, g_temperature)
                 else:
-                    model = config.get_model(config.CURRENT_MODEL_ID)
+                    model = config.get_model()
                 clean_content = config.strip_bot_mention(
                     message.content,
                     bot.user.id if bot.user else None,

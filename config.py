@@ -167,7 +167,6 @@ class BotConfig:
         if model_id not in AVAILABLE_MODELS:
             return False
         self.current_model_id = model_id
-        # Cập nhật module-level variable để các file khác (cmd.py, event.py) thấy được
         import sys
         sys.modules[__name__].CURRENT_MODEL_ID = model_id
         return True
@@ -491,7 +490,7 @@ def save_all_data():
         _atomic_write(f"{data_dir}/daily_usage.json", {str(k): v for k, v in config.daily_usage.items()})
         # Lưu current_model_id
         _atomic_write(f"{data_dir}/model_config.json", {
-            "current_model_id": config.config.current_model_id
+            "current_model_id": config.current_model_id
         })
         
         # Backup mechanism - lưu backup mỗi 10 lần save
@@ -591,7 +590,9 @@ def load_all_data():
                 model_data = json.load(f)
                 saved_model_id = model_data.get("current_model_id")
                 if saved_model_id in AVAILABLE_MODELS:
-                    config.config.current_model_id = saved_model_id
+                    config.current_model_id = saved_model_id
+                    import sys
+                    sys.modules[__name__].CURRENT_MODEL_ID = saved_model_id
                     print(f"✅ Loaded model config: {saved_model_id}")
                 else:
                     print(f"⚠️ Model '{saved_model_id}' không hợp lệ, dùng default: {DEFAULT_MODEL_ID}")
