@@ -167,7 +167,6 @@ class BotConfig:
         if model_id not in AVAILABLE_MODELS:
             return False
         self.current_model_id = model_id
-        _update_module_globals()
         return True
 
     def get_context_key(self, message_or_interaction) -> str:
@@ -242,7 +241,7 @@ class BotConfig:
                 stripped.startswith("*When") or
                 stripped.startswith("*Length") or
                 stripped.startswith("---") or
-                stripped.startswith("---") or
+                stripped.startswith("___") or
                 # Pattern chain-of-thought: *   text
                 (stripped.startswith("*") and not stripped.startswith("**")) or
                 # Pattern: "    *Draft" (indented với sao)
@@ -590,8 +589,6 @@ def load_all_data():
                 saved_model_id = model_data.get("current_model_id")
                 if saved_model_id in AVAILABLE_MODELS:
                     config.current_model_id = saved_model_id
-                    import sys
-                    sys.modules[__name__].CURRENT_MODEL_ID = saved_model_id
                     print(f"✅ Loaded model config: {saved_model_id}")
                 else:
                     print(f"⚠️ Model '{saved_model_id}' không hợp lệ, dùng default: {DEFAULT_MODEL_ID}")
@@ -653,25 +650,7 @@ MSG_COUNTERS = config.msg_counters
 USER_ROLES = config.user_roles
 GUILD_SETTINGS = config.guild_settings
 
-# Dynamic properties - these will be accessed directly from config instance
-CURRENT_MAX_TOKENS = config.max_tokens
-CURRENT_TEMPERATURE = config.temperature
-IS_CHAT_ENABLED = config.is_chat_enabled
 DAILY_USAGE = config.daily_usage
-
-# ============================================
-# 12. DYNAMIC PROPERTIES (UPDATED BY SET_CURRENT_MODEL)
-# ============================================
-def _update_module_globals():
-    """Update module-level globals when config changes"""
-    global CURRENT_MODEL_ID, CURRENT_MAX_TOKENS, CURRENT_TEMPERATURE, IS_CHAT_ENABLED
-    CURRENT_MODEL_ID = config.current_model_id
-    CURRENT_MAX_TOKENS = config.max_tokens
-    CURRENT_TEMPERATURE = config.temperature
-    IS_CHAT_ENABLED = config.is_chat_enabled
-
-# Initialize
-CURRENT_MODEL_ID = config.current_model_id
 
 # ============================================
 # 13. VALIDATION

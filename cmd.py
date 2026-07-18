@@ -146,6 +146,14 @@ def register_commands(bot):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
+        if not interaction.guild:
+            embed = discord.Embed(
+                title="❌ Không hỗ trợ DM",
+                description="Lệnh `/setting` chỉ dùng được trong server.",
+                color=ERROR_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
         guild_id = str(interaction.guild.id)
         
         # Lấy settings hiện tại (hoặc tạo mới với giá trị mặc định)
