@@ -589,6 +589,8 @@ def load_all_data():
                 saved_model_id = model_data.get("current_model_id")
                 if saved_model_id in AVAILABLE_MODELS:
                     config.current_model_id = saved_model_id
+                    import sys
+                    sys.modules[__name__].current_model_id = saved_model_id
                     print(f"✅ Loaded model config: {saved_model_id}")
                 else:
                     print(f"⚠️ Model '{saved_model_id}' không hợp lệ, dùng default: {DEFAULT_MODEL_ID}")
@@ -620,7 +622,11 @@ def get_model_for_guild(max_tokens, temperature):
     return config.get_model_for_guild(max_tokens, temperature)
 
 def set_current_model(model_id):
-    return config.set_current_model(model_id)
+    global current_model_id
+    result = config.set_current_model(model_id)
+    if result:
+        current_model_id = config.current_model_id
+    return result
 
 def strip_bot_mention(text, bot_user_id=None):
     return config.strip_bot_mention(text, bot_user_id)
@@ -651,6 +657,7 @@ USER_ROLES = config.user_roles
 GUILD_SETTINGS = config.guild_settings
 
 DAILY_USAGE = config.daily_usage
+current_model_id = config.current_model_id
 
 # ============================================
 # 13. VALIDATION
