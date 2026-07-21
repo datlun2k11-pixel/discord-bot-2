@@ -724,8 +724,8 @@ def set_context_state(ctx_key, active, role_config):
 def get_model(model_name=None):
     return config.get_model(model_name)
 
-def get_model_for_guild(max_tokens, temperature):
-    return config.get_model_for_guild(max_tokens, temperature)
+def get_model_for_guild(max_tokens, temperature, guild_id=None):
+    return config.get_model_for_guild(max_tokens, temperature, guild_id)
 
 def set_current_model(model_id):
     global current_model_id
