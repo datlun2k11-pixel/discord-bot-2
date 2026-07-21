@@ -215,6 +215,100 @@ def register_commands(bot):
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
     
+    # --- SETUP COMMAND (ADMIN/OWNER) ---
+    @bot.tree.command(name="setup", description="[Admin/Owner] Cấu hình OpenAI-compatible provider cho server")
+    async def setup(
+        interaction: discord.Interaction,
+        base_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+    ):
+        is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
+        is_owner = interaction.user.id == config.OWNER_ID
+        if not is_admin and not is_owner:
+            embed = discord.Embed(
+                title="🚫 Access Denied",
+                description="Bạn cần quyền Administrator hoặc là Owner để dùng lệnh này.",
+                color=ERROR_COLOR,
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        if not interaction.guild:
+            embed = discord.Embed(
+                title="❌ Không hỗ trợ DM",
+                description="Lệnh `/setup` chỉ dùng được trong server.",
+                color=ERROR_COLOR,
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        guild_id = str(interaction.guild.id)
+        current = config.PROVIDER_SETTINGS.get(guild_id, {})
+
+        changed = []
+
+        if base_url is not None:
+            if not base_url.startswith(("http://", "https://")):
+                await interaction.response.send_message(
+                    "❌ `base_url` phải bắt đầu bằng http:// hoặc https://!",
+                    ephemeral=True,
+                )
+                return
+            current["base_url"] = base_url.rstrip("/")
+            changed.append(f"base_url: {base_url}")
+
+        if api_key is not None:
+            if not api_key.strip():
+                await interaction.response.send_message(
+                    "❌ `api_key` không được để trống!",
+                    ephemeral=True,
+                )
+                return
+            current["api_key"] = api_key.strip()
+            changed.append("api_key: ✅ đã đặt")
+
+        if model is not None:
+            if not model.strip():
+                await interaction.response.send_message(
+                    "❌ `model` không được để trống!",
+                    ephemeral=True,
+                )
+                return
+            current["model"] = model.strip()
+            changed.append(f"model: {model}")
+
+        if not changed:
+            if current:
+                embed = discord.Embed(
+                    title="🔧 Cấu hình provider hiện tại",
+                    color=BRAND_COLOR,
+                    description=f"**Server:** {interaction.guild.name}",
+                )
+                embed.add_field(name="Base URL", value=current.get("base_url", "❌"), inline=False)
+                embed.add_field(name="Model", value=current.get("model", "gpt-4o-mini"), inline=True)
+                embed.add_field(name="API Key", value="✅ đã đặt" if current.get("api_key") else "❌", inline=True)
+                embed.set_footer(text="Dùng /setup <option> <value> để thay đổi")
+            else:
+                embed = discord.Embed(
+                    title="🔧 Chưa cấu hình provider",
+                    color=ERROR_COLOR,
+                    description="Server chưa set provider nào. Dùng `/setup base_url:... api_key:... model:...` để thêm.",
+                )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        config.PROVIDER_SETTINGS[guild_id] = current
+        config.save_all_data()
+
+        embed = discord.Embed(
+            title="✅ Đã cập nhật provider",
+            color=SUCCESS_COLOR,
+            description="\n".join([f"• Đã đặt **{c}**" for c in changed]),
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+    
+    
     # Thêm lệnh /joke để tạo joke bằng AI
     @bot.tree.command(name="joke", description="Tạo joke hài hước với username và chủ đề")
     async def joke(interaction: discord.Interaction, username: discord.Member, topic: str = None):

@@ -335,10 +335,11 @@ def register_events(bot):
             async with message.channel.typing():
                 # Sử dụng guild-specific settings nếu có
                 if message.guild:
-                    guild_settings = config.GUILD_SETTINGS.get(str(message.guild.id), {})
+                    guild_id = str(message.guild.id)
+                    guild_settings = config.GUILD_SETTINGS.get(guild_id, {})
                     g_max_tokens = guild_settings.get("max_tokens", config.DEFAULT_MAX_TOKENS)
                     g_temperature = guild_settings.get("temperature", config.DEFAULT_TEMPERATURE)
-                    model = config.get_model_for_guild(g_max_tokens, g_temperature)
+                    model = config.get_model_for_guild(g_max_tokens, g_temperature, guild_id)
                 else:
                     model = config.get_model()
                 clean_content = config.strip_bot_mention(

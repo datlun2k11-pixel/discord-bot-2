@@ -96,6 +96,9 @@ class BotConfig:
         self.user_roles: Dict[str, Dict] = {}
         self.guild_settings: Dict[str, Dict] = {}  # guild_id_str -> {max_tokens, temperature, chat_enabled}
         
+        # Provider settings per guild: guild_id_str -> {base_url, api_key, model}
+        self.provider_settings: Dict[str, Dict] = {}
+        
         # Daily usage tracking: key = user_id, value = {"date": "YYYY-MM-DD", "count": int}
         self.daily_usage: Dict[int, Dict] = {}
         
@@ -153,8 +156,19 @@ class BotConfig:
             },
         )
 
-    def get_model_for_guild(self, max_tokens: int, temperature: float) -> "GeminiModelWrapper":
-        """Tạo model Gemini với config riêng cho từng guild"""
+    def get_model_for_guild(self, max_tokens: int, temperature: float, guild_id: Optional[str] = None):
+        """Tạo model - nếu guild có provider_settings thì dùng OpenAI-compatible, không thì Gemini"""
+        if guild_id and guild_id in self.provider_settings:
+            provider = self.provider_settings[guild_id]
+            return OpenAICompatibleWrapper(
+                base_url=provider["base_url"],
+                api_key=provider["api_key"],
+                model_id=provider.get("model", "gpt-4o-mini"),
+                generation_config={
+                    "max_output_tokens": max_tokens,
+                    "temperature": temperature,
+                },
+            )
         return GeminiModelWrapper(
             model_name=self.current_model_id,
             generation_config={
@@ -355,6 +369,88 @@ class GeminiModelWrapper:
         )
         return response
 
+
+class OpenAICompatibleWrapper:
+    """Wrapper cho API tương thích OpenAI (OpenAI, vLLM, Ollama, Groq, ...)
+    
+    Dùng raw HTTP requests (aiohttp), không cần thư viện openai.
+    """
+
+    def __init__(self, base_url: str, api_key: str, model_id: str, generation_config: dict):
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model_id = model_id
+        self.max_tokens = generation_config.get("max_output_tokens", 2048)
+        self.temperature = generation_config.get("temperature", 0.7)
+
+    async def generate_content_async(self, contents: list) -> object:
+        import aiohttp
+        import base64
+
+        system_msg = None
+        user_parts = []
+
+        for i, item in enumerate(contents):
+            if isinstance(item, dict) and "mime_type" in item and "data" in item:
+                b64 = base64.b64encode(item["data"]).decode("utf-8")
+                user_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:{item['mime_type']};base64,{b64}"},
+                })
+            elif i == 0 and isinstance(item, str):
+                system_msg = item
+            elif isinstance(item, str):
+                if user_parts and user_parts[-1].get("type") == "text":
+                    user_parts[-1]["text"] += "\n" + item
+                else:
+                    user_parts.append({"type": "text", "text": item})
+
+        messages = []
+        if system_msg:
+            messages.append({"role": "system", "content": system_msg})
+
+        if len(user_parts) == 1 and user_parts[0]["type"] == "text":
+            messages.append({"role": "user", "content": user_parts[0]["text"]})
+        else:
+            messages.append({"role": "user", "content": user_parts})
+
+        payload = {
+            "model": self.model_id,
+            "messages": messages,
+            "max_tokens": self.max_tokens,
+            "temperature": self.temperature,
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{self.base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            ) as resp:
+                data = await resp.json()
+
+        if "choices" in data and len(data["choices"]) > 0:
+            text = data["choices"][0]["message"]["content"]
+            return _OpenAIResponse(text)
+
+        error_msg = data.get("error", {}).get("message", str(data))
+        raise Exception(f"API error: {error_msg}")
+
+
+class _OpenAIResponse:
+    """Wrapper nhỏ để tương thích với extract_response_text"""
+
+    def __init__(self, text: str):
+        self._text = text
+
+    @property
+    def text(self):
+        return self._text
+
+
 # ============================================
 # 6. SINGLETON INSTANCE
 # ============================================
@@ -487,6 +583,8 @@ def save_all_data():
         _atomic_write(f"{data_dir}/guild_settings.json", config.guild_settings)
         # Convert int keys to str for JSON serialization
         _atomic_write(f"{data_dir}/daily_usage.json", {str(k): v for k, v in config.daily_usage.items()})
+        # Lưu provider settings
+        _atomic_write(f"{data_dir}/provider_settings.json", config.provider_settings)
         # Lưu current_model_id
         _atomic_write(f"{data_dir}/model_config.json", {
             "current_model_id": config.current_model_id
@@ -519,6 +617,7 @@ def _backup_data(data_dir: str):
             "context_states.json",
             "guild_settings.json",
             "daily_usage.json",
+            "provider_settings.json",
         ]
         
         for filename in backup_files:
@@ -583,6 +682,12 @@ def load_all_data():
                 config.daily_usage = {int(k): v for k, v in config.daily_usage.items()}
                 print(f"✅ Loaded daily_usage: {len(config.daily_usage)} users")
         
+        # Load provider_settings
+        if os.path.exists(f"{data_dir}/provider_settings.json"):
+            with open(f"{data_dir}/provider_settings.json", "r", encoding="utf-8") as f:
+                config.provider_settings = json.load(f)
+                print(f"✅ Loaded provider_settings: {len(config.provider_settings)} guilds")
+
         # Load current_model_id
         if os.path.exists(f"{data_dir}/model_config.json"):
             with open(f"{data_dir}/model_config.json", "r", encoding="utf-8") as f:
@@ -656,6 +761,7 @@ chat_history = config.chat_history
 MSG_COUNTERS = config.msg_counters
 USER_ROLES = config.user_roles
 GUILD_SETTINGS = config.guild_settings
+PROVIDER_SETTINGS = config.provider_settings
 
 DAILY_USAGE = config.daily_usage
 current_model_id = config.current_model_id
