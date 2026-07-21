@@ -36,7 +36,7 @@ BOT_USER_ID = int(os.getenv("BOT_USER_ID", 1458799287910535324))
 OWNER_ID = int(os.getenv("OWNER_ID", 1155129530122510376))
 
 # Cấu hình mặc định
-DEFAULT_MODEL_ID = "gemini-3.1-flash-lite"  # Model Gemini mới nhất
+DEFAULT_MODEL_ID = "gemini-3.5-flash-lite"  # Model Gemini mới nhất
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_HISTORY_LIMIT = 17  # Số tin nhắn nhớ trong channel
