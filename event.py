@@ -185,7 +185,7 @@ async def _announce_update(bot):
         ),
         color=0x00F0FF,
     )
-    embed.set_footer(text="Thông báo này sẽ tự biến mất sau 30 giây")
+    embed.set_footer(text="Thông báo này sẽ tự biến mất sau 10 giây")
 
     sent = []
     for guild in bot.guilds:
@@ -204,7 +204,7 @@ async def _announce_update(bot):
         except Exception as e:
             print(f"⚠️ Không gửi announcement được cho {guild.name}: {e}")
 
-    await asyncio.sleep(30)
+    await asyncio.sleep(10)
 
     for msg in sent:
         try:
