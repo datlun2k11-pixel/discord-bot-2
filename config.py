@@ -43,6 +43,9 @@ DEFAULT_TEMPERATURE = 0.7
 DEFAULT_HISTORY_LIMIT = 17  # Số tin nhắn nhớ trong channel
 DEFAULT_CONTEXT_LIMIT = 17  # Số tin nhắn nhớ trong chat_history
 
+# Bot version - tăng lên mỗi khi có update đáng chú ý
+BOT_VERSION = "2.0.0"
+
 # Danh sách model Gemini chính hãng (cập nhật từ Google Docs)
 AVAILABLE_MODELS = [
     "gemini-flash-lite-latest",
@@ -105,6 +108,9 @@ class BotConfig:
 
         # RPD (Requests Per Day) lock - timestamp until which bot is locked
         self.rpd_locked_until: float = 0.0
+
+        # Last announced version - để biết có cần gửi announcement khi version thay đổi
+        self.last_announced_version: str = ""
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
@@ -608,6 +614,10 @@ def save_all_data():
         _atomic_write(f"{data_dir}/rpd_lock.json", {
             "rpd_locked_until": config.rpd_locked_until
         })
+        # Lưu version
+        _atomic_write(f"{data_dir}/version.json", {
+            "last_announced_version": config.last_announced_version
+        })
         
         # Backup mechanism - lưu backup mỗi 10 lần save
         if not hasattr(save_all_data, "save_count"):
@@ -729,6 +739,13 @@ def load_all_data():
                     config.rpd_locked_until = rpd_val
                     remaining = rpd_val - time.time()
                     print(f"✅ Restored RPD lock: {remaining/3600:.1f}h remaining")
+
+        # Load last announced version
+        if os.path.exists(f"{data_dir}/version.json"):
+            with open(f"{data_dir}/version.json", "r") as f:
+                ver_data = json.load(f)
+                config.last_announced_version = ver_data.get("last_announced_version", "")
+                print(f"✅ Loaded last_announced_version: {config.last_announced_version}")
                     
         return True
     except Exception as e:

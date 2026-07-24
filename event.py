@@ -169,6 +169,53 @@ async def _check_daily_limit_and_reply(message: discord.Message) -> bool:
         return False
     return True
 
+# --- ANNOUNCEMENT KHI BOT UPDATE ---
+async def _announce_update(bot):
+    """Gửi announcement đến tất cả server nếu version thay đổi, xoá sau 30s"""
+    if config.BOT_VERSION == config.last_announced_version:
+        return
+
+    embed = discord.Embed(
+        title=f"🚀 GenA-Bot v{config.BOT_VERSION}",
+        description=(
+            f"Bot vừa được nâng cấp lên phiên bản **{config.BOT_VERSION}** với nhiều tính năng mới! 🎉\n\n"
+            f"📌 Dùng `/` để xem danh sách lệnh.\n"
+            f"💬 Tag bot hoặc reply tin nhắn bot để chat.\n"
+            f"📢 Cảm ơn mọi người đã sử dụng! ❤️"
+        ),
+        color=0x00F0FF,
+    )
+    embed.set_footer(text="Thông báo này sẽ tự biến mất sau 30 giây")
+
+    sent = []
+    for guild in bot.guilds:
+        try:
+            channel = guild.system_channel
+            if not channel:
+                channel = next(
+                    (c for c in guild.text_channels if c.permissions_for(guild.me).send_messages),
+                    None,
+                )
+            if not channel:
+                continue
+            msg = await channel.send(embed=embed)
+            sent.append(msg)
+            await asyncio.sleep(0.5)
+        except Exception as e:
+            print(f"⚠️ Không gửi announcement được cho {guild.name}: {e}")
+
+    await asyncio.sleep(30)
+
+    for msg in sent:
+        try:
+            await msg.delete()
+        except Exception:
+            pass
+
+    config.last_announced_version = config.BOT_VERSION
+    config.save_all_data()
+    print(f"✅ Đã gửi announcement v{config.BOT_VERSION} đến {len(sent)} server")
+
 # --- HÀM ON_MESSAGE NÂNG CẤP (TỐI ƯU CHO KOYEB) ---
 def register_events(bot):
     @bot.event
@@ -182,6 +229,9 @@ def register_events(bot):
             print(f"Đã đồng bộ {len(synced)} lệnh.")
         except Exception as error:
             print(f"Lỗi đồng bộ lệnh: {error}")
+
+        # Gửi announcement nếu có version mới
+        asyncio.create_task(_announce_update(bot))
 
     @bot.event
     async def on_guild_join(guild: discord.Guild):
