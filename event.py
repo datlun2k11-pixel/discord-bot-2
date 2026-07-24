@@ -90,13 +90,23 @@ def format_message_for_memory(msg: discord.Message) -> str:
     
     # Xử lý nội dung tin nhắn
     content = msg.content or ""
-    # Nếu tin nhắn chỉ có ảnh/sticker
+    # Nếu tin nhắn có ảnh đính kèm
+    has_image_attachment = any(
+        att.content_type and att.content_type.startswith("image/")
+        for att in msg.attachments
+    )
     if not content and msg.attachments:
-        content = "[📷 Ảnh]"
+        if has_image_attachment:
+            content = "[📷 Ảnh]"
+        else:
+            content = "[📎 File]"
     elif not content and msg.stickers:
         content = "[🎨 Sticker]"
     elif not content:
         content = "[💬 Tin nhắn trống]"
+    elif has_image_attachment:
+        # Nếu có text + ảnh, thêm tag ảnh vào cuối
+        content += " [📷 Ảnh]"
         
     # Cắt ngắn nội dung nếu quá dài (tiết kiệm token)
     if len(content) > 200:
@@ -114,6 +124,26 @@ def format_message_for_memory(msg: discord.Message) -> str:
             reply_context = f" (→ {replied_name}: {replied_content})"
             
     return f"{author_name}: {content}{reply_context}"
+
+async def _describe_image(image_parts: list) -> Optional[str]:
+    """Dùng Gemini để mô tả ảnh ngắn gọn (1-2 câu), tiết kiệm token cho memory"""
+    if not image_parts:
+        return None
+    try:
+        # Dùng model rẻ nhất để mô tả ảnh
+        desc_model = config.get_model("gemini-flash-lite-latest")
+        desc_prompt = [
+            "Mô tả ảnh này siêu ngắn gọn trong 1 câu (tối đa 15 từ), chỉ nội dung chính, không cảm xúc, không giải thích.",
+        ]
+        desc_prompt.extend(image_parts)
+        response = await desc_model.generate_content_async(desc_prompt)
+        description = config.extract_response_text(response)
+        if description and len(description) > 100:
+            description = description[:97] + "..."
+        return description.strip() if description else None
+    except Exception as e:
+        print(f"⚠️ Lỗi describe image: {e}")
+        return None
 
 # === KIỂM TRA DAILY LIMIT ===
 async def _check_daily_limit_and_reply(message: discord.Message) -> bool:
@@ -449,6 +479,27 @@ def register_events(bot):
                         response_text or "T nghẹn text r 💀",
                         mention_author=False,
                     )
+
+                # --- CẬP NHẬT MEMORY VỚI MÔ TẢ ẢNH (NẾU CÓ) ---
+                if image_parts and message.guild:
+                    description = await _describe_image(image_parts)
+                    if description:
+                        channel_id = message.channel.id
+                        if channel_id in CHANNEL_MEMORY and len(CHANNEL_MEMORY[channel_id]) > 0:
+                            # Lấy nội dung gốc của user (không phải "Hãy mô tả ảnh này" đã modify)
+                            original_user_text = config.strip_bot_mention(
+                                message.content,
+                                bot.user.id if bot.user else None,
+                            )
+                            # Xây dựng memory entry với mô tả ảnh thay vì [📷 Ảnh]
+                            author_name = message.author.display_name or message.author.name
+                            if original_user_text:
+                                updated_msg = f"{author_name}: {original_user_text} [📷 {description}]"
+                            else:
+                                updated_msg = f"{author_name}: [📷 {description}]"
+                            if len(updated_msg) > 200:
+                                updated_msg = updated_msg[:197] + "..."
+                            CHANNEL_MEMORY[channel_id][-1] = updated_msg
 
                 # Lưu vào chat_history
                 config.chat_history[ctx_key].append(
