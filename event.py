@@ -347,6 +347,13 @@ def register_events(bot):
                     bot.user.id if bot.user else None,
                 )
                 
+                # Nếu ko có nội dung và ko có ảnh thì bỏ qua
+                if not clean_content and not image_parts:
+                    await message.reply("Sao? Gọi t chi z? 🤡", mention_author=False)
+                    return
+                if not clean_content and image_parts:
+                    clean_content = "Hãy mô tả ảnh này"
+
                 # Lấy thông tin user
                 author_name = message.author.display_name or message.author.name
                 
