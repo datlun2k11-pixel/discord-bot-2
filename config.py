@@ -6,6 +6,7 @@ import tempfile
 import shutil
 import math
 import random
+from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict
 import discord
@@ -101,6 +102,9 @@ class BotConfig:
         
         # Daily usage tracking: key = user_id, value = {"date": "YYYY-MM-DD", "count": int}
         self.daily_usage: Dict[int, Dict] = {}
+
+        # RPD (Requests Per Day) lock - timestamp until which bot is locked
+        self.rpd_locked_until: float = 0.0
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
@@ -144,6 +148,17 @@ class BotConfig:
             usage["count"] += 1
         else:
             self.daily_usage[user_id] = {"date": self._today(), "count": 1}
+
+    # --- RPD LOCK METHODS ---
+    def is_rpd_locked(self) -> bool:
+        return time.time() < self.rpd_locked_until
+
+    def lock_rpd_until_midnight(self):
+        vietnam_tz = timezone(timedelta(hours=7))
+        now_vn = datetime.now(vietnam_tz)
+        midnight_vn = datetime(now_vn.year, now_vn.month, now_vn.day, 0, 0, 0, tzinfo=vietnam_tz) + timedelta(days=1)
+        self.rpd_locked_until = midnight_vn.timestamp()
+        save_all_data()
 
     # --- MODEL METHODS ---
     def get_model(self, model_name: Optional[str] = None) -> "GeminiModelWrapper":
@@ -589,6 +604,10 @@ def save_all_data():
         _atomic_write(f"{data_dir}/model_config.json", {
             "current_model_id": config.current_model_id
         })
+        # Lưu RPD lock
+        _atomic_write(f"{data_dir}/rpd_lock.json", {
+            "rpd_locked_until": config.rpd_locked_until
+        })
         
         # Backup mechanism - lưu backup mỗi 10 lần save
         if not hasattr(save_all_data, "save_count"):
@@ -700,6 +719,16 @@ def load_all_data():
                     print(f"✅ Loaded model config: {saved_model_id}")
                 else:
                     print(f"⚠️ Model '{saved_model_id}' không hợp lệ, dùng default: {DEFAULT_MODEL_ID}")
+
+        # Load RPD lock
+        if os.path.exists(f"{data_dir}/rpd_lock.json"):
+            with open(f"{data_dir}/rpd_lock.json", "r") as f:
+                rpd_data = json.load(f)
+                rpd_val = rpd_data.get("rpd_locked_until", 0.0)
+                if rpd_val > time.time():
+                    config.rpd_locked_until = rpd_val
+                    remaining = rpd_val - time.time()
+                    print(f"✅ Restored RPD lock: {remaining/3600:.1f}h remaining")
                     
         return True
     except Exception as e:
@@ -751,6 +780,12 @@ def check_daily_limit(user_id):
 
 def increment_daily_usage(user_id):
     config.increment_daily_usage(user_id)
+
+def is_rpd_locked():
+    return config.is_rpd_locked()
+
+def lock_rpd_until_midnight():
+    config.lock_rpd_until_midnight()
 
 # ============================================
 # 11. EXPOSE VARIABLES (COMPATIBILITY LAYER)

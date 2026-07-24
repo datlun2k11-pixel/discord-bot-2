@@ -317,6 +317,24 @@ def register_commands(bot):
         - username: @mention của user (bắt buộc)
         - topic: chủ đề của joke (tùy chọn)
         """
+        # Kiểm tra RPD lock (global)
+        if config.is_rpd_locked():
+            remaining = config.rpd_locked_until - time.time()
+            hours = int(remaining // 3600)
+            minutes = int((remaining % 3600) // 60)
+            embed = discord.Embed(
+                title="😴 Bot đã hết lượt hôm nay!",
+                description=(
+                    f"Hôm nay mọi người chat nhiều quá, API Google đã cạn RPD 🤡\n\n"
+                    f"Bot sẽ hoạt động trở lại sau **{hours} tiếng {minutes} phút** nữa (khoảng **0:00**).\n\n"
+                    f"Quay lại vào ngày mai nha! 🕐"
+                ),
+                color=ERROR_COLOR,
+            )
+            embed.set_footer(text="=)) mai t lại lên sóng!")
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
         # Kiểm tra daily limit
         user_id = interaction.user.id
         if user_id != config.OWNER_ID:
@@ -386,17 +404,30 @@ Joke phải:
             
             # Xử lý rate limit
             if "429" in error_str or "rate" in error_str or "quota" in error_str or "resource exhausted" in error_str:
-                embed = discord.Embed(
-                    title="😴 API hết quota hôm nay rồi!",
-                    description=(
-                        f"**Gemini API** đã hết lượt sử dụng trong hôm nay! 💀\n\n"
-                        f"• Bot sẽ không trả lời được cho tới khi **reset vào 0:00** 🕐\n"
-                        f"• Các tính năng khác (lệnh, roleplay) vẫn hoạt động bình thường ✅\n\n"
-                        f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
-                    ),
-                    color=ERROR_COLOR,
-                )
-                embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
+                if "resource exhausted" in error_str or "quota" in error_str:
+                    config.lock_rpd_until_midnight()
+                    embed = discord.Embed(
+                        title="😴 Bot đã hết lượt hôm nay!",
+                        description=(
+                            f"Hôm nay mọi người chat nhiều quá, API Google đã cạn RPD 🤡\n\n"
+                            f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
+                            f"Quay lại vào ngày mai nha! 🕐"
+                        ),
+                        color=ERROR_COLOR,
+                    )
+                    embed.set_footer(text="=)) mai t lại lên sóng!")
+                else:
+                    embed = discord.Embed(
+                        title="😴 API hết quota hôm nay rồi!",
+                        description=(
+                            f"**Gemini API** đã hết lượt sử dụng trong hôm nay! 💀\n\n"
+                            f"• Bot sẽ không trả lời được cho tới khi **reset vào 0:00** 🕐\n"
+                            f"• Các tính năng khác (lệnh, roleplay) vẫn hoạt động bình thường ✅\n\n"
+                            f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
+                        ),
+                        color=ERROR_COLOR,
+                    )
+                    embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 # Xử lý lỗi khác
