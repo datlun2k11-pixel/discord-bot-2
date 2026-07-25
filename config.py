@@ -54,8 +54,8 @@ AVAILABLE_MODELS = [
     "gemma-4-26b-a4b-it",
 ]
 
-# Daily usage limits
-DAILY_LIMIT_PER_USER = 50  # Số lần gọi AI tối đa mỗi ngày cho mỗi user
+# RPD limits
+FLASH_RPD_LIMIT = 500  # Tổng RPD cho tất cả model flash (gộp chung)
 
 # ============================================
 # 3. KHỞI TẠO GEMINI
@@ -103,14 +103,13 @@ class BotConfig:
         # Provider settings per guild: guild_id_str -> {base_url, api_key, model}
         self.provider_settings: Dict[str, Dict] = {}
         
-        # Daily usage tracking: key = user_id, value = {"date": "YYYY-MM-DD", "count": int}
-        self.daily_usage: Dict[int, Dict] = {}
+        # RPD tracking for flash models (gộp chung - tổng 500 RPD)
+        self.rpd_count: int = 0
+        self.rpd_date: str = ""
 
-        # RPD (Requests Per Day) lock - timestamp until which bot is locked
-        self.rpd_locked_until: float = 0.0
+        # API fallback lock - khi API trả về 429 bất ngờ (dự phòng)
+        self.api_locked_until: float = 0.0
 
-        # Last announced version - để biết có cần gửi announcement khi version thay đổi
-        self.last_announced_version: str = ""
         
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
@@ -121,49 +120,37 @@ class BotConfig:
             if len(history) > 15:
                 self.chat_history[ctx_key] = history[-15:]
 
-    def cleanup_old_daily_usage(self):
-        """Dọn dẹp daily_usage cũ (trước 30 ngày) để tránh memory leak"""
-        cutoff_date = time.strftime("%Y-%m-%d", time.localtime(time.time() - 30*24*60*60))
-        keys_to_remove = [uid for uid, data in self.daily_usage.items() if data["date"] < cutoff_date]
-        for uid in keys_to_remove:
-            del self.daily_usage[uid]
+    # --- RPD METHODS (FLASH MODELS - GỘP CHUNG 500 RPD) ---
+    def is_flash_model(self, model_id: str) -> bool:
+        return "flash" in model_id.lower()
 
-    # --- DAILY USAGE METHODS ---
-    def _today(self) -> str:
-        return time.strftime("%Y-%m-%d")
+    def _reset_rpd_if_new_day(self):
+        today = time.strftime("%Y-%m-%d")
+        if self.rpd_date != today:
+            self.rpd_date = today
+            self.rpd_count = 0
 
-    def check_daily_limit(self, user_id: int) -> Tuple[bool, int]:
-        """Kiểm tra xem user còn lượt chat không. Trả về (còn_lượt_không?, số_lượt_còn_lại)"""
-        today = self._today()
-        if user_id not in self.daily_usage:
-            self.daily_usage[user_id] = {"date": today, "count": 0}
-        
-        usage = self.daily_usage[user_id]
-        # Reset nếu sang ngày mới
-        if usage["date"] != today:
-            usage["date"] = today
-            usage["count"] = 0
-        
-        remaining = DAILY_LIMIT_PER_USER - usage["count"]
+    def check_flash_rpd(self) -> Tuple[bool, int]:
+        self._reset_rpd_if_new_day()
+        remaining = FLASH_RPD_LIMIT - self.rpd_count
         return remaining > 0, max(0, remaining)
 
-    def increment_daily_usage(self, user_id: int):
-        """Tăng lượt chat hôm nay"""
-        usage = self.daily_usage.get(user_id)
-        if usage and usage["date"] == self._today():
-            usage["count"] += 1
-        else:
-            self.daily_usage[user_id] = {"date": self._today(), "count": 1}
+    def increment_flash_rpd(self):
+        self._reset_rpd_if_new_day()
+        self.rpd_count += 1
 
-    # --- RPD LOCK METHODS ---
-    def is_rpd_locked(self) -> bool:
-        return time.time() < self.rpd_locked_until
+    def is_rpd_locked(self, model_id: Optional[str] = None) -> bool:
+        model_id = model_id or self.current_model_id
+        if time.time() < self.api_locked_until:
+            return True
+        if self.is_flash_model(model_id):
+            has_remaining, _ = self.check_flash_rpd()
+            return not has_remaining
+        return False
 
     def lock_rpd_until_midnight(self):
-        vietnam_tz = timezone(timedelta(hours=7))
-        now_vn = datetime.now(vietnam_tz)
-        midnight_vn = datetime(now_vn.year, now_vn.month, now_vn.day, 0, 0, 0, tzinfo=vietnam_tz) + timedelta(days=1)
-        self.rpd_locked_until = midnight_vn.timestamp()
+        self._reset_rpd_if_new_day()
+        self.rpd_count = FLASH_RPD_LIMIT
         save_all_data()
 
     # --- MODEL METHODS ---
@@ -602,23 +589,18 @@ def save_all_data():
         _atomic_write(f"{data_dir}/user_roles.json", config.user_roles)
         _atomic_write(f"{data_dir}/context_states.json", config.context_states)
         _atomic_write(f"{data_dir}/guild_settings.json", config.guild_settings)
-        # Convert int keys to str for JSON serialization
-        _atomic_write(f"{data_dir}/daily_usage.json", {str(k): v for k, v in config.daily_usage.items()})
         # Lưu provider settings
         _atomic_write(f"{data_dir}/provider_settings.json", config.provider_settings)
         # Lưu current_model_id
         _atomic_write(f"{data_dir}/model_config.json", {
             "current_model_id": config.current_model_id
         })
-        # Lưu RPD lock
+        # Lưu RPD tracking
         _atomic_write(f"{data_dir}/rpd_lock.json", {
-            "rpd_locked_until": config.rpd_locked_until
+            "rpd_count": config.rpd_count,
+            "rpd_date": config.rpd_date,
+            "api_locked_until": config.api_locked_until,
         })
-        # Lưu version
-        _atomic_write(f"{data_dir}/version.json", {
-            "last_announced_version": config.last_announced_version
-        })
-        
         # Backup mechanism - lưu backup mỗi 10 lần save
         if not hasattr(save_all_data, "save_count"):
             save_all_data.save_count = 0
@@ -645,7 +627,6 @@ def _backup_data(data_dir: str):
             "user_roles.json",
             "context_states.json",
             "guild_settings.json",
-            "daily_usage.json",
             "provider_settings.json",
         ]
         
@@ -703,14 +684,6 @@ def load_all_data():
                 config.guild_settings = json.load(f)
                 print(f"✅ Loaded guild_settings: {len(config.guild_settings)} guilds")
                 
-        # Load daily_usage
-        if os.path.exists(f"{data_dir}/daily_usage.json"):
-            with open(f"{data_dir}/daily_usage.json", "r", encoding="utf-8") as f:
-                config.daily_usage = json.load(f)
-                # Convert string keys back to int
-                config.daily_usage = {int(k): v for k, v in config.daily_usage.items()}
-                print(f"✅ Loaded daily_usage: {len(config.daily_usage)} users")
-        
         # Load provider_settings
         if os.path.exists(f"{data_dir}/provider_settings.json"):
             with open(f"{data_dir}/provider_settings.json", "r", encoding="utf-8") as f:
@@ -730,23 +703,19 @@ def load_all_data():
                 else:
                     print(f"⚠️ Model '{saved_model_id}' không hợp lệ, dùng default: {DEFAULT_MODEL_ID}")
 
-        # Load RPD lock
+        # Load RPD tracking
         if os.path.exists(f"{data_dir}/rpd_lock.json"):
             with open(f"{data_dir}/rpd_lock.json", "r") as f:
                 rpd_data = json.load(f)
-                rpd_val = rpd_data.get("rpd_locked_until", 0.0)
-                if rpd_val > time.time():
-                    config.rpd_locked_until = rpd_val
-                    remaining = rpd_val - time.time()
-                    print(f"✅ Restored RPD lock: {remaining/3600:.1f}h remaining")
+                config.rpd_count = rpd_data.get("rpd_count", 0)
+                config.rpd_date = rpd_data.get("rpd_date", "")
+                config.api_locked_until = rpd_data.get("api_locked_until", 0.0)
+                if config.api_locked_until > time.time():
+                    remaining = config.api_locked_until - time.time()
+                    print(f"✅ Restored API fallback lock: {remaining/3600:.1f}h remaining")
+                print(f"✅ Loaded RPD: {config.rpd_count}/{FLASH_RPD_LIMIT} (date: {config.rpd_date})")
 
-        # Load last announced version
-        if os.path.exists(f"{data_dir}/version.json"):
-            with open(f"{data_dir}/version.json", "r") as f:
-                ver_data = json.load(f)
-                config.last_announced_version = ver_data.get("last_announced_version", "")
-                print(f"✅ Loaded last_announced_version: {config.last_announced_version}")
-                    
+        
         return True
     except Exception as e:
         print(f"⚠️ Lỗi load dữ liệu: {e}")
@@ -792,12 +761,6 @@ def has_avatar_tag(text):
 def remove_avatar_tag(text):
     return config.remove_avatar_tag(text)
 
-def check_daily_limit(user_id):
-    return config.check_daily_limit(user_id)
-
-def increment_daily_usage(user_id):
-    config.increment_daily_usage(user_id)
-
 def is_rpd_locked():
     return config.is_rpd_locked()
 
@@ -815,7 +778,6 @@ USER_ROLES = config.user_roles
 GUILD_SETTINGS = config.guild_settings
 PROVIDER_SETTINGS = config.provider_settings
 
-DAILY_USAGE = config.daily_usage
 current_model_id = config.current_model_id
 
 # ============================================
@@ -823,4 +785,4 @@ current_model_id = config.current_model_id
 # ============================================
 print("✅ Config loaded successfully!")
 print(f"   - Bot: {BOT_USER_ID} | Owner: {OWNER_ID} | Model: {DEFAULT_MODEL_ID}")
-print(f"   - Port: {PORT} | History: {DEFAULT_HISTORY_LIMIT} | Daily: {DAILY_LIMIT_PER_USER}")
+print(f"   - Port: {PORT} | History: {DEFAULT_HISTORY_LIMIT} | Flash RPD: {FLASH_RPD_LIMIT}")

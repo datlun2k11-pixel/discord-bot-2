@@ -212,7 +212,7 @@ def register_commands(bot):
             color=SUCCESS_COLOR,
             description="\n".join([f"• Đã đặt **{c}**" for c in changed])
         )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, delete_after=10)
     
     
     # --- SETUP COMMAND (ADMIN/OWNER) ---
@@ -317,16 +317,14 @@ def register_commands(bot):
         - username: @mention của user (bắt buộc)
         - topic: chủ đề của joke (tùy chọn)
         """
-        # Kiểm tra RPD lock (global)
+        # Kiểm tra RPD lock
         if config.is_rpd_locked():
-            remaining = config.rpd_locked_until - time.time()
-            hours = int(remaining // 3600)
-            minutes = int((remaining % 3600) // 60)
+            _, remaining = config.check_flash_rpd()
             embed = discord.Embed(
                 title="😴 Bot đã hết lượt hôm nay!",
                 description=(
-                    f"Hôm nay mọi người chat nhiều quá, API Google đã cạn RPD 🤡\n\n"
-                    f"Bot sẽ hoạt động trở lại sau **{hours} tiếng {minutes} phút** nữa (khoảng **0:00**).\n\n"
+                    f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                    f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
                     f"Quay lại vào ngày mai nha! 🕐"
                 ),
                 color=ERROR_COLOR,
@@ -335,24 +333,6 @@ def register_commands(bot):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # Kiểm tra daily limit
-        user_id = interaction.user.id
-        if user_id != config.OWNER_ID:
-            has_remaining, remaining = config.check_daily_limit(user_id)
-            if not has_remaining:
-                embed = discord.Embed(
-                    title="😴 Hết lượt chat hôm nay rồi!",
-                    description=(
-                        f"Bạn đã dùng hết **{config.DAILY_LIMIT_PER_USER}** lượt chat với bot hôm nay rồi! 🥀\n\n"
-                        f"Quay lại vào ngày mai nha! ⏰\n"
-                        f"(Lượt sẽ reset lúc **0:00** theo giờ Việt Nam)"
-                    ),
-                    color=ERROR_COLOR
-                )
-                embed.set_footer(text="=)) chat ít thôi để còn lượt nha bro")
-                await interaction.response.send_message(embed=embed, ephemeral=True)
-                return
-        
         # Lấy display name của user
         target_name = username.display_name or username.name
         
@@ -396,38 +376,26 @@ Joke phải:
             
             await interaction.followup.send(embed=embed)
             
-            # Tăng daily usage
-            config.increment_daily_usage(user_id)
+            # Increment RPD nếu dùng flash model
+            if hasattr(model, 'model_name') and config.is_flash_model(model.model_name):
+                config.increment_flash_rpd()
             
         except Exception as error:
             error_str = str(error).lower()
             
             # Xử lý rate limit
             if "429" in error_str or "rate" in error_str or "quota" in error_str or "resource exhausted" in error_str:
-                if "resource exhausted" in error_str or "quota" in error_str:
-                    config.lock_rpd_until_midnight()
-                    embed = discord.Embed(
-                        title="😴 Bot đã hết lượt hôm nay!",
-                        description=(
-                            f"Hôm nay mọi người chat nhiều quá, API Google đã cạn RPD 🤡\n\n"
-                            f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
-                            f"Quay lại vào ngày mai nha! 🕐"
-                        ),
-                        color=ERROR_COLOR,
-                    )
-                    embed.set_footer(text="=)) mai t lại lên sóng!")
-                else:
-                    embed = discord.Embed(
-                        title="😴 API hết quota hôm nay rồi!",
-                        description=(
-                            f"**Gemini API** đã hết lượt sử dụng trong hôm nay! 💀\n\n"
-                            f"• Bot sẽ không trả lời được cho tới khi **reset vào 0:00** 🕐\n"
-                            f"• Các tính năng khác (lệnh, roleplay) vẫn hoạt động bình thường ✅\n\n"
-                            f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
-                        ),
-                        color=ERROR_COLOR,
-                    )
-                    embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
+                config.lock_rpd_until_midnight()
+                embed = discord.Embed(
+                    title="😴 Bot đã hết lượt hôm nay!",
+                    description=(
+                        f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                        f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
+                        f"Quay lại vào ngày mai nha! 🕐"
+                    ),
+                    color=ERROR_COLOR,
+                )
+                embed.set_footer(text="=)) mai t lại lên sóng!")
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 # Xử lý lỗi khác

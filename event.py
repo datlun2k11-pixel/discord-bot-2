@@ -145,77 +145,6 @@ async def _describe_image(image_parts: list) -> Optional[str]:
         print(f"⚠️ Lỗi describe image: {e}")
         return None
 
-# === KIỂM TRA DAILY LIMIT ===
-async def _check_daily_limit_and_reply(message: discord.Message) -> bool:
-    """Kiểm tra daily limit, trả về True nếu còn lượt, False nếu hết"""
-    user_id = message.author.id
-    # Owner không bị giới hạn
-    if user_id == config.OWNER_ID:
-        return True
-    
-    has_remaining, remaining = config.check_daily_limit(user_id)
-    if not has_remaining:
-        embed = discord.Embed(
-            title="😴 Hết lượt chat hôm nay rồi!",
-            description=(
-                f"Bạn đã dùng hết **{config.DAILY_LIMIT_PER_USER}** lượt chat với bot hôm nay rồi! 🥀\n\n"
-                f"Quay lại vào ngày mai nha! ⏰\n"
-                f"(Lượt sẽ reset lúc **0:00** theo giờ Việt Nam)"
-            ),
-            color=0xFFA500,
-        )
-        embed.set_footer(text="=)) chat ít thôi để còn lượt nha bro")
-        await message.reply(embed=embed, mention_author=False)
-        return False
-    return True
-
-# --- ANNOUNCEMENT KHI BOT UPDATE ---
-async def _announce_update(bot):
-    """Gửi announcement đến tất cả server nếu version thay đổi, xoá sau 30s"""
-    if config.BOT_VERSION == config.last_announced_version:
-        return
-
-    embed = discord.Embed(
-        title=f"🚀 GenA-Bot v{config.BOT_VERSION}",
-        description=(
-            f"Bot vừa được nâng cấp lên phiên bản **{config.BOT_VERSION}** với nhiều tính năng mới! 🎉\n\n"
-            f"📌 Dùng `/` để xem danh sách lệnh.\n"
-            f"💬 Tag bot hoặc reply tin nhắn bot để chat.\n"
-            f"📢 Cảm ơn mọi người đã sử dụng! ❤️"
-        ),
-        color=0x00F0FF,
-    )
-    embed.set_footer(text="Thông báo này sẽ tự biến mất sau 10 giây")
-
-    sent = []
-    for guild in bot.guilds:
-        try:
-            channel = guild.system_channel
-            if not channel:
-                channel = next(
-                    (c for c in guild.text_channels if c.permissions_for(guild.me).send_messages),
-                    None,
-                )
-            if not channel:
-                continue
-            msg = await channel.send(embed=embed)
-            sent.append(msg)
-            await asyncio.sleep(0.5)
-        except Exception as e:
-            print(f"⚠️ Không gửi announcement được cho {guild.name}: {e}")
-
-    await asyncio.sleep(10)
-
-    for msg in sent:
-        try:
-            await msg.delete()
-        except Exception:
-            pass
-
-    config.last_announced_version = config.BOT_VERSION
-    config.save_all_data()
-    print(f"✅ Đã gửi announcement v{config.BOT_VERSION} đến {len(sent)} server")
-
 # --- HÀM ON_MESSAGE NÂNG CẤP (TỐI ƯU CHO KOYEB) ---
 def register_events(bot):
     @bot.event
@@ -229,9 +158,6 @@ def register_events(bot):
             print(f"Đã đồng bộ {len(synced)} lệnh.")
         except Exception as error:
             print(f"Lỗi đồng bộ lệnh: {error}")
-
-        # Gửi announcement nếu có version mới
-        asyncio.create_task(_announce_update(bot))
 
     @bot.event
     async def on_guild_join(guild: discord.Guild):
@@ -310,26 +236,20 @@ def register_events(bot):
         elif not config.is_chat_enabled:
             return
 
-        # === KIỂM TRA RPD LOCK (GLOBAL) ===
+        # === KIỂM TRA RPD LOCK ===
         if config.is_rpd_locked():
-            remaining = config.rpd_locked_until - time.time()
-            hours = int(remaining // 3600)
-            minutes = int((remaining % 3600) // 60)
+            _, remaining = config.check_flash_rpd()
             embed = discord.Embed(
                 title="😴 Bot đã hết lượt hôm nay!",
                 description=(
-                    f"Hôm nay mọi người chat nhiều quá, API Google đã cạn RPD 🤡\n\n"
-                    f"Bot sẽ hoạt động trở lại sau **{hours} tiếng {minutes} phút** nữa (khoảng **0:00**).\n\n"
+                    f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                    f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
                     f"Quay lại vào ngày mai nha! 🕐"
                 ),
                 color=0xFFA500,
             )
             embed.set_footer(text="=)) mai t lại lên sóng!")
             await message.reply(embed=embed, mention_author=False)
-            return
-
-        # === KIỂM TRA DAILY LIMIT ===
-        if not await _check_daily_limit_and_reply(message):
             return
 
         # --- 3. ANTI-SPAM (GIỮ NGUYÊN) ---
@@ -588,8 +508,9 @@ def register_events(bot):
                 if len(config.chat_history[ctx_key]) > 15:
                     config.chat_history[ctx_key] = config.chat_history[ctx_key][-15:]
                 
-                # Increment daily usage sau khi gọi API thành công
-                config.increment_daily_usage(user_id)
+                # Increment RPD nếu dùng flash model
+                if hasattr(model, 'model_name') and config.is_flash_model(model.model_name):
+                    config.increment_flash_rpd()
                     
         except Exception as error:
             error_str = str(error).lower()
@@ -597,36 +518,20 @@ def register_events(bot):
             
             # === BẮT LỖI RATE LIMIT (429) ===
             if "429" in error_str or "rate" in error_str or "quota" in error_str or "resource exhausted" in error_str:
-                # RPD (Requests Per Day) exhausted → lock bot until midnight
-                if "resource exhausted" in error_str or "quota" in error_str:
-                    config.lock_rpd_until_midnight()
-                    embed = discord.Embed(
-                        title="😴 Bot đã hết lượt hôm nay!",
-                        description=(
-                            f"Hôm nay mọi người chat nhiều quá, API Google đã cạn RPD 🤡\n\n"
-                            f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
-                            f"Quay lại vào ngày mai nha! 🕐"
-                        ),
-                        color=0xFF0040,
-                    )
-                    embed.set_footer(text="=)) mai t lại lên sóng!")
-                else:
-                    embed = discord.Embed(
-                        title="😴 API hết quota hôm nay rồi!",
-                        description=(
-                            f"**Gemini API** đã hết lượt sử dụng trong hôm nay! 💀\n\n"
-                            f"• Bot sẽ không trả lời được cho tới khi **reset vào 0:00** 🕐\n"
-                            f"• Các tính năng khác (lệnh, roleplay) vẫn hoạt động bình thường ✅\n\n"
-                            f"**Giải pháp:** Chờ mai hoặc nhắn Owner nạp thêm API key! 😎"
-                        ),
-                        color=0xFF0040,
-                    )
-                    embed.set_footer(text="=)) hết xài r, để dành tiền nạp API đi bro")
+                config.lock_rpd_until_midnight()
+                embed = discord.Embed(
+                    title="😴 Bot đã hết lượt hôm nay!",
+                    description=(
+                        f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                        f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
+                        f"Quay lại vào ngày mai nha! 🕐"
+                    ),
+                    color=0xFF0040,
+                )
+                embed.set_footer(text="=)) mai t lại lên sóng!")
                 await message.reply(embed=embed, mention_author=False)
             elif message.author.id == config.OWNER_ID:
                 await message.channel.send(f"Lỗi nè đại ca: `{error}` 💀")
-                
-        # Không cần process_commands vì bot dùng slash commands (app_commands)
 
 # --- HÀM PHỤ TRỢ (GIỮ NGUYÊN) ---
 async def _build_invite_url(guild: discord.Guild):
