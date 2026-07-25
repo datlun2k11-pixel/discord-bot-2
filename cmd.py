@@ -9,15 +9,49 @@ BRAND_COLOR = 0x00F0FF
 ERROR_COLOR = 0xFF0040
 SUCCESS_COLOR = 0x00FF88
 
+# --- MODAL TẠO ROLE MỚI ---
+class CreateRoleModal(discord.ui.Modal, title="Tạo role mới"):
+    name_input = discord.ui.TextInput(
+        label="Tên role",
+        placeholder="VD: Catgirl, Waifu, ...",
+        required=True,
+        max_length=100,
+    )
+    prompt_input = discord.ui.TextInput(
+        label="System Prompt",
+        style=discord.TextStyle.paragraph,
+        placeholder="Nhập mô tả tính cách, cách nói chuyện, ...",
+        required=True,
+        max_length=2000,
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        name = self.name_input.value.strip()
+        prompt = self.prompt_input.value.strip()
+        if not name or not prompt:
+            await interaction.response.send_message("❌ Thiếu thông tin!", ephemeral=True)
+            return
+        key = name.lower().replace(" ", "_")
+        config.config.custom_roles[key] = {"name": name, "prompt": prompt}
+        config.save_all_data()
+        embed = discord.Embed(
+            title="✅ Đã tạo role mới",
+            description=f"**{name}** đã được thêm vào danh sách role!\nDùng `/roleplay start` để chọn.",
+            color=SUCCESS_COLOR,
+        )
+        embed.set_footer(text="Có thể dùng /roleplay list để xem tất cả role")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
 # --- AUTOCOMPLETE CHO ROLEPLAY CHARACTERS ---
 async def autocomplete_characters(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Autocomplete gợi ý tên nhân vật khi gõ /roleplay start"""
     choices = []
     for key, role in config.SAMPLE_ROLES.items():
-        # Nếu chưa gõ gì thì hiện full list, nếu có gõ thì filter
         if not current or current.lower() in key.lower() or current.lower() in role["name"].lower():
             choices.append(app_commands.Choice(name=f"{role['name']} ({key})", value=key))
-    # Giới hạn 25 choices (Discord limit)
+    for key, role in config.config.custom_roles.items():
+        if not current or current.lower() in key.lower() or current.lower() in role["name"].lower():
+            choices.append(app_commands.Choice(name=f"{role['name']} ⭐", value=f"custom_{key}"))
     return choices[:25]
 
 def register_commands(bot):
@@ -50,11 +84,12 @@ def register_commands(bot):
         app_commands.Choice(name="📋 Xem danh sách nhân vật", value="list"),
         app_commands.Choice(name="🎭 Bắt đầu nhập vai", value="start"),
         app_commands.Choice(name="🛑 Dừng nhập vai", value="stop"),
+        app_commands.Choice(name="➕ Tạo role mới", value="create"),
     ])
     @app_commands.autocomplete(character=autocomplete_characters)
     async def roleplay(interaction: discord.Interaction, action: str = "list", character: Optional[str] = None):
         """
-        action: 'list' (xem danh sách), 'start' (bắt đầu), 'stop' (dừng)
+        action: 'list' (xem danh sách), 'start' (bắt đầu), 'stop' (dừng), 'create' (tạo role mới)
         character: tên nhân vật (chỉ cần khi action là 'start')
         """
         ctx_key = config.get_context_key(interaction)
@@ -62,9 +97,12 @@ def register_commands(bot):
         # 1. Xem danh sách nhân vật
         if action == "list":
             roles_list = "\n".join([f"- **{k}**: {v['name']}" for k, v in config.SAMPLE_ROLES.items()])
+            if config.config.custom_roles:
+                roles_list += "\n\n**⭐ Role tự tạo:**\n"
+                roles_list += "\n".join([f"- **{k}**: {v['name']}" for k, v in config.config.custom_roles.items()])
             embed = discord.Embed(
                 title="🎭 Danh sách tính cách có sẵn",
-                description=f"Dùng lệnh `/roleplay start <tên>` để bắt đầu.\n\n{roles_list}",
+                description=f"Dùng `/roleplay start <tên>` để bắt đầu.\n\n{roles_list}",
                 color=BRAND_COLOR
             )
             embed.set_footer(text="💡 Chọn action 'Bắt đầu' rồi chọn nhân vật từ dropdown!")
@@ -82,25 +120,38 @@ def register_commands(bot):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # 3. Bắt đầu nhập vai
+        # 3. Tạo role mới
+        if action == "create":
+            await interaction.response.send_modal(CreateRoleModal())
+            return
+
+        # 4. Bắt đầu nhập vai
         if action == "start":
-            if not character or character.lower() not in config.SAMPLE_ROLES:
-                available = ", ".join(config.SAMPLE_ROLES.keys())
-                roles_display = "\n".join([f"• `{k}` - {v['name']}" for k, v in config.SAMPLE_ROLES.items()])
+            selected_role = None
+            if character and character.lower() in config.SAMPLE_ROLES:
+                selected_role = config.SAMPLE_ROLES[character.lower()]
+            elif character and character.startswith("custom_"):
+                actual_key = character[7:]
+                if actual_key in config.config.custom_roles:
+                    selected_role = config.config.custom_roles[actual_key]
+            
+            if selected_role is None:
+                roles_list = "\n".join([f"• `{k}` - {v['name']}" for k, v in config.SAMPLE_ROLES.items()])
+                if config.config.custom_roles:
+                    roles_list += "\n\n**Role tự tạo:**\n"
+                    roles_list += "\n".join([f"• `custom_{k}` - {v['name']}" for k, v in config.config.custom_roles.items()])
                 embed = discord.Embed(
                     title="❌ Sai tên nhân vật",
                     description=(
                         f"Bro chưa chọn nhân vật kìa! 🤡\n\n"
                         f"**Các nhân vật có sẵn:**\n"
-                        f"{roles_display}\n\n"
+                        f"{roles_list}\n\n"
                         f"📝 **Cách dùng:** Chọn action **Bắt đầu** → gõ tên nhân vật vào ô **character**"
                     ),
                     color=ERROR_COLOR
                 )
                 await interaction.response.send_message(embed=embed, ephemeral=True)
                 return
-            
-            selected_role = config.SAMPLE_ROLES[character.lower()]
             config.set_context_state(ctx_key, True, selected_role)
             
             embed = discord.Embed(

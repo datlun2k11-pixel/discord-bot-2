@@ -110,7 +110,9 @@ class BotConfig:
         # API fallback lock - khi API trả về 429 bất ngờ (dự phòng)
         self.api_locked_until: float = 0.0
 
-        
+        # Custom roles do user tự tạo: key -> {"name": str, "prompt": str}
+        self.custom_roles: Dict[str, Dict] = {}
+
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
     # --- CLEANUP METHODS ---
@@ -591,6 +593,8 @@ def save_all_data():
         _atomic_write(f"{data_dir}/guild_settings.json", config.guild_settings)
         # Lưu provider settings
         _atomic_write(f"{data_dir}/provider_settings.json", config.provider_settings)
+        # Lưu custom roles
+        _atomic_write(f"{data_dir}/custom_roles.json", config.custom_roles)
         # Lưu current_model_id
         _atomic_write(f"{data_dir}/model_config.json", {
             "current_model_id": config.current_model_id
@@ -628,6 +632,7 @@ def _backup_data(data_dir: str):
             "context_states.json",
             "guild_settings.json",
             "provider_settings.json",
+            "custom_roles.json",
         ]
         
         for filename in backup_files:
@@ -689,6 +694,12 @@ def load_all_data():
             with open(f"{data_dir}/provider_settings.json", "r", encoding="utf-8") as f:
                 config.provider_settings = json.load(f)
                 print(f"✅ Loaded provider_settings: {len(config.provider_settings)} guilds")
+
+        # Load custom roles
+        if os.path.exists(f"{data_dir}/custom_roles.json"):
+            with open(f"{data_dir}/custom_roles.json", "r", encoding="utf-8") as f:
+                config.custom_roles = json.load(f)
+                print(f"✅ Loaded custom_roles: {len(config.custom_roles)} roles")
 
         # Load current_model_id
         if os.path.exists(f"{data_dir}/model_config.json"):
@@ -766,6 +777,15 @@ def is_rpd_locked():
 
 def lock_rpd_until_midnight():
     config.lock_rpd_until_midnight()
+
+def is_flash_model(model_id: str) -> bool:
+    return config.is_flash_model(model_id)
+
+def check_flash_rpd():
+    return config.check_flash_rpd()
+
+def increment_flash_rpd():
+    config.increment_flash_rpd()
 
 # ============================================
 # 11. EXPOSE VARIABLES (COMPATIBILITY LAYER)
