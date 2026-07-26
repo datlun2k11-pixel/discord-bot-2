@@ -1,16 +1,61 @@
-# Environment
-.env
-
-# Python
-__pycache__/
+# Compiled and build artifacts
 *.pyc
-*.pyo
+__pycache__/
+*.o
+*.obj
+*.out
+*.so
+*.dll
+*.exe
 
-# Data files
-data/
-channel_memory.json
+# Dependencies
+.venv/
+venv/
+.env
+.env.local
+.env.*
 
-# IDE
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Editors
 .vscode/
 .idea/
-.aider*
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# Python specific
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Cache
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+
+# OS generated files
+.DS_Store
+Thumbs.db

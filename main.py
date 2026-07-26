@@ -28,6 +28,8 @@ def home():
 @app.route("/health")
 def health():
     """Health check chi tiết - kiểm tra cả bot và Flask"""
+    from flask import jsonify
+    
     bot_status = "running" if not bot.is_closed() else "closed"
     flask_status = "ok"
     
@@ -38,7 +40,7 @@ def health():
         "timestamp": time.time()
     }
     
-    return response_data
+    return jsonify(response_data)
 
 def start_keep_alive():
     """Chạy Flask health-check endpoint cho Koyeb"""
@@ -114,6 +116,9 @@ async def main():
         try:
             loop.add_signal_handler(sig, _make_handler(sig.name))
         except NotImplementedError:
+            # Windows không hỗ trợ add_signal_handler cho một số tín hiệu
+            # Fallback: xử lý trong except KeyboardInterrupt
+            print(f"⚠️ Hệ điều hành không hỗ trợ signal handler cho {sig}, sẽ dùng fallback")
             pass
 
     start_keep_alive()
@@ -133,6 +138,7 @@ async def main():
         except:
             pass
     finally:
+        # Đảm bảo lưu dữ liệu khi thoát, kể cả trên Windows
         if not _shutdown_done:
             await shutdown("exit")
 

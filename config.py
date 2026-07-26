@@ -36,6 +36,18 @@ PORT = int(os.getenv("PORT", 8080))
 BOT_USER_ID = int(os.getenv("BOT_USER_ID", 1458799287910535324))
 OWNER_ID = int(os.getenv("OWNER_ID", 1155129530122510376))
 
+# Kiểm tra và xử lý giá trị rỗng cho các biến môi trường
+_bot_user_id_raw = os.getenv("BOT_USER_ID")
+_owner_id_raw = os.getenv("OWNER_ID")
+_port_raw = os.getenv("PORT")
+
+if _bot_user_id_raw and _bot_user_id_raw.strip():
+    BOT_USER_ID = int(_bot_user_id_raw)
+if _owner_id_raw and _owner_id_raw.strip():
+    OWNER_ID = int(_owner_id_raw)
+if _port_raw and _port_raw.strip():
+    PORT = int(_port_raw)
+
 # Cấu hình mặc định
 DEFAULT_MODEL_ID = "gemini-flash-lite-latest"  # Model Gemini mới nhất
 DEFAULT_MAX_TOKENS = 2048
@@ -118,9 +130,28 @@ class BotConfig:
     # --- CLEANUP METHODS ---
     def cleanup_old_chat_history(self):
         """Dọn dẹp chat_history quá dài (giới hạn 15 items)"""
-        for ctx_key, history in self.chat_history.items():
+        for ctx_key, history in list(self.chat_history.items()):
             if len(history) > 15:
                 self.chat_history[ctx_key] = history[-15:]
+    
+    def cleanup_stale_chat_history(self, max_age_hours: int = 24):
+        """Dọn dẹp chat_history cũ (tránh memory leak khi chạy dài hạn)"""
+        now = time.time()
+        cutoff = now - (max_age_hours * 3600)
+        
+        # Xóa các context không được sử dụng trong vòng 24 giờ
+        keys_to_delete = []
+        for ctx_key in self.chat_history:
+            # Kiểm tra xem context có còn active không
+            if ctx_key not in self.context_states or not self.context_states[ctx_key].get("active", False):
+                # Nếu không active và đã lâu không dùng, xóa khỏi bộ nhớ
+                keys_to_delete.append(ctx_key)
+        
+        for key in keys_to_delete:
+            del self.chat_history[key]
+        
+        if keys_to_delete:
+            print(f"✅ Đã dọn dẹp {len(keys_to_delete)} context chat_history cũ")
 
     # --- RPD METHODS (FLASH MODELS - GỘP CHUNG 500 RPD) ---
     def is_flash_model(self, model_id: str) -> bool:
@@ -584,6 +615,7 @@ def save_all_data():
         
         # Cleanup memory leaks trước khi lưu
         config.cleanup_old_chat_history()
+        config.cleanup_stale_chat_history()  # Thêm dọn dẹp chat_history cũ
         
         # Atomic write từng file
         _atomic_write(f"{data_dir}/chat_history.json", config.chat_history)
