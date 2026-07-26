@@ -14,8 +14,7 @@ Một Discord bot thông minh được tích hợp AI để xử lý hội tho�
 
 1. Clone repository:
 ```bash
-git clone <repo-url>
-cd <project-folder>
+git clone https://github.com/datlun2k11-pixel/discord-bot-2
 ```
 
 2. Cài đặt dependencies:
