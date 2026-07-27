@@ -461,13 +461,13 @@ Joke phải:
         # === ACTION: VIEW ===
         if action == "view":
             # Reset RPD nếu sang ngày mới
-            config._reset_rpd_if_new_day()
+            config.config._reset_rpd_if_new_day()
             
-            remaining = config.FLASH_RPD_LIMIT - config.rpd_count
+            remaining = config.FLASH_RPD_LIMIT - config.config.rpd_count
             is_locked = config.is_rpd_locked()
             lock_time = ""
-            if config.api_locked_until > time.time():
-                remaining_time = config.api_locked_until - time.time()
+            if config.config.api_locked_until > time.time():
+                remaining_time = config.config.api_locked_until - time.time()
                 hours = int(remaining_time // 3600)
                 minutes = int((remaining_time % 3600) // 60)
                 lock_time = f"⏰ {hours}h {minutes}m còn lại"
@@ -481,7 +481,7 @@ Joke phải:
             )
             embed.add_field(
                 name="📈 RPD hiện tại",
-                value=f"`{config.rpd_count}` / `{config.FLASH_RPD_LIMIT}`",
+                value=f"`{config.config.rpd_count}` / `{config.FLASH_RPD_LIMIT}`",
                 inline=True
             )
             embed.add_field(
@@ -501,7 +501,7 @@ Joke phải:
             )
             embed.add_field(
                 name="📅 Ngày reset",
-                value=config.rpd_date or "Chưa có",
+                value=config.config.rpd_date or "Chưa có",
                 inline=False
             )
             embed.set_footer(text="Dùng /quota_setting set để thay đổi giá trị")
@@ -539,22 +539,22 @@ Joke phải:
                 return
             
             # Lưu giá trị cũ
-            old_count = config.rpd_count
+            old_count = config.config.rpd_count
             old_limit = config.FLASH_RPD_LIMIT
-            old_date = config.rpd_date
+            old_date = config.config.rpd_date
             
             # Cập nhật giá trị mới
-            config.rpd_count = rpd_count
+            config.config.rpd_count = rpd_count
             # Lưu ý: Cần sửa FLASH_RPD_LIMIT trong config (global variable)
             # Cách đơn giản: gán trực tiếp vào biến global
             import sys
             sys.modules['config'].FLASH_RPD_LIMIT = rpd_limit
             
             # Reset date về hôm nay
-            config.rpd_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
+            config.config.rpd_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
             
             # Mở khóa API nếu đang bị lock
-            config.api_locked_until = 0.0
+            config.config.api_locked_until = 0.0
             
             # Lưu config
             config.save_all_data()
@@ -571,7 +571,7 @@ Joke phải:
             )
             embed.add_field(
                 name="📅 Ngày reset",
-                value=config.rpd_date,
+                value=config.config.rpd_date,
                 inline=True
             )
             embed.add_field(
@@ -586,15 +586,15 @@ Joke phải:
 
         # === ACTION: RESET ===
         if action == "reset":
-            old_count = config.rpd_count
+            old_count = config.config.rpd_count
             old_limit = config.FLASH_RPD_LIMIT
             
             # Reset về mặc định
-            config.rpd_count = 0
+            config.config.rpd_count = 0
             import sys
             sys.modules['config'].FLASH_RPD_LIMIT = 500  # Giá trị mặc định
-            config.rpd_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
-            config.api_locked_until = 0.0
+            config.config.rpd_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
+            config.config.api_locked_until = 0.0
             
             config.save_all_data()
             
@@ -610,7 +610,7 @@ Joke phải:
             )
             embed.add_field(
                 name="📅 Ngày reset",
-                value=config.rpd_date,
+                value=config.config.rpd_date,
                 inline=True
             )
             embed.add_field(
@@ -625,7 +625,7 @@ Joke phải:
 
         # === ACTION: UNLOCK ===
         if action == "unlock":
-            if config.api_locked_until == 0.0 and not config.is_rpd_locked():
+            if config.config.api_locked_until == 0.0 and not config.is_rpd_locked():
                 embed = discord.Embed(
                     title="🔓 API đang hoạt động",
                     description="Bot không bị khóa API, không cần mở khóa.",
@@ -635,7 +635,7 @@ Joke phải:
                 return
             
             # Mở khóa API
-            config.api_locked_until = 0.0
+            config.config.api_locked_until = 0.0
             config.save_all_data()
             
             embed = discord.Embed(
