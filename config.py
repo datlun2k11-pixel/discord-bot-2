@@ -127,6 +127,26 @@ class BotConfig:
 
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
+    # === ĐÂY LÀ NƠI CẦN THÊM PHƯƠNG THỨC _reset_rpd_if_new_day ===
+    def _reset_rpd_if_new_day(self):
+        """Reset RPD counter nếu đã sang ngày mới (theo UTC+7)"""
+        # Lấy ngày hiện tại theo UTC+7 (giờ Việt Nam)
+        now = datetime.now(timezone(timedelta(hours=7)))
+        today = now.strftime("%Y-%m-%d")
+        
+        if self.rpd_date != today:
+            # Reset counter khi sang ngày mới
+            self.rpd_date = today
+            self.rpd_count = 0
+            # Reset cả api_locked_until nếu nó đang ở ngày cũ
+            if self.api_locked_until > 0:
+                lock_date = datetime.fromtimestamp(self.api_locked_until, tz=timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
+                if lock_date != today:
+                    self.api_locked_until = 0.0
+                    print(f"✅ Đã reset API lock do sang ngày mới")
+            print(f"📅 Đã reset RPD cho ngày mới: {today}")
+    # === KẾT THÚC PHƯƠNG THỨC CẦN THÊM ===
+
     # --- CLEANUP METHODS ---
     def cleanup_old_chat_history(self):
         """Dọn dẹp chat_history quá dài (giới hạn 15 items)"""

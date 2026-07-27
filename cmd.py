@@ -4,6 +4,7 @@ from discord.ext import commands
 import config
 import datetime
 from typing import Optional, List
+
 # Branding màu sắc cho Embed
 BRAND_COLOR = 0x00F0FF
 ERROR_COLOR = 0xFF0040
@@ -56,6 +57,12 @@ async def autocomplete_characters(interaction: discord.Interaction, current: str
 
 def register_commands(bot):
     # --- GLOBAL ERROR HANDLER FOR PERMISSIONS ---
+    @bot.event
+    async def on_command_error(ctx, error):
+        # Error handler cho prefix commands
+        pass
+    
+    # Dùng cách này thay vì @bot.tree.error
     @bot.tree.error
     async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
         if isinstance(error, app_commands.CheckFailure):
@@ -74,7 +81,7 @@ def register_commands(bot):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    # --- ROLEPLAY COMMAND (NÂNG CẤP - DỄ DÙNG HƠN) ---
+    # --- ROLEPLAY COMMAND ---
     @bot.tree.command(name="roleplay", description="🎭 Bật/Tắt chế độ nhập vai với các tính cách có sẵn")
     @app_commands.describe(
         action="Chọn hành động muốn thực hiện",
@@ -88,13 +95,8 @@ def register_commands(bot):
     ])
     @app_commands.autocomplete(character=autocomplete_characters)
     async def roleplay(interaction: discord.Interaction, action: str = "list", character: Optional[str] = None):
-        """
-        action: 'list' (xem danh sách), 'start' (bắt đầu), 'stop' (dừng), 'create' (tạo role mới)
-        character: tên nhân vật (chỉ cần khi action là 'start')
-        """
         ctx_key = config.get_context_key(interaction)
         
-        # 1. Xem danh sách nhân vật
         if action == "list":
             roles_list = "\n".join([f"- **{k}**: {v['name']}" for k, v in config.SAMPLE_ROLES.items()])
             if config.config.custom_roles:
@@ -109,7 +111,6 @@ def register_commands(bot):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # 2. Dừng nhập vai
         if action == "stop":
             config.set_context_state(ctx_key, False, None)
             embed = discord.Embed(
@@ -120,12 +121,10 @@ def register_commands(bot):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # 3. Tạo role mới
         if action == "create":
             await interaction.response.send_modal(CreateRoleModal())
             return
 
-        # 4. Bắt đầu nhập vai
         if action == "start":
             selected_role = None
             if character and character.lower() in config.SAMPLE_ROLES:
@@ -164,13 +163,12 @@ def register_commands(bot):
                 color=SUCCESS_COLOR
             )
             embed.set_footer(text="=)) chuẩn bị tinh thần đi bro")
-            await interaction.response.send_message(embed=embed, ephemeral=False) # Public để mọi người cùng thấy và chơi chung
+            await interaction.response.send_message(embed=embed, ephemeral=False)
             return
 
-        # Fallback nếu nhập sai action
         await interaction.response.send_message("❌ Lệnh không hợp lệ. Dùng `/roleplay list` để xem hướng dẫn.", ephemeral=True)
 
-    # --- SETTING COMMAND (ADMIN/OWNER) ---
+    # --- SETTING COMMAND ---
     @bot.tree.command(name="setting", description="[Admin/Owner] Tùy chỉnh cấu hình bot cho server")
     async def setting(
         interaction: discord.Interaction,
@@ -178,13 +176,6 @@ def register_commands(bot):
         temperature: Optional[float] = None,
         chat_enabled: Optional[bool] = None,
     ):
-        """
-        Tùy chỉnh cấu hình bot cho server hiện tại.
-        - max_tokens: Số token tối đa (128-8192, để trống giữ nguyên)
-        - temperature: Độ sáng tạo (0.0-2.0, để trống giữ nguyên)
-        - chat_enabled: Bật/tắt chat AI (True/False, để trống giữ nguyên)
-        """
-        # Kiểm tra quyền: Administrator hoặc Owner
         is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
         is_owner = interaction.user.id == config.OWNER_ID
         
@@ -205,11 +196,9 @@ def register_commands(bot):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
+        
         guild_id = str(interaction.guild.id)
-        
-        # Lấy settings hiện tại (hoặc tạo mới với giá trị mặc định)
         current = config.GUILD_SETTINGS.get(guild_id, {})
-        
         changed = []
         
         if max_tokens is not None:
@@ -236,7 +225,6 @@ def register_commands(bot):
             current["chat_enabled"] = chat_enabled
             changed.append(f"chat_enabled: {chat_enabled}")
         
-        # Nếu không có gì thay đổi -> hiển thị settings hiện tại
         if not changed:
             max_t = current.get("max_tokens", config.DEFAULT_MAX_TOKENS)
             temp = current.get("temperature", config.DEFAULT_TEMPERATURE)
@@ -254,7 +242,6 @@ def register_commands(bot):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
-        # Lưu settings
         config.GUILD_SETTINGS[guild_id] = current
         config.save_all_data()
         
@@ -265,8 +252,7 @@ def register_commands(bot):
         )
         await interaction.response.send_message(embed=embed, delete_after=10)
     
-    
-    # --- SETUP COMMAND (ADMIN/OWNER) ---
+    # --- SETUP COMMAND ---
     @bot.tree.command(name="setup", description="[Admin/Owner] Cấu hình OpenAI-compatible provider cho server")
     async def setup(
         interaction: discord.Interaction,
@@ -296,7 +282,6 @@ def register_commands(bot):
 
         guild_id = str(interaction.guild.id)
         current = config.PROVIDER_SETTINGS.get(guild_id, {})
-
         changed = []
 
         if base_url is not None:
@@ -359,16 +344,9 @@ def register_commands(bot):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
     
-    
-    # Thêm lệnh /joke để tạo joke bằng AI
+    # --- JOKE COMMAND ---
     @bot.tree.command(name="joke", description="Tạo joke hài hước với username và chủ đề")
     async def joke(interaction: discord.Interaction, username: discord.Member, topic: str = None):
-        """
-        Tạo joke bằng AI với username và chủ đề được chỉ định
-        - username: @mention của user (bắt buộc)
-        - topic: chủ đề của joke (tùy chọn)
-        """
-        # Kiểm tra RPD lock
         if config.is_rpd_locked():
             _, remaining = config.check_flash_rpd()
             embed = discord.Embed(
@@ -384,12 +362,10 @@ def register_commands(bot):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # Lấy display name của user
         target_name = username.display_name or username.name
         
-        # Tạo prompt cho Gemini
         prompt = f"""
-Hãy tạo một joke hài hước, hài hước về người tên là "{target_name}".
+Hãy tạo một joke hài hước về người tên là "{target_name}".
 Joke phải:
 - Ngắn gọn, hài hước, dễ hiểu
 - Có liên quan đến display name của người này
@@ -400,24 +376,18 @@ Joke phải:
         if topic:
             prompt += f"\n- Chủ đề của joke là: {topic}"
         
-        prompt += """
-\nChỉ trả về joke duy nhất, không giải thích, không giới thiệu gì cả."""
+        prompt += "\nChỉ trả về joke duy nhất, không giải thích, không giới thiệu gì cả."
         
-        # Defer response vì gọi API có thể mất >3s
         await interaction.response.defer()
         
         try:
-            # Lấy model từ config (dùng instance method)
             model = config.get_model()
-            
-            # Gọi Gemini API
             response = await model.generate_content_async([prompt])
             joke_text = config.extract_response_text(response)
             
             if not joke_text:
                 joke_text = "API bị mù rồi, nói lại phát 💀"
             
-            # Tạo embed
             embed = discord.Embed(
                 title="😂 Joke Hài Hước",
                 description=f"**Joke về {target_name}:**\n\n{joke_text}",
@@ -427,14 +397,12 @@ Joke phải:
             
             await interaction.followup.send(embed=embed)
             
-            # Increment RPD nếu dùng flash model
             if hasattr(model, 'model_name') and config.is_flash_model(model.model_name):
                 config.increment_flash_rpd()
             
         except Exception as error:
             error_str = str(error).lower()
             
-            # Xử lý rate limit
             if "429" in error_str or "rate" in error_str or "quota" in error_str or "resource exhausted" in error_str:
                 config.lock_rpd_until_midnight()
                 embed = discord.Embed(
@@ -449,7 +417,6 @@ Joke phải:
                 embed.set_footer(text="=)) mai t lại lên sóng!")
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
-                # Xử lý lỗi khác
                 embed = discord.Embed(
                     title="💀 Lỗi hệ thống",
                     description=f"Đã xảy ra lỗi khi tạo joke: `{error}`",
@@ -457,13 +424,13 @@ Joke phải:
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
     
-    # Thêm lệnh /ping đơn giản để test
+    # --- PING COMMAND ---
     @bot.tree.command(name="ping", description="Kiểm tra độ trễ của bot")
     async def ping(interaction: discord.Interaction):
         latency = round(bot.latency * 1000)
         await interaction.response.send_message(f"Pong! 🏓 Độ trễ: {latency}ms")
 
-    # --- MODEL COMMAND (OWNER ONLY) ---
+    # --- MODEL COMMAND ---
     @bot.tree.command(name="model", description="[Owner] Xem/đổi model Gemini đang dùng")
     @app_commands.describe(
         action="list (xem danh sách), current (xem model hiện tại), set (đổi model)",
@@ -474,13 +441,6 @@ Joke phải:
         action: str,
         model_id: Optional[str] = None
     ):
-        """
-        Quản lý model Gemini.
-        - action="list": Hiển thị danh sách model có sẵn + highlight model đang dùng
-        - action="current": Hiển thị model hiện tại
-        - action="set": Đổi model (chỉ OWNER mới được)
-        """
-        # Chỉ OWNER được dùng lệnh này
         if interaction.user.id != config.OWNER_ID:
             embed = discord.Embed(
                 title="🚫 Access Denied",
@@ -490,7 +450,6 @@ Joke phải:
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # === ACTION: LIST ===
         if action == "list":
             lines = ["**Danh sách model Gemini chính hãng:**\n"]
             for m in config.AVAILABLE_MODELS:
@@ -506,7 +465,6 @@ Joke phải:
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # === ACTION: CURRENT ===
         if action == "current":
             embed = discord.Embed(
                 title="🤖 Model hiện tại",
@@ -516,7 +474,6 @@ Joke phải:
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
 
-        # === ACTION: SET ===
         if action == "set":
             if not model_id:
                 await interaction.response.send_message(
@@ -525,7 +482,6 @@ Joke phải:
                 )
                 return
             
-            # Validate model_id
             if model_id not in config.AVAILABLE_MODELS:
                 available = ", ".join(f"`{m}`" for m in config.AVAILABLE_MODELS)
                 await interaction.response.send_message(
@@ -534,12 +490,10 @@ Joke phải:
                 )
                 return
             
-            # Đổi model
             old_model = config.current_model_id
             success = config.set_current_model(model_id)
             
             if success:
-                # Lưu ngay
                 config.save_all_data()
                 
                 embed = discord.Embed(
@@ -559,7 +513,6 @@ Joke phải:
                 )
             return
 
-        # Fallback: action không hợp lệ
         await interaction.response.send_message(
             "❌ Action không hợp lệ. Dùng: `list`, `current`, hoặc `set`",
             ephemeral=True

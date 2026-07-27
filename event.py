@@ -154,11 +154,16 @@ def register_events(bot):
         # Load memory từ file
         load_memory()
         try:
+            # Thử sync commands
             synced = await bot.tree.sync()
-            print(f"Đã đồng bộ {len(synced)} lệnh.")
+            print(f"✅ Đã đồng bộ {len(synced)} lệnh slash.")
+            # Log tên các lệnh đã sync
+            command_names = [cmd.name for cmd in synced]
+            print(f"📋 Các lệnh đã sync: {', '.join(command_names)}")
         except Exception as error:
-            print(f"Lỗi đồng bộ lệnh: {error}")
-
+            print(f"❌ Lỗi đồng bộ lệnh: {error}")
+            import traceback
+            traceback.print_exc()
     @bot.event
     async def on_guild_join(guild: discord.Guild):
         try:
