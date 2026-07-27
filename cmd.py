@@ -1,11 +1,11 @@
-import time
-from datetime import datetime, timezone, timedelta
+# Đầu file cmd.py
 import discord
 from discord import app_commands
 from discord.ext import commands
 import config
-import datetime
+from datetime import datetime, timezone, timedelta  # <--- THÊM DÒNG NÀY
 from typing import Optional, List
+import time
 
 # Branding màu sắc cho Embed
 BRAND_COLOR = 0x00F0FF
