@@ -1,3 +1,5 @@
+import time
+from datetime import datetime, timezone, timedelta
 import discord
 from discord import app_commands
 from discord.ext import commands
@@ -423,7 +425,236 @@ Joke phải:
                     color=ERROR_COLOR
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
-    
+    # Thêm vào cuối file cmd.py, trong hàm register_commands(bot)
+
+    # --- QUOTA SETTING COMMAND (OWNER ONLY) ---
+    @bot.tree.command(name="quota_setting", description="[Owner] Tùy chỉnh quota RPD cho bot")
+    @app_commands.describe(
+        action="Chọn hành động: set (đặt lại), reset (reset về mặc định), view (xem trạng thái)",
+        rpd_count="Số RPD hiện tại (chỉ cần khi action='set')",
+        rpd_limit="Giới hạn RPD tối đa (chỉ cần khi action='set')"
+    )
+    @app_commands.choices(action=[
+        app_commands.Choice(name="📊 Xem trạng thái RPD", value="view"),
+        app_commands.Choice(name="🔧 Đặt lại RPD", value="set"),
+        app_commands.Choice(name="🔄 Reset về mặc định", value="reset"),
+        app_commands.Choice(name="🔓 Mở khóa API lock", value="unlock")
+    ])
+    async def quota_setting(
+        interaction: discord.Interaction,
+        action: str = "view",
+        rpd_count: Optional[int] = None,
+        rpd_limit: Optional[int] = None
+    ):
+        """Quản lý quota RPD của bot"""
+        
+        # Chỉ Owner mới được dùng
+        if interaction.user.id != config.OWNER_ID:
+            embed = discord.Embed(
+                title="🚫 Access Denied",
+                description="Chỉ Owner mới được quản lý quota RPD.",
+                color=ERROR_COLOR
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # === ACTION: VIEW ===
+        if action == "view":
+            # Reset RPD nếu sang ngày mới
+            config._reset_rpd_if_new_day()
+            
+            remaining = config.FLASH_RPD_LIMIT - config.rpd_count
+            is_locked = config.is_rpd_locked()
+            lock_time = ""
+            if config.api_locked_until > time.time():
+                remaining_time = config.api_locked_until - time.time()
+                hours = int(remaining_time // 3600)
+                minutes = int((remaining_time % 3600) // 60)
+                lock_time = f"⏰ {hours}h {minutes}m còn lại"
+            else:
+                lock_time = "🔓 Không bị khóa"
+            
+            embed = discord.Embed(
+                title="📊 Trạng thái RPD",
+                color=BRAND_COLOR,
+                description=f"**Server:** {interaction.guild.name if interaction.guild else 'DM'}"
+            )
+            embed.add_field(
+                name="📈 RPD hiện tại",
+                value=f"`{config.rpd_count}` / `{config.FLASH_RPD_LIMIT}`",
+                inline=True
+            )
+            embed.add_field(
+                name="📉 RPD còn lại",
+                value=f"`{max(0, remaining)}`",
+                inline=True
+            )
+            embed.add_field(
+                name="🔒 Trạng thái",
+                value="🔴 Đã khóa" if is_locked else "🟢 Hoạt động",
+                inline=True
+            )
+            embed.add_field(
+                name="⏰ API Lock",
+                value=lock_time,
+                inline=False
+            )
+            embed.add_field(
+                name="📅 Ngày reset",
+                value=config.rpd_date or "Chưa có",
+                inline=False
+            )
+            embed.set_footer(text="Dùng /quota_setting set để thay đổi giá trị")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # === ACTION: SET ===
+        if action == "set":
+            if rpd_count is None or rpd_limit is None:
+                embed = discord.Embed(
+                    title="❌ Thiếu tham số",
+                    description="Khi action='set' cần cung cấp cả `rpd_count` và `rpd_limit`",
+                    color=ERROR_COLOR
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            
+            if rpd_count < 0 or rpd_count > rpd_limit:
+                embed = discord.Embed(
+                    title="❌ Giá trị không hợp lệ",
+                    description=f"`rpd_count` ({rpd_count}) phải từ 0 đến `rpd_limit` ({rpd_limit})",
+                    color=ERROR_COLOR
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            
+            if rpd_limit < 0 or rpd_limit > 2000:
+                embed = discord.Embed(
+                    title="❌ Giá trị không hợp lệ",
+                    description="`rpd_limit` phải từ 0 đến 2000",
+                    color=ERROR_COLOR
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            
+            # Lưu giá trị cũ
+            old_count = config.rpd_count
+            old_limit = config.FLASH_RPD_LIMIT
+            old_date = config.rpd_date
+            
+            # Cập nhật giá trị mới
+            config.rpd_count = rpd_count
+            # Lưu ý: Cần sửa FLASH_RPD_LIMIT trong config (global variable)
+            # Cách đơn giản: gán trực tiếp vào biến global
+            import sys
+            sys.modules['config'].FLASH_RPD_LIMIT = rpd_limit
+            
+            # Reset date về hôm nay
+            config.rpd_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
+            
+            # Mở khóa API nếu đang bị lock
+            config.api_locked_until = 0.0
+            
+            # Lưu config
+            config.save_all_data()
+            
+            embed = discord.Embed(
+                title="✅ Đã cập nhật RPD",
+                color=SUCCESS_COLOR,
+                description=f"**Server:** {interaction.guild.name if interaction.guild else 'DM'}"
+            )
+            embed.add_field(
+                name="📊 RPD cũ → mới",
+                value=f"`{old_count}` → `{rpd_count}` / `{old_limit}` → `{rpd_limit}`",
+                inline=False
+            )
+            embed.add_field(
+                name="📅 Ngày reset",
+                value=config.rpd_date,
+                inline=True
+            )
+            embed.add_field(
+                name="🔓 API Lock",
+                value="✅ Đã mở khóa",
+                inline=True
+            )
+            embed.set_footer(text="Thay đổi sẽ áp dụng ngay lập tức")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # === ACTION: RESET ===
+        if action == "reset":
+            old_count = config.rpd_count
+            old_limit = config.FLASH_RPD_LIMIT
+            
+            # Reset về mặc định
+            config.rpd_count = 0
+            import sys
+            sys.modules['config'].FLASH_RPD_LIMIT = 500  # Giá trị mặc định
+            config.rpd_date = datetime.now(timezone(timedelta(hours=7))).strftime("%Y-%m-%d")
+            config.api_locked_until = 0.0
+            
+            config.save_all_data()
+            
+            embed = discord.Embed(
+                title="🔄 Đã reset RPD về mặc định",
+                color=SUCCESS_COLOR,
+                description=f"**Server:** {interaction.guild.name if interaction.guild else 'DM'}"
+            )
+            embed.add_field(
+                name="📊 RPD cũ → mới",
+                value=f"`{old_count}` → `0` / `{old_limit}` → `500`",
+                inline=False
+            )
+            embed.add_field(
+                name="📅 Ngày reset",
+                value=config.rpd_date,
+                inline=True
+            )
+            embed.add_field(
+                name="🔓 API Lock",
+                value="✅ Đã mở khóa",
+                inline=True
+            )
+            embed.set_footer(text="Đã reset về cấu hình mặc định")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # === ACTION: UNLOCK ===
+        if action == "unlock":
+            if config.api_locked_until == 0.0 and not config.is_rpd_locked():
+                embed = discord.Embed(
+                    title="🔓 API đang hoạt động",
+                    description="Bot không bị khóa API, không cần mở khóa.",
+                    color=BRAND_COLOR
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+            
+            # Mở khóa API
+            config.api_locked_until = 0.0
+            config.save_all_data()
+            
+            embed = discord.Embed(
+                title="🔓 Đã mở khóa API",
+                description="API lock đã được gỡ bỏ, bot có thể tiếp tục hoạt động.",
+                color=SUCCESS_COLOR
+            )
+            embed.set_footer(text="Bot đã sẵn sàng hoạt động trở lại")
+            
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+
+        # Fallback
+        embed = discord.Embed(
+            title="❌ Action không hợp lệ",
+            description="Dùng: `view`, `set`, `reset`, hoặc `unlock`",
+            color=ERROR_COLOR
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
     # --- PING COMMAND ---
     @bot.tree.command(name="ping", description="Kiểm tra độ trễ của bot")
     async def ping(interaction: discord.Interaction):
