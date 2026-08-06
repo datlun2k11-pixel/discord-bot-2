@@ -3,7 +3,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 import config
-from datetime import datetime, timezone, timedelta  # <--- THÊM DÒNG NÀY
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 import time
 
@@ -11,6 +11,21 @@ import time
 BRAND_COLOR = 0x00F0FF
 ERROR_COLOR = 0xFF0040
 SUCCESS_COLOR = 0x00FF88
+
+async def autocomplete_users(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """Autocomplete gợi ý người dùng khi gõ /usage"""
+    choices = []
+    if interaction.guild:
+        # Lấy danh sách member trong guild
+        try:
+            members = [m for m in interaction.guild.members if not m.bot]
+            for member in members[:100]:  # Giới hạn 100 member để tránh lag
+                name = f"{member.display_name} ({member.id})"
+                if not current or current.lower() in name.lower() or current in str(member.id):
+                    choices.append(app_commands.Choice(name=name, value=str(member.id)))
+        except Exception:
+            pass
+    return choices[:25]
 
 # --- MODAL TẠO ROLE MỚI ---
 class CreateRoleModal(discord.ui.Modal, title="Tạo role mới"):
@@ -749,3 +764,86 @@ Joke phải:
             "❌ Action không hợp lệ. Dùng: `list`, `current`, hoặc `set`",
             ephemeral=True
         )
+
+    # --- USAGE COMMAND ---
+    @bot.tree.command(name="usage", description="📊 Kiểm tra số lượt chat của người dùng")
+    @app_commands.describe(
+        user="Người dùng cần kiểm tra (nhập ID hoặc @mention)",
+    )
+    @app_commands.autocomplete(user=autocomplete_users)
+    async def usage(interaction: discord.Interaction, user: Optional[str] = None):
+        # Nếu không truyền user, mặc định là người gọi lệnh
+        if user is None:
+            target_user = interaction.user
+        else:
+            # Thử parse user từ string (có thể là ID hoặc mention)
+            target_user = None
+            # Trường hợp 1: user là ID số
+            if user.isdigit():
+                try:
+                    if interaction.guild:
+                        target_user = await interaction.guild.fetch_member(int(user))
+                    else:
+                        target_user = await bot.fetch_user(int(user))
+                except Exception:
+                    pass
+            
+            # Trường hợp 2: user là mention <@123456789>
+            if not target_user:
+                import re
+                mention_match = re.match(r"<@!?(\d+)>", user.strip())
+                if mention_match:
+                    user_id = int(mention_match.group(1))
+                    try:
+                        if interaction.guild:
+                            target_user = await interaction.guild.fetch_member(user_id)
+                        else:
+                            target_user = await bot.fetch_user(user_id)
+                    except Exception:
+                        pass
+            
+            # Trường hợp 3: không tìm thấy, báo lỗi
+            if not target_user:
+                embed = discord.Embed(
+                    title="❌ Không tìm thấy người dùng",
+                    description=f"Không tìm thấy người dùng với thông tin: `{user}`\n\n💡 **Gợi ý:**\n• Nhập trực tiếp ID người dùng\n• Hoặc dùng @mention để tag người dùng",
+                    color=ERROR_COLOR
+                )
+                await interaction.response.send_message(embed=embed, ephemeral=True)
+                return
+        
+        # Lấy thông tin RPD counter của user này
+        # Lưu ý: Hiện tại bot chỉ track tổng RPD, chưa track per-user
+        # Nên sẽ hiển thị thông tin chung
+        has_remaining, remaining = config.check_flash_rpd()
+        total_limit = config.FLASH_RPD_LIMIT
+        used_count = total_limit - remaining
+        
+        # Tạo embed hiển thị
+        embed = discord.Embed(
+            title=f"📊 Thống kê sử dụng của {target_user.display_name}",
+            color=BRAND_COLOR,
+            description=(
+                f"**User ID:** `{target_user.id}`\n"
+                f"**Username:** {target_user.name}\n"
+            )
+        )
+        
+        # Thêm thông tin về hạn mức
+        embed.add_field(
+            name="🎯 Hạn mức hôm nay",
+            value=(
+                f"Đã dùng: **{used_count}**/{total_limit}\n"
+                f"Còn lại: **{remaining}** lượt\n"
+                f"Trạng thái: {'✅ Bình thường' if has_remaining else '⚠️ Hết lượt'}"
+            ),
+            inline=False
+        )
+        
+        # Ghi chú về cơ chế RPD
+        embed.set_footer(
+            text="💡 Lưu ý: Bot hiện đang tính RPD chung cho tất cả người dùng trong server. "
+                 "Hạn mức sẽ reset vào 0:00 mỗi ngày (giờ Việt Nam)."
+        )
+        
+        await interaction.response.send_message(embed=embed, ephemeral=True)
