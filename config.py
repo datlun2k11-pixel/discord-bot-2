@@ -177,12 +177,6 @@ class BotConfig:
     def is_flash_model(self, model_id: str) -> bool:
         return "flash" in model_id.lower()
 
-    def _reset_rpd_if_new_day(self):
-        today = time.strftime("%Y-%m-%d")
-        if self.rpd_date != today:
-            self.rpd_date = today
-            self.rpd_count = 0
-
     def check_flash_rpd(self) -> Tuple[bool, int]:
         self._reset_rpd_if_new_day()
         remaining = FLASH_RPD_LIMIT - self.rpd_count
