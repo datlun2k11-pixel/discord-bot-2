@@ -300,13 +300,14 @@ def register_events(bot):
         if not is_dm and not is_mentioned and not is_reply_to_bot:
             return
             
+        # Check global chat_enabled (tắt toàn bộ server + DM)
+        if not config.config.is_chat_enabled:
+            return
         # Check guild-specific chat_enabled (nếu server đã cài đặt)
         if message.guild:
             guild_settings = config.GUILD_SETTINGS.get(str(message.guild.id), {})
             if guild_settings.get("chat_enabled") is False:
                 return
-        elif not config.is_chat_enabled:
-            return
 
         # === KIỂM TRA RPD LOCK ===
         if config.is_rpd_locked():
@@ -314,7 +315,7 @@ def register_events(bot):
             embed = discord.Embed(
                 title="😴 Bot đã hết lượt hôm nay!",
                 description=(
-                    f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                    f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🥀\n\n"
                     f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
                     f"Quay lại vào ngày mai nha! 🕐"
                 ),
@@ -369,7 +370,7 @@ def register_events(bot):
                 user_spam_data["last_msgs"] = []
                 user_spam_data["dup_count"] = 0
                 await message.channel.send(
-                    f"<@{user_id}> Spam clm, cút 30s! 🤡",
+                    f"<@{user_id}> Spam clm, cút 30s! 🥀",
                     delete_after=10,
                 )
                 return
@@ -444,7 +445,7 @@ def register_events(bot):
                 
                 # Nếu ko có nội dung và ko có ảnh thì bỏ qua
                 if not clean_content and not image_parts:
-                    await message.reply("Sao? Gọi t chi z? 🤡", mention_author=False)
+                    await message.reply("Sao? Gọi t chi z? 🥀", mention_author=False)
                     return
                 if not clean_content and image_parts:
                     clean_content = "Hãy mô tả ảnh này"
@@ -518,7 +519,7 @@ def register_events(bot):
                 response_text = config.extract_response_text(response)
                 
                 if not response_text:
-                    response_text = "T bị câm ngang API r, nói lại phát 💀"
+                    response_text = "T bị câm ngang API r, nói lại phát 🥀"
                     
                 response_text = response_text[:2000].strip()
 
@@ -574,12 +575,12 @@ def register_events(bot):
                         )
                     else:
                         await message.reply(
-                            response_text if response_text else "Hồn nhiên t khum có avatar 💀",
+                            response_text if response_text else "Hồn nhiên t khum có avatar 🥀",
                             mention_author=False,
                         )
                 else:
                     await message.reply(
-                        response_text or "T nghẹn text r 💀",
+                        response_text or "T nghẹn text r 🥀",
                         mention_author=False,
                     )
 
@@ -645,7 +646,7 @@ def register_events(bot):
                 embed = discord.Embed(
                     title="😴 Bot đã hết lượt hôm nay!",
                     description=(
-                        f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                        f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🥀\n\n"
                         f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
                         f"Quay lại vào ngày mai nha! 🕐"
                     ),
@@ -654,7 +655,7 @@ def register_events(bot):
                 embed.set_footer(text="=)) mai t lại lên sóng!")
                 await message.reply(embed=embed, mention_author=False)
             elif message.author.id == config.OWNER_ID:
-                await message.channel.send(f"Lỗi nè đại ca: `{error}` 💀")
+                await message.channel.send(f"Lỗi nè đại ca: `{error}` 🥀")
 
 # --- HÀM PHỤ TRỢ (GIỮ NGUYÊN) ---
 async def _build_invite_url(guild: discord.Guild):

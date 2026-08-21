@@ -92,7 +92,7 @@ def register_commands(bot):
         else:
             err_desc = "Đã xảy ra lỗi: `" + str(error) + "`"
             embed = discord.Embed(
-                title="💀 Lỗi hệ thống",
+                title="🥀 Lỗi hệ thống",
                 description=err_desc,
                 color=ERROR_COLOR
             )
@@ -159,7 +159,7 @@ def register_commands(bot):
                 embed = discord.Embed(
                     title="❌ Sai tên nhân vật",
                     description=(
-                        f"Bro chưa chọn nhân vật kìa! 🤡\n\n"
+                        f"Bro chưa chọn nhân vật kìa! 🥀\n\n"
                         f"**Các nhân vật có sẵn:**\n"
                         f"{roles_list}\n\n"
                         f"📝 **Cách dùng:** Chọn action **Bắt đầu** → gõ tên nhân vật vào ô **character**"
@@ -247,7 +247,22 @@ def register_commands(bot):
         
         if chat_enabled is not None:
             current["chat_enabled"] = chat_enabled
-            changed.append(f"chat_enabled: {chat_enabled}")
+            changed.append(f"chat_enabled (server này): {chat_enabled}")
+            # Nếu là Owner -> áp dụng global + tất cả server bot đang ở (theo yêu cầu tắt toàn bộ)
+            if interaction.user.id == config.OWNER_ID:
+                config.config.is_chat_enabled = chat_enabled
+                updated = 0
+                for g in bot.guilds:
+                    gid = str(g.id)
+                    gs = config.GUILD_SETTINGS.get(gid, {})
+                    gs["chat_enabled"] = chat_enabled
+                    config.GUILD_SETTINGS[gid] = gs
+                    updated += 1
+                # Đảm bảo guild hiện tại đã được đồng bộ (tránh double)
+                if updated == 0:
+                    # Bot chưa ready hoặc không có guild nào khác, vẫn set global
+                    pass
+                changed.append(f"global chat_enabled: {chat_enabled} (đã áp dụng cho {updated} server + DM)")
         
         if send_gif is not None:
             current["send_gif"] = send_gif
@@ -258,6 +273,7 @@ def register_commands(bot):
             temp = current.get("temperature", config.DEFAULT_TEMPERATURE)
             enabled = current.get("chat_enabled", True)
             gif_enabled = current.get("send_gif", True)
+            global_enabled = config.config.is_chat_enabled
             
             embed = discord.Embed(
                 title="⚙️ Cấu hình server hiện tại",
@@ -266,9 +282,10 @@ def register_commands(bot):
             )
             embed.add_field(name="Max Tokens", value=str(max_t), inline=True)
             embed.add_field(name="Temperature", value=str(temp), inline=True)
-            embed.add_field(name="Chat Enabled", value="✅ Bật" if enabled else "❌ Tắt", inline=True)
+            embed.add_field(name="Chat Enabled (server)", value="✅ Bật" if enabled else "❌ Tắt", inline=True)
             embed.add_field(name="Send GIF", value="✅ Bật" if gif_enabled else "❌ Tắt", inline=True)
-            embed.set_footer(text="Dùng /setting <option> <value> để thay đổi")
+            embed.add_field(name="Global Chat", value="✅ Bật" if global_enabled else "❌ Tắt (tất cả server)", inline=True)
+            embed.set_footer(text="Dùng /setting <option> <value> để thay đổi | Owner: chat_enabled sẽ áp dụng toàn bộ server")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
@@ -382,7 +399,7 @@ def register_commands(bot):
             embed = discord.Embed(
                 title="😴 Bot đã hết lượt hôm nay!",
                 description=(
-                    f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                    f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🥀\n\n"
                     f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
                     f"Quay lại vào ngày mai nha! 🕐"
                 ),
@@ -399,8 +416,8 @@ Hãy tạo một joke hài hước về người tên là "{target_name}".
 Joke phải:
 - Ngắn gọn, hài hước, dễ hiểu
 - Có liên quan đến display name của người này
-- Dùng ngôn ngữ GenZ, teencode (nx, th, cx, vs, k, thx, j, z, 🤡, 💀...)
-- Có ít nhất 1 emoji/kaomoji (🥀, 💔, 💀, (._.), (¬_¬), (╯°□°）╯︵ ┻━┻)
+- Dùng ngôn ngữ GenZ, teencode (nx, th, cx, vs, k, thx, j, z...)
+- Có ít nhất 1 emoji trong danh sách cho phép (❤️‍🩹, 🌹, 💔, 🥀, 😡, 🐧, 🫩) - Cấm emoji khác
 """
         
         if topic:
@@ -416,10 +433,10 @@ Joke phải:
             joke_text = config.extract_response_text(response)
             
             if not joke_text:
-                joke_text = "API bị mù rồi, nói lại phát 💀"
+                joke_text = "API bị mù rồi, nói lại phát 🥀"
             
             embed = discord.Embed(
-                title="😂 Joke Hài Hước",
+                title="🥀 Joke Hài Hước",
                 description=f"**Joke về {target_name}:**\n\n{joke_text}",
                 color=BRAND_COLOR
             )
@@ -438,7 +455,7 @@ Joke phải:
                 embed = discord.Embed(
                     title="😴 Bot đã hết lượt hôm nay!",
                     description=(
-                        f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🤡\n\n"
+                        f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🥀\n\n"
                         f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay.\n\n"
                         f"Quay lại vào ngày mai nha! 🕐"
                     ),
@@ -448,7 +465,7 @@ Joke phải:
                 await interaction.followup.send(embed=embed, ephemeral=True)
             else:
                 embed = discord.Embed(
-                    title="💀 Lỗi hệ thống",
+                    title="🥀 Lỗi hệ thống",
                     description=f"Đã xảy ra lỗi khi tạo joke: `{error}`",
                     color=ERROR_COLOR
                 )
