@@ -9,6 +9,7 @@ import random
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from collections import defaultdict
+import requests
 import discord
 from google import genai
 from google.genai import types
@@ -28,6 +29,89 @@ if not DISCORD_TOKEN:
     raise ValueError("❌ DISCORD_TOKEN không được để trống! Check file .env")
 if not GOOGLE_API_KEY:
     raise ValueError("❌ GOOGLE_API_KEY không được để trống! Check file .env")
+
+# GIPHY - không bắt buộc, nếu không có thì tắt tính năng GIF
+GIPHY_API_KEY = os.getenv("GIPHY_API_KEY")
+GIPHY_ENABLED = bool(GIPHY_API_KEY and GIPHY_API_KEY.strip())
+if GIPHY_ENABLED:
+    print(f"✅ GIPHY enabled (key: {GIPHY_API_KEY[:6]}...)")
+else:
+    print("⚠️ GIPHY_API_KEY chưa set - tính năng GIF sẽ bị tắt")
+
+GIPHY_SEARCH_URL = "https://api.giphy.com/v1/gifs/search"
+GIPHY_RANDOM_URL = "https://api.giphy.com/v1/gifs/random"
+
+def search_gifs(query: str, limit: int = 1) -> List[str]:
+    """Tìm GIF từ Giphy bằng requests (sync - caller nên chạy qua asyncio.to_thread)
+
+    Args:
+        query: từ khóa search (tiếng Anh)
+        limit: số GIF muốn lấy (1-3, tự clamp)
+    Returns:
+        List URL GIF (original url)
+    """
+    if not GIPHY_ENABLED:
+        print("⚠️ GIPHY_API_KEY chưa cấu hình, bỏ qua search_gifs")
+        return []
+    if not query or not query.strip():
+        return []
+    # clamp limit 1-3 để tránh spam
+    try:
+        limit = int(limit)
+    except:
+        limit = 1
+    limit = max(1, min(limit, 3))
+
+    try:
+        resp = requests.get(
+            GIPHY_SEARCH_URL,
+            params={
+                "api_key": GIPHY_API_KEY,
+                "q": query.strip(),
+                "limit": limit,
+                "rating": "pg",
+                "lang": "en",
+                "bundle": "messaging_non_clutter",
+            },
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        urls = []
+        for item in data.get("data", [])[:limit]:
+            # Ưu tiên original, fallback downsized
+            images = item.get("images", {})
+            url = images.get("original", {}).get("url") or images.get("downsized_large", {}).get("url") or item.get("url")
+            if url:
+                urls.append(url)
+        return urls
+    except Exception as e:
+        print(f"⚠️ Giphy search lỗi (query={query}): {e}")
+        return []
+
+def get_random_gif(query: str) -> Optional[str]:
+    """Lấy 1 GIF random theo tag (fallback nếu search fail)"""
+    if not GIPHY_ENABLED:
+        return None
+    try:
+        resp = requests.get(
+            GIPHY_RANDOM_URL,
+            params={"api_key": GIPHY_API_KEY, "tag": query.strip(), "rating": "pg"},
+            timeout=8,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data", {})
+        images = data.get("images", {}) if isinstance(data, dict) else {}
+        url = images.get("original", {}).get("url") or data.get("url") or data.get("images", {}).get("original", {}).get("url")
+        if url:
+            return url
+        # fallback: nếu random trả về dict khác
+        if isinstance(data, dict) and data.get("url"):
+            return data["url"]
+        return None
+    except Exception as e:
+        print(f"⚠️ Giphy random lỗi (query={query}): {e}")
+        return None
 
 # ============================================
 # 2. CẤU HÌNH CƠ BẢN
@@ -527,6 +611,14 @@ Rep siêu ngắn (1 dòng thôi, đừng văn vở).
 Sẵn sàng cà khịa chủ nhân nếu thấy hợp lý.
 Nếu user hỏi về chính mình (GenA-Bot), giới thiệu ngắn gọn.
 ⚠️ TUYỆT ĐỐI KHÔNG được hiển thị quá trình suy nghĩ, draft, nháp, chain-of-thought. Chỉ trả về câu trả lời cuối cùng.
+
+🎬 GIF (GIPHY) - TÙY CHỌN, DÙNG KHI HỢP LÝ:
+- Nếu cảm xúc mạnh, muốn troll/meme/cringe/slay mà GIF sẽ vui hơn text, mày có thể gửi kèm GIF.
+- Cách gửi: Thêm 1 dòng JSON ở CUỐI tin nhắn (sau khi đã viết xong text): {"search": "<từ khóa tiếng Anh>", "max_result": 1}
+- Ví dụ: "m cringe vãi 💀\\n{"search": "cringe", "max_result": 2}" -> bot sẽ tự fetch và gửi 2 GIF cringe.
+- search: từ khóa tiếng Anh ngắn gọn (cringe, anime dance, facepalm, slay, bruh...)
+- max_result: 1-3 (mặc định 1, tối đa 3 để tránh spam). Chỉ gửi khi thực sự cần, đừng lạm dụng mỗi câu.
+- JSON này sẽ bị ẩn khỏi người dùng, chỉ dùng để bot fetch GIF. Đừng giải thích JSON cho user.
 """
 
 META_ROLEPLAY_PROMPT = """

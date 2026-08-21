@@ -1,11 +1,12 @@
 import time
 import json
+import re
 import os
 import tempfile
 import shutil
 import asyncio
 from collections import deque
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Tuple
 import discord
 import config
 
@@ -25,6 +26,72 @@ _save_counter = 0  # Khởi tạo biến đếm toàn cục
 
 # File lưu memory (để khi restart bot vẫn nhớ)
 MEMORY_FILE = "channel_memory.json"
+
+# --- GIF HELPERS (GIPHY via requests) ---
+_GIF_CODEBLOCK_RE = re.compile(r'```(?:json)?\s*(\{[^`]*?\})\s*```', re.IGNORECASE | re.DOTALL)
+_GIF_INLINE_RE = re.compile(r'\{[^{}]*"search"\s*:\s*"[^"]*"[^{}]*\}')
+
+def extract_gif_requests(text: str) -> Tuple[str, List[Tuple[str, int]]]:
+    """Tách JSON GIF ra khỏi text
+
+    Hỗ trợ:
+    - ```json {"search": "cringe", "max_result": 2}```
+    - {"search": "cringe", "max_result": "3"}
+    - {"search": "anime dance", "max_results": 2} / limit
+    Returns: (clean_text, [(search, limit), ...])
+    """
+    if not text or not config.GIPHY_ENABLED:
+        return text, []
+    gif_requests: List[dict] = []
+    clean = text
+
+    # 1. Codeblock json
+    for m in list(_GIF_CODEBLOCK_RE.finditer(text)):
+        raw = m.group(1).strip()
+        try:
+            obj = json.loads(raw)
+            if isinstance(obj, dict) and "search" in obj:
+                gif_requests.append(obj)
+                clean = clean.replace(m.group(0), "")
+        except:
+            continue
+
+    # 2. Inline json (tìm trong clean hiện tại để tránh duplicate)
+    for m in list(_GIF_INLINE_RE.finditer(clean)):
+        raw = m.group(0)
+        try:
+            obj = json.loads(raw)
+            if isinstance(obj, dict) and "search" in obj:
+                # Tránh duplicate nếu đã bắt từ codeblock
+                if obj not in gif_requests:
+                    gif_requests.append(obj)
+                clean = clean.replace(raw, "")
+        except:
+            continue
+
+    # Normalize limits
+    normalized: List[Tuple[str, int]] = []
+    for obj in gif_requests:
+        search = str(obj.get("search", "")).strip()
+        if not search:
+            continue
+        raw_limit = obj.get("max_result", obj.get("max_results", obj.get("limit", obj.get("maxResult", 1))))
+        try:
+            limit = int(str(raw_limit).strip())
+        except:
+            limit = 1
+        limit = max(1, min(limit, 3))
+        normalized.append((search, limit))
+
+    # Dọn clean text: xóa dòng trống thừa, strip
+    clean = re.sub(r'\n{3,}', '\n\n', clean).strip()
+    return clean, normalized
+
+def _get_gif_instruction() -> str:
+    """Trả về instruction GIF để inject vào prompt (nếu enabled)"""
+    if not config.GIPHY_ENABLED:
+        return ""
+    return '\n🎬 GIF: Nếu cảm xúc hợp lý (cringe, troll, meme...), có thể gửi GIF bằng cách thêm 1 dòng JSON ở CUỐI tin nhắn: {"search": "keyword tiếng Anh", "max_result": 1} (1-3). VD: {"search": "cringe", "max_result": 2}. JSON sẽ bị ẩn và bot tự gửi GIF. Chỉ dùng khi thực sự cần.'
 
 def _get_save_lock() -> asyncio.Lock:
     """Lazy initialization of asyncio.Lock để tránh lỗi event loop chưa tồn tại"""
@@ -329,6 +396,14 @@ def register_events(bot):
             system_instruction = f"{state['config']['prompt']}\n\n{config.META_ROLEPLAY_PROMPT}"
         else:
             system_instruction = config.DEFAULT_SYSTEM_PROMPT
+        # Inject GIF instruction nếu enabled toàn cục VÀ guild cho phép (mặc định true)
+        _guild_send_gif_for_prompt = True
+        if message.guild:
+            _guild_send_gif_for_prompt = config.GUILD_SETTINGS.get(str(message.guild.id), {}).get("send_gif", True)
+        if config.GIPHY_ENABLED and _guild_send_gif_for_prompt:
+            gif_instr = _get_gif_instruction()
+            if gif_instr and "GIF" not in system_instruction:
+                system_instruction += "\n" + gif_instr
 
         # --- 5. XỬ LÝ ẢNH (AN TOÀN) ---
         image_parts = []
@@ -447,6 +522,43 @@ def register_events(bot):
                     
                 response_text = response_text[:2000].strip()
 
+                # --- GIF PARSING & FETCH (GIPHY via requests) ---
+                # Tôn trọng setting send_gif của guild (mặc định True)
+                _guild_send_gif = True
+                if message.guild:
+                    _guild_send_gif = config.GUILD_SETTINGS.get(str(message.guild.id), {}).get("send_gif", True)
+                if not _guild_send_gif:
+                    # Guild tắt GIF: vẫn strip JSON để không lộ JSON ra channel, nhưng không fetch
+                    tmp_clean, tmp_q = extract_gif_requests(response_text)
+                    if tmp_q:
+                        response_text = tmp_clean.strip()[:2000] if tmp_clean.strip() else response_text
+                        # xóa JSON khỏi hiển thị nhưng không gửi GIF
+                        print(f"🎬 GIF disabled cho guild {message.guild.id}, đã strip {len(tmp_q)} request(s)")
+                    gif_urls: List[str] = []
+                    clean_text, gif_queries = response_text, []
+                else:
+                    clean_text, gif_queries = extract_gif_requests(response_text)
+                    gif_urls: List[str] = []
+                    if gif_queries:
+                        for search_term, limit in gif_queries:
+                            try:
+                                urls = await asyncio.to_thread(config.search_gifs, search_term, limit)
+                                if urls:
+                                    gif_urls.extend(urls)
+                                else:
+                                    rand = await asyncio.to_thread(config.get_random_gif, search_term)
+                                    if rand:
+                                        gif_urls.append(rand)
+                            except Exception as e:
+                                print(f"⚠️ Lỗi fetch GIF {search_term}: {e}")
+                        if not clean_text.strip():
+                            # Nếu text chỉ toàn JSON, fallback lấy text gốc đã xóa JSON
+                            tmp = re.sub(r'```(?:json)?\s*\{[^`]*?\}\s*```', '', response_text, flags=re.IGNORECASE|re.DOTALL)
+                            tmp = _GIF_INLINE_RE.sub('', tmp).strip()
+                            clean_text = tmp if tmp else "🥀"
+                        response_text = clean_text.strip()[:2000]
+                        print(f"🎬 GIF requests: {gif_queries} -> {len(gif_urls)} urls")
+
                 # --- GỬI REPLY ---
                 if config.has_avatar_tag(response_text):
                     response_text = config.remove_avatar_tag(response_text)
@@ -470,6 +582,14 @@ def register_events(bot):
                         response_text or "T nghẹn text r 💀",
                         mention_author=False,
                     )
+
+                # --- GỬI GIFs KÈM THEO (nếu có) ---
+                if gif_urls:
+                    for url in gif_urls:
+                        try:
+                            await message.channel.send(url)
+                        except Exception as e:
+                            print(f"⚠️ Lỗi gửi GIF url {url}: {e}")
 
                 # --- CẬP NHẬT MEMORY VỚI MÔ TẢ ẢNH (NẾU CÓ) ---
                 if image_parts and message.guild:

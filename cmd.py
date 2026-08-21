@@ -187,11 +187,18 @@ def register_commands(bot):
 
     # --- SETTING COMMAND ---
     @bot.tree.command(name="setting", description="[Admin/Owner] Tùy chỉnh cấu hình bot cho server")
+    @app_commands.describe(
+        max_tokens="Số token tối đa (128-8192)",
+        temperature="Độ sáng tạo (0.0-2.0)",
+        chat_enabled="Bật/tắt chat AI trong server",
+        send_gif="Bật/tắt gửi GIF từ Giphy (true/false)"
+    )
     async def setting(
         interaction: discord.Interaction,
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
         chat_enabled: Optional[bool] = None,
+        send_gif: Optional[bool] = None,
     ):
         is_admin = interaction.user.guild_permissions.administrator if interaction.guild else False
         is_owner = interaction.user.id == config.OWNER_ID
@@ -242,10 +249,15 @@ def register_commands(bot):
             current["chat_enabled"] = chat_enabled
             changed.append(f"chat_enabled: {chat_enabled}")
         
+        if send_gif is not None:
+            current["send_gif"] = send_gif
+            changed.append(f"send_gif: {send_gif}")
+        
         if not changed:
             max_t = current.get("max_tokens", config.DEFAULT_MAX_TOKENS)
             temp = current.get("temperature", config.DEFAULT_TEMPERATURE)
             enabled = current.get("chat_enabled", True)
+            gif_enabled = current.get("send_gif", True)
             
             embed = discord.Embed(
                 title="⚙️ Cấu hình server hiện tại",
@@ -255,6 +267,7 @@ def register_commands(bot):
             embed.add_field(name="Max Tokens", value=str(max_t), inline=True)
             embed.add_field(name="Temperature", value=str(temp), inline=True)
             embed.add_field(name="Chat Enabled", value="✅ Bật" if enabled else "❌ Tắt", inline=True)
+            embed.add_field(name="Send GIF", value="✅ Bật" if gif_enabled else "❌ Tắt", inline=True)
             embed.set_footer(text="Dùng /setting <option> <value> để thay đổi")
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
