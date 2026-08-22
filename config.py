@@ -814,11 +814,34 @@ Nói chuyện ngắn gọn 1-2 câu cho chuẩn discord
 }
 
 # ============================================
-# 9. DATA PERSISTENCE
+# 9. DATA PERSISTENCE (KOYEB VOLUME FIX)
 # ============================================
+# Koyeb filesystem là ephemeral — redeploy sẽ mất data/ nếu không mount volume.
+# Hỗ trợ volume mount tại /data, /app/data hoặc DATA_DIR env để persist.
+def _get_data_dir() -> str:
+    """Trả về data_dir persist nhất có thể: ưu tiên DATA_DIR env -> /data -> /app/data -> data"""
+    env_dir = os.getenv("DATA_DIR") or os.getenv("KOYEB_DATA_DIR")
+    if env_dir and env_dir.strip():
+        return env_dir.strip()
+    # Thử các volume path phổ biến trên Koyeb/Fly/Docker
+    for cand in ["/data", "/app/data", "/persistent/data"]:
+        try:
+            if os.path.isdir(cand) and os.access(cand, os.W_OK):
+                return cand
+        except:
+            pass
+    return "data"
+
+DATA_DIR = _get_data_dir()
+
 def _atomic_write(filepath: str, data: object):
     """Ghi file an toàn: ghi vào temp → rename, tránh corrupt data nếu crash giữa chừng"""
-    temp_fd, temp_path = tempfile.mkstemp(dir=os.path.dirname(filepath) or ".")
+    dirpath = os.path.dirname(filepath) or "."
+    try:
+        os.makedirs(dirpath, exist_ok=True)
+    except:
+        pass
+    temp_fd, temp_path = tempfile.mkstemp(dir=dirpath)
     try:
         with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
@@ -830,10 +853,52 @@ def _atomic_write(filepath: str, data: object):
             pass
         raise
 
+def _backup_characters_to_github_if_configured():
+    """Nếu có GITHUB_TOKEN + GITHUB_REPO thì push characters.json lên GitHub để không mất khi redeploy (backup phụ)"""
+    token = os.getenv("GITHUB_TOKEN") or os.getenv("GH_TOKEN")
+    repo = os.getenv("GITHUB_REPO")  # dạng datlun2k11-pixel/discord-bot-2
+    if not token or not repo:
+        return
+    try:
+        data_dir = _get_data_dir()
+        char_path = f"{data_dir}/characters.json"
+        if not os.path.exists(char_path):
+            return
+        with open(char_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Dùng GitHub API để update file (không bắt buộc phải thành công, chỉ backup)
+        import base64
+        # Lấy sha hiện tại
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        get_url = f"https://api.github.com/repos/{repo}/contents/{char_path}"
+        # GitHub repo path thường là data/characters.json (từ root)
+        # Nếu DATA_DIR là /data thì vẫn push vào data/characters.json trong repo
+        github_path = "data/characters.json"
+        get_resp = requests.get(f"https://api.github.com/repos/{repo}/contents/{github_path}", headers=headers, timeout=8)
+        sha = None
+        if get_resp.status_code == 200:
+            sha = get_resp.json().get("sha")
+        elif get_resp.status_code == 404:
+            sha = None  # file chưa có
+        else:
+            print(f"⚠️ GitHub backup get sha fail: {get_resp.status_code} {get_resp.text[:200]}")
+            return
+        b64 = base64.b64encode(content.encode("utf-8")).decode("utf-8")
+        payload = {"message": "chore: backup characters.json [skip ci]", "content": b64, "branch": "main"}
+        if sha:
+            payload["sha"] = sha
+        put_resp = requests.put(f"https://api.github.com/repos/{repo}/contents/{github_path}", headers=headers, json=payload, timeout=10)
+        if put_resp.status_code in (200, 201):
+            print("✅ Đã backup characters.json lên GitHub")
+        else:
+            print(f"⚠️ GitHub backup push fail: {put_resp.status_code} {put_resp.text[:300]}")
+    except Exception as e:
+        print(f"⚠️ Lỗi backup GitHub: {e}")
+
 def save_all_data():
     """Lưu toàn bộ dữ liệu ra file JSON (atomic write, tránh corrupt)"""
     try:
-        data_dir = "data"
+        data_dir = _get_data_dir()
         os.makedirs(data_dir, exist_ok=True)
         
         # Cleanup memory leaks trước khi lưu
@@ -872,8 +937,23 @@ def save_all_data():
         save_all_data.save_count += 1
         if save_all_data.save_count % 10 == 0:
             _backup_data(data_dir)
+
+        # Đồng bộ sang thư mục data/ gốc nếu DATA_DIR là volume khác (để git track backup)
+        if data_dir != "data":
+            try:
+                os.makedirs("data", exist_ok=True)
+                # Chỉ sync characters.json quan trọng
+                if os.path.exists(f"{data_dir}/characters.json"):
+                    shutil.copy2(f"{data_dir}/characters.json", "data/characters.json")
+            except Exception as e:
+                print(f"⚠️ Sync data -> data/character fail: {e}")
             
-        print("✅ Đã lưu toàn bộ dữ liệu config")
+        print(f"✅ Đã lưu toàn bộ dữ liệu config (DATA_DIR={data_dir})")
+        # Thử backup lên GitHub nếu có token (không chặn luồng chính)
+        try:
+            _backup_characters_to_github_if_configured()
+        except Exception:
+            pass
         return True
     except Exception as e:
         print(f"⚠️ Lỗi lưu dữ liệu: {e}")
@@ -915,58 +995,82 @@ def _backup_data(data_dir: str):
         print(f"⚠️ Lỗi tạo backup: {e}")
 
 def load_all_data():
-    """Load toàn bộ dữ liệu từ file JSON"""
+    """Load toàn bộ dữ liệu từ file JSON - hỗ trợ volume persist và fallback"""
     try:
-        data_dir = "data"
+        data_dir = _get_data_dir()
         os.makedirs(data_dir, exist_ok=True)
+        # Fallback: nếu DATA_DIR là volume nhưng rỗng (mới mount), thử load từ ./data cũ
+        fallback_dir = "data" if data_dir != "data" else None
+        def _resolve_path(fname: str) -> Optional[str]:
+            """Ưu tiên data_dir, fallback sang ./data nếu file không tồn tại ở volume"""
+            primary = f"{data_dir}/{fname}"
+            if os.path.exists(primary):
+                return primary
+            if fallback_dir and os.path.exists(f"{fallback_dir}/{fname}"):
+                # Tự động copy fallback sang volume để lần sau persist
+                try:
+                    shutil.copy2(f"{fallback_dir}/{fname}", primary)
+                    print(f"🔄 Migrated {fname} từ {fallback_dir} sang {data_dir}")
+                except:
+                    pass
+                return primary if os.path.exists(primary) else f"{fallback_dir}/{fname}"
+            return primary if os.path.exists(primary) else None
         
         # Load chat_history
-        if os.path.exists(f"{data_dir}/chat_history.json"):
-            with open(f"{data_dir}/chat_history.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("chat_history.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 config.chat_history = json.load(f)
                 print(f"✅ Loaded chat_history: {len(config.chat_history)} keys")
                 
         # Load msg_counters
-        if os.path.exists(f"{data_dir}/msg_counters.json"):
-            with open(f"{data_dir}/msg_counters.json", "r") as f:
+        path = _resolve_path("msg_counters.json")
+        if path and os.path.exists(path):
+            with open(path, "r") as f:
                 data = json.load(f)
                 # Convert keys to int
                 config.msg_counters = {int(k): v for k, v in data.items()}
                 print(f"✅ Loaded msg_counters: {len(config.msg_counters)} servers")
                 
         # Load user_roles
-        if os.path.exists(f"{data_dir}/user_roles.json"):
-            with open(f"{data_dir}/user_roles.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("user_roles.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 config.user_roles = json.load(f)
                 print(f"✅ Loaded user_roles: {len(config.user_roles)} roles")
                 
         # Load context_states
-        if os.path.exists(f"{data_dir}/context_states.json"):
-            with open(f"{data_dir}/context_states.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("context_states.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 config.context_states = json.load(f)
                 print(f"✅ Loaded context_states: {len(config.context_states)} states")
                 
         # Load guild_settings
-        if os.path.exists(f"{data_dir}/guild_settings.json"):
-            with open(f"{data_dir}/guild_settings.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("guild_settings.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 config.guild_settings = json.load(f)
                 print(f"✅ Loaded guild_settings: {len(config.guild_settings)} guilds")
                 
         # Load provider_settings
-        if os.path.exists(f"{data_dir}/provider_settings.json"):
-            with open(f"{data_dir}/provider_settings.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("provider_settings.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 config.provider_settings = json.load(f)
                 print(f"✅ Loaded provider_settings: {len(config.provider_settings)} guilds")
 
         # Load custom roles
-        if os.path.exists(f"{data_dir}/custom_roles.json"):
-            with open(f"{data_dir}/custom_roles.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("custom_roles.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 config.custom_roles = json.load(f)
                 print(f"✅ Loaded custom_roles: {len(config.custom_roles)} roles")
 
         # Load current_model_id
-        if os.path.exists(f"{data_dir}/model_config.json"):
-            with open(f"{data_dir}/model_config.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("model_config.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 model_data = json.load(f)
                 saved_model_id = model_data.get("current_model_id")
                 if saved_model_id in AVAILABLE_MODELS:
@@ -978,8 +1082,9 @@ def load_all_data():
                     print(f"⚠️ Model '{saved_model_id}' không hợp lệ, dùng default: {DEFAULT_MODEL_ID}")
 
         # Load RPD tracking
-        if os.path.exists(f"{data_dir}/rpd_lock.json"):
-            with open(f"{data_dir}/rpd_lock.json", "r") as f:
+        path = _resolve_path("rpd_lock.json")
+        if path and os.path.exists(path):
+            with open(path, "r") as f:
                 rpd_data = json.load(f)
                 config.rpd_count = rpd_data.get("rpd_count", 0)
                 config.rpd_date = rpd_data.get("rpd_date", "")
@@ -990,15 +1095,17 @@ def load_all_data():
                 print(f"✅ Loaded RPD: {config.rpd_count}/{FLASH_RPD_LIMIT} (date: {config.rpd_date})")
 
         # Load global settings (is_chat_enabled)
-        if os.path.exists(f"{data_dir}/global_settings.json"):
-            with open(f"{data_dir}/global_settings.json", "r") as f:
+        path = _resolve_path("global_settings.json")
+        if path and os.path.exists(path):
+            with open(path, "r") as f:
                 g_data = json.load(f)
                 config.is_chat_enabled = g_data.get("is_chat_enabled", True)
                 print(f"✅ Loaded global_settings: is_chat_enabled={config.is_chat_enabled}")
 
         # Load characters (Character Webhook System)
-        if os.path.exists(f"{data_dir}/characters.json"):
-            with open(f"{data_dir}/characters.json", "r", encoding="utf-8") as f:
+        path = _resolve_path("characters.json")
+        if path and os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
                 raw = json.load(f)
                 # raw: {guild_id_str: {role_id_str: {...}}}
                 # Đảm bảo keys là str
