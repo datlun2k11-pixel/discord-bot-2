@@ -14,6 +14,7 @@ SUCCESS_COLOR = 0x00FF88
 
 # --- CHARACTER SYSTEM CONSTANTS ---
 MAX_AVATAR_SIZE = 20 * 1024 * 1024  # 20MB theo spec
+MAX_CHARACTERS_PER_GUILD = 6  # giới hạn mỗi server
 _pending_character_pfps: dict[int, Optional[discord.Attachment]] = {}  # user_id -> attachment
 
 async def autocomplete_users(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
@@ -156,6 +157,14 @@ class CreateCharacterModal(discord.ui.Modal, title="Tạo Character mới"):
                     ephemeral=True,
                 )
                 return
+
+        # Giới hạn 6 character/server
+        if len(guild_chars) >= MAX_CHARACTERS_PER_GUILD:
+            await interaction.response.send_message(
+                f"❌ Server đã đạt giới hạn **{MAX_CHARACTERS_PER_GUILD}** Character! Xóa bớt (`/character delete`) trước khi tạo mới.",
+                ephemeral=True,
+            )
+            return
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
@@ -367,6 +376,14 @@ def register_commands(bot):
             # Validate phải là ảnh (đã check size ở trên)
             if pfp.content_type and not pfp.content_type.startswith("image/"):
                 await interaction.response.send_message("❌ `pfp` phải là file ảnh! (png/jpg/webp...)", ephemeral=True)
+                return
+            # Giới hạn 6 character/server — check ngay trước khi mở form để tránh spam modal
+            guild_chars_cnt = config.get_guild_characters(interaction.guild.id)
+            if len(guild_chars_cnt) >= MAX_CHARACTERS_PER_GUILD:
+                await interaction.response.send_message(
+                    f"❌ Server đã đạt giới hạn **{MAX_CHARACTERS_PER_GUILD}** Character! Xóa bớt (`/character delete`) trước khi tạo mới.",
+                    ephemeral=True,
+                )
                 return
             # Đã có pfp hợp lệ → cho phép điền form
             await interaction.response.send_modal(CreateCharacterModal(pfp=pfp))
