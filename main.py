@@ -123,6 +123,15 @@ async def main():
 
     start_keep_alive()
 
+    # Load Watcher extension để /watcher xuất hiện trong gợi ý Discord (bot.tree.sync sẽ sync)
+    try:
+        await bot.load_extension("watcher")
+        print("✅ Đã load watcher extension (/watcher)")
+    except Exception as e:
+        print(f"⚠️ Lỗi load watcher extension: {e}")
+        import traceback
+        traceback.print_exc()
+
     try:
         await bot.start(config.DISCORD_TOKEN)
     except KeyboardInterrupt:
