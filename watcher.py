@@ -7,11 +7,18 @@ from discord.ext import commands
 from google.genai import types
 import config
 
-# Model Gemma 4 trên Google AI Studio (Gemma 3 đã khai tử 404)
-GEMMA_MODEL_ID = "gemma-4-31b-it"
+# Model Gemma 4 trên Google AI Studio (Gemma 3 đã khai tử 404) - 26B đỡ nghẽn hơn 31B
+GEMMA_MODEL_ID = "gemma-4-26b-a4b-it"
 
 # Dict lưu trạng thái Watcher theo channel_id - mặc định tắt (False)
 watcher_status: dict[int, bool] = {}
+
+# Mute per channel+user khi user bảo "đừng rep t" -> bot rep "ok k rep" 1 lần rồi im
+# key: (channel_id, user_id) -> True
+watcher_muted: set[tuple[int, int]] = set()
+
+_MUTE_PAT = re.compile(r"đừng\s*rep|đừng\s*trả\s*lời|im\s*đi|câm\s*mồm|câm\s*đi|đừng\s*nói\s*nữa|stop\s*rep", re.IGNORECASE)
+_UNMUTE_PAT = re.compile(r"rep\s*đi|rep\s*lại|rep\s*tiếp|nói\s*lại\s*đi|được\s*rep\s*rồi", re.IGNORECASE)
 
 # Regex để trích JSON từ response Gemma (hỗ trợ ```json block)
 _JSON_RE = re.compile(r"\{[^{}]*\"should_reply\"[^{}]*\}", re.IGNORECASE | re.DOTALL)
@@ -57,7 +64,7 @@ def _extract_json(raw: str) -> dict | None:
 
 
 async def select_character_with_gemma3(text: str, guild_id: int) -> tuple[bool, dict | None]:
-    """Dùng Gemma 4 31B để quyết định có reply không và chọn character nào.
+    """Dùng Gemma 4 26B để quyết định có reply không và chọn character nào.
 
     Returns:
         (should_reply: bool, character: dict|None)
@@ -219,7 +226,7 @@ class Watcher(commands.Cog):
         self.bot = bot
 
     # ---- Slash Command /watcher ----
-    @app_commands.command(name="watcher", description="Bật/tắt Watcher Mode - Gemma 4 tự chọn character để rep (thú vị hơn)")
+    @app_commands.command(name="watcher", description="Bật/tắt Watcher Mode - Gemma 4 26B tự chọn character để rep")
     async def watcher(self, interaction: discord.Interaction):
         if not interaction.guild:
             await interaction.response.send_message("❌ Lệnh chỉ dùng trong server!", ephemeral=True)
@@ -235,9 +242,9 @@ class Watcher(commands.Cog):
             guild_chars = config.get_guild_characters(interaction.guild.id)
             if guild_chars:
                 char_names = ", ".join([f"`{c['name']}`" for c in guild_chars.values()])
-                desc += f"\nBot sẽ dùng **Gemma 4 31B** để tự chọn character phù hợp khi không mention.\n**Characters:** {char_names}\n+ `DEFAULT` (GenA-Bot)"
+                desc += f"\nBot sẽ dùng **Gemma 4 26B** để tự chọn character phù hợp khi không mention.\n**Characters:** {char_names}\n+ `DEFAULT` (GenA-Bot)"
             else:
-                desc += "\nBot sẽ dùng **Gemma 4 31B** để nhận diện ý định chat khi không mention.\n(Chưa có character custom - sẽ rep bằng GenA-Bot)"
+                desc += "\nBot sẽ dùng **Gemma 4 26B** để nhận diện ý định chat khi không mention.\n(Chưa có character custom - sẽ rep bằng GenA-Bot)"
             desc += "\n*Gemma sẽ chọn character thú vị nhất dựa trên nội dung tin nhắn* ✨"
         else:
             desc += "\nBot chỉ trả lời khi được @mention trực tiếp."
@@ -281,6 +288,32 @@ class Watcher(commands.Cog):
         # Trường hợp duy nhất watcher xử lý: Watcher BẬT và KHÔNG mention -> qua Gemma 4 selector
         if _watcher_enabled:
             content = message.content or ""
+            # --- MUTE LOGIC: "bot ơi đừng rep t" -> rep "ok k rep" 1 lần rồi im ---
+            low = content.lower()
+            mute_key = (message.channel.id, message.author.id)
+            if _MUTE_PAT.search(low):
+                if mute_key not in watcher_muted:
+                    watcher_muted.add(mute_key)
+                    print(f"🔇 [Watcher] User {message.author} ({message.author.id}) mute tại #{message.channel.id} do: {repr(content[:80])}")
+                    try:
+                        await message.reply("ok k rep 🥀", mention_author=False)
+                    except Exception as e:
+                        print(f"⚠️ [Watcher] mute ack fail: {e}")
+                else:
+                    print(f"🔇 [Watcher] User đã mute rồi, bỏ qua: {repr(content[:50])}")
+                return
+            if _UNMUTE_PAT.search(low) and mute_key in watcher_muted:
+                watcher_muted.remove(mute_key)
+                print(f"🔊 [Watcher] User {message.author} unmute tại #{message.channel.id}")
+                try:
+                    await message.reply("ok rep lại nè 🥀", mention_author=False)
+                except:
+                    pass
+                return
+            # Nếu đã mute trước đó -> im lặng, không gọi Gemma
+            if mute_key in watcher_muted:
+                print(f"🔇 [Watcher] Bỏ qua do user đã mute (đừng rep) : {repr(content[:60])}")
+                return
             if content.strip():
                 print(f"🔍 [Watcher Debug] Watcher BẬT -> gọi Gemma 4 selector...")
                 should_reply, selected_character = await select_character_with_gemma3(content, message.guild.id)
