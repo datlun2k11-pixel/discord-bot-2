@@ -212,6 +212,339 @@ async def _describe_image(image_parts: list) -> Optional[str]:
         print(f"⚠️ Lỗi describe image: {e}")
         return None
 
+# --- CHARACTER WEBHOOK SYSTEM HELPERS ---
+_ROLE_MENTION_RE = re.compile(r"<@&(\d+)>")
+
+def _strip_role_mentions(text: str) -> str:
+    """Xóa tất cả <@&role_id> tag khỏi text"""
+    if not text:
+        return ""
+    return _ROLE_MENTION_RE.sub("", text).strip()
+
+async def _get_or_create_webhook(channel: discord.TextChannel, bot_user) -> Optional[discord.Webhook]:
+    """Tạo hoặc tái sử dụng Webhook trong channel hiện tại"""
+    # Kiểm tra quyền trước
+    if not channel.permissions_for(channel.guild.me).manage_webhooks:
+        return None
+    try:
+        webhooks = await channel.webhooks()
+        # Tìm webhook do bot tạo ra hoặc tên GenA-Character
+        for wh in webhooks:
+            if wh.user and wh.user.id == bot_user.id:
+                return wh
+            if wh.name == "GenA-Character":
+                return wh
+        # Không có -> tạo mới
+        wh = await channel.create_webhook(
+            name="GenA-Character",
+            reason="Character Webhook System - auto create",
+        )
+        print(f"✅ Đã tạo webhook mới tại #{channel.name} ({channel.id})")
+        return wh
+    except discord.Forbidden:
+        print(f"⚠️ Thiếu quyền Manage Webhooks tại #{channel.name}")
+        return None
+    except discord.HTTPException as e:
+        print(f"⚠️ Lỗi tạo/fetch webhook tại #{channel.name}: {e}")
+        return None
+
+async def _handle_character_mention(
+    bot,
+    message: discord.Message,
+    matched_char: dict,
+) -> bool:
+    """Xử lý khi user @Mention Role Character — gen AI + webhook reply
+
+    Returns True nếu đã xử lý (để caller return), False nếu fail và muốn fallback.
+    """
+    guild = message.guild
+    channel = message.channel
+    if not guild or not isinstance(channel, discord.TextChannel):
+        # Chỉ support TextChannel (có webhook)
+        # Fallback: reply thường nếu không phải TextChannel
+        if isinstance(channel, discord.Thread):
+            # Thread không hỗ trợ webhook trực tiếp -> fallback reply thường
+            pass
+        else:
+            return False
+
+    # Kiểm tra RPD lock
+    if config.is_rpd_locked():
+        _, remaining = config.check_flash_rpd()
+        embed = discord.Embed(
+            title="😴 Bot đã hết lượt hôm nay!",
+            description=(
+                f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🥀\n\n"
+                f"Bot sẽ hoạt động trở lại vào **0:00** hôm nay."
+            ),
+            color=0xFFA500,
+        )
+        embed.set_footer(text="=)) mai t lại lên sóng!")
+        try:
+            await message.reply(embed=embed, mention_author=False)
+        except:
+            pass
+        return True
+
+    # Anti-spam? reuse logic ngắn gọn
+    now = time.time()
+    user_id = message.author.id
+    if user_id != config.OWNER_ID:
+        if user_id not in config.SPAM_TRACKER:
+            config.SPAM_TRACKER[user_id] = {"last_msgs": [], "blocked_until": 0, "last_content": "", "dup_count": 0}
+        user_spam = config.SPAM_TRACKER[user_id]
+        if now < user_spam["blocked_until"]:
+            return True  # chặn lặng lẽ
+        # Simple dup & rate check
+        is_dup = message.content == user_spam["last_content"] and (now - user_spam.get("last_time", 0) < 10)
+        if is_dup:
+            user_spam["dup_count"] += 1
+        else:
+            user_spam["dup_count"] = 1
+        user_spam["last_content"] = message.content
+        user_spam["last_time"] = now
+        user_spam["last_msgs"] = [t for t in user_spam["last_msgs"] if now - t < 7]
+        user_spam["last_msgs"].append(now)
+        if len(user_spam["last_msgs"]) > 20 or user_spam["dup_count"] >= 4:
+            user_spam["blocked_until"] = now + 30
+            user_spam["last_msgs"] = []
+            user_spam["dup_count"] = 0
+            try:
+                await channel.send(f"<@{user_id}> Spam clm, cút 30s! 🥀", delete_after=10)
+            except:
+                pass
+            return True
+
+    # --- Build System Prompt cho Character ---
+    system_instruction = f"{config.BASE_SYSTEM_PROMPT}\n\n{matched_char['system_prompt']}\n\n{config.META_ROLEPLAY_PROMPT}"
+    # Inject GIF instruction nếu chưa có
+    if config.GIPHY_ENABLED:
+        guild_send_gif = config.GUILD_SETTINGS.get(str(guild.id), {}).get("send_gif", True)
+        if guild_send_gif:
+            gif_instr = _get_gif_instruction()
+            if gif_instr and "GIF" not in system_instruction:
+                system_instruction += "\n" + gif_instr
+
+    # --- Xử lý ảnh đính kèm (giống logic thường) ---
+    image_parts = []
+    for att in message.attachments:
+        if att.size > MAX_ATTACHMENT_SIZE:
+            continue
+        is_image = att.content_type and att.content_type.startswith("image/")
+        if not is_image:
+            continue
+        try:
+            image_bytes = await att.read()
+            image_parts.append({"mime_type": att.content_type, "data": image_bytes})
+        except Exception as e:
+            print(f"⚠️ Lỗi đọc attachment character: {e}")
+
+    # --- Build Prompt ---
+    try:
+        # Guild-specific model settings
+        guild_settings = config.GUILD_SETTINGS.get(str(guild.id), {})
+        g_max_tokens = guild_settings.get("max_tokens", config.DEFAULT_MAX_TOKENS)
+        g_temperature = guild_settings.get("temperature", config.DEFAULT_TEMPERATURE)
+        model = config.get_model_for_guild(g_max_tokens, g_temperature, str(guild.id))
+
+        # Clean content: xóa role mention + bot mention
+        clean_content = _strip_role_mentions(message.content)
+        clean_content = config.strip_bot_mention(clean_content, bot.user.id if bot.user else None).strip()
+        # Nếu sau khi strip rỗng và không có ảnh -> bỏ qua
+        if not clean_content and not image_parts:
+            # Nếu chỉ ping role không kèm text, gợi ý
+            clean_content = "Chào"
+
+        author_name = message.author.display_name or message.author.name
+        channel_context = get_channel_context(channel.id, max_messages=15)
+
+        # Lấy old_history cho character channel (dùng ctx_key = guild-channel? dùng channel id)
+        ctx_key = config.get_context_key(message)
+        if ctx_key not in config.chat_history:
+            config.chat_history[ctx_key] = []
+        old_history = config.chat_history[ctx_key]
+        old_history_text = ""
+        if old_history:
+            history_lines = []
+            for item in old_history[-10:]:
+                if item["role"] == "user":
+                    name = item.get("display_name", "User")
+                    history_lines.append(f"{name}: {item['parts'][0]}")
+                else:
+                    history_lines.append(f"Bot ({matched_char['name']}): {item['parts'][0]}")
+            old_history_text = "\n".join(history_lines)
+
+        reply_info = ""
+        if message.reference and message.reference.resolved and isinstance(message.reference.resolved, discord.Message):
+            replied = message.reference.resolved
+            replied_name = getattr(replied.author, "display_name", None) or getattr(replied.author, "name", "Unknown")
+            replied_content = getattr(replied, "content", "") or "[không có text]"
+            if len(replied_content) > 100:
+                replied_content = replied_content[:97] + "..."
+            reply_info = f"\n[💬 {author_name} đang trả lời {replied_name}: \"{replied_content}\"]"
+
+        prompt_parts = [system_instruction]
+        prompt_parts.append("\n--- LỊCH SỬ CHAT 15 TIN GẦN NHẤT ---")
+        prompt_parts.append(channel_context)
+        if old_history_text:
+            prompt_parts.append("\n--- LỊCH SỬ TƯƠNG TÁC CŨ ---")
+            prompt_parts.append(old_history_text)
+        if reply_info:
+            prompt_parts.append(reply_info)
+        prompt_parts.append(f"\n--- TIN NHẮN CỦA {author_name.upper()} (gọi {matched_char['name']}) ---")
+        prompt_parts.append(clean_content)
+        if message.reference and message.reference.resolved:
+            prompt_parts.append("\n⚠️ LƯU Ý: Tin nhắn đang reply người khác. Hãy trả lời phù hợp ngữ cảnh!")
+        prompt_parts.append("\nTrả lời ngắn gọn, hài hước, đúng phong cách GenZ, GIỮ ĐÚNG tính cách Character đã giao.")
+        if image_parts:
+            prompt_parts.extend(image_parts)
+
+        # --- GỌI AI ---
+        async with channel.typing():
+            response = await model.generate_content_async(prompt_parts)
+            response_text = config.extract_response_text(response)
+            if not response_text:
+                response_text = "T bị câm ngang API r, nói lại phát 🥀"
+            response_text = response_text[:2000].strip()
+
+            # GIF parsing (giống event.py chính)
+            guild_send_gif = config.GUILD_SETTINGS.get(str(guild.id), {}).get("send_gif", True) if guild else True
+            if not guild_send_gif:
+                tmp_clean, tmp_q = extract_gif_requests(response_text)
+                if tmp_q:
+                    response_text = tmp_clean.strip()[:2000] if tmp_clean.strip() else response_text
+                gif_urls: List[str] = []
+                clean_text, gif_queries = response_text, []
+            else:
+                clean_text, gif_queries = extract_gif_requests(response_text)
+                gif_urls: List[str] = []
+                if gif_queries:
+                    for search_term, limit in gif_queries:
+                        try:
+                            urls = await asyncio.to_thread(config.search_gifs, search_term, limit)
+                            if urls:
+                                gif_urls.extend(urls)
+                            else:
+                                rand = await asyncio.to_thread(config.get_random_gif, search_term)
+                                if rand:
+                                    gif_urls.append(rand)
+                        except Exception as e:
+                            print(f"⚠️ Lỗi fetch GIF character {search_term}: {e}")
+                    if not clean_text.strip():
+                        tmp = re.sub(r'```(?:json)?\s*\{[^`]*?\}\s*```', '', response_text, flags=re.IGNORECASE|re.DOTALL)
+                        tmp = _GIF_INLINE_RE.sub('', tmp).strip()
+                        clean_text = tmp if tmp else "🥀"
+                    response_text = clean_text.strip()[:2000]
+                    print(f"🎬 [Character:{matched_char['name']}] GIF requests: {gif_queries} -> {len(gif_urls)} urls")
+
+            # Avatar tag handling
+            if config.has_avatar_tag(response_text):
+                response_text = config.remove_avatar_tag(response_text)
+                if not response_text:
+                    response_text = "🥀"
+
+            # --- WEBHOOK SEND ---
+            webhook = await _get_or_create_webhook(channel, bot.user)
+            if webhook is None:
+                # Fallback: không có quyền webhook -> reply thường với tên character
+                embed = discord.Embed(color=0x00F0FF)
+                embed.set_author(name=matched_char["name"], icon_url=matched_char.get("avatar_url") or None)
+                embed.description = response_text
+                if matched_char.get("avatar_url"):
+                    embed.set_thumbnail(url=matched_char["avatar_url"])
+                embed.set_footer(text="⚠️ Thiếu quyền Manage Webhooks — đã fallback sang embed")
+                await message.reply(embed=embed, mention_author=False)
+                # GIFs
+                if 'gif_urls' in locals() and gif_urls:
+                    for url in gif_urls:
+                        try:
+                            await channel.send(url)
+                        except:
+                            pass
+            else:
+                # Chuẩn bị username/avatar — Discord giới hạn 80 ký tự / 1024
+                webhook_name = matched_char["name"][:80]
+                webhook_avatar = matched_char.get("avatar_url") or None
+                # Validate avatar_url còn usable không (nếu rỗng thì không truyền)
+                try:
+                    # Discord webhook sẽ fetch avatar_url, nếu lỗi sẽ fallback không avatar
+                    await webhook.send(
+                        content=response_text or "🥀",
+                        username=webhook_name,
+                        avatar_url=webhook_avatar,
+                        allowed_mentions=discord.AllowedMentions.none(),
+                        wait=True,
+                    )
+                except discord.HTTPException as e:
+                    print(f"⚠️ Webhook send lỗi (thử không avatar): {e}")
+                    # Thử lại không có avatar
+                    try:
+                        await webhook.send(
+                            content=response_text or "🥀",
+                            username=webhook_name,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                            wait=True,
+                        )
+                    except Exception as e2:
+                        print(f"⚠️ Webhook fallback fail: {e2}")
+                        await message.reply(response_text or "🥀", mention_author=False)
+
+                # GIFs riêng (webhook không tự gửi link preview? vẫn gửi như message thường)
+                if 'gif_urls' in locals() and gif_urls:
+                    for url in gif_urls:
+                        try:
+                            # Gửi qua webhook để giữ vibe character?
+                            await webhook.send(
+                                content=url,
+                                username=webhook_name,
+                                avatar_url=webhook_avatar,
+                                allowed_mentions=discord.AllowedMentions.none(),
+                                wait=True,
+                            )
+                        except:
+                            try:
+                                await channel.send(url)
+                            except:
+                                pass
+
+            # Lưu vào chat_history
+            config.chat_history[ctx_key].append(
+                {"role": "user", "parts": [clean_content], "user_id": user_id, "display_name": author_name, "user_mention": f"<@{user_id}>", "character": matched_char["name"]}
+            )
+            config.chat_history[ctx_key].append(
+                {"role": "model", "parts": [response_text], "character": matched_char["name"]}
+            )
+            if len(config.chat_history[ctx_key]) > 15:
+                config.chat_history[ctx_key] = config.chat_history[ctx_key][-15:]
+
+            if hasattr(model, 'model_name') and config.is_flash_model(model.model_name):
+                config.increment_flash_rpd()
+
+            return True
+
+    except Exception as error:
+        error_str = str(error).lower()
+        print(f"❌ [Character {matched_char['name']}] Lỗi API: {error}")
+        if "429" in error_str or "rate" in error_str or "quota" in error_str or "resource exhausted" in error_str:
+            config.lock_rpd_until_midnight()
+            embed = discord.Embed(
+                title="😴 Bot đã hết lượt hôm nay!",
+                description=f"Hôm nay đã dùng hết **{config.FLASH_RPD_LIMIT}** lượt RPD rồi 🥀",
+                color=0xFF0040,
+            )
+            embed.set_footer(text="=)) mai t lại lên sóng!")
+            try:
+                await message.reply(embed=embed, mention_author=False)
+            except:
+                pass
+            return True
+        elif message.author.id == config.OWNER_ID:
+            try:
+                await channel.send(f"Lỗi nè đại ca: `{error}` 🥀")
+            except:
+                pass
+        return True
+
 # --- HÀM ON_MESSAGE NÂNG CẤP (TỐI ƯU CHO KOYEB) ---
 def register_events(bot):
     @bot.event
@@ -308,6 +641,35 @@ def register_events(bot):
             guild_settings = config.GUILD_SETTINGS.get(str(message.guild.id), {})
             if guild_settings.get("chat_enabled") is False:
                 return
+
+        # === 2a. CHARACTER WEBHOOK SYSTEM: phát hiện @Role Character ===
+        # Yêu cầu: khi user @Mention Role của Character -> trigger AI + webhook
+        if message.guild and message.role_mentions is not None:
+            try:
+                guild_chars = config.get_guild_characters(message.guild.id)
+                matched_char = None
+                # Ưu tiên role_mentions (đã resolve)
+                for role in message.role_mentions:
+                    char = guild_chars.get(str(role.id))
+                    if char:
+                        matched_char = char
+                        break
+                # Fallback: parse thô từ content nếu role_mentions rỗng (thiếu intent/member cache)
+                if not matched_char and message.content:
+                    for m in _ROLE_MENTION_RE.finditer(message.content):
+                        rid = m.group(1)
+                        char = guild_chars.get(rid)
+                        if char:
+                            matched_char = char
+                            break
+                if matched_char:
+                    handled = await _handle_character_mention(bot, message, matched_char)
+                    if handled:
+                        return
+            except Exception as e:
+                print(f"⚠️ Character mention handler lỗi: {e}")
+                import traceback
+                traceback.print_exc()
 
         # === KIỂM TRA RPD LOCK ===
         if config.is_rpd_locked():

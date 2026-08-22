@@ -261,6 +261,9 @@ class BotConfig:
         # Custom roles do user tự tạo: key -> {"name": str, "prompt": str}
         self.custom_roles: Dict[str, Dict] = {}
 
+        # Character Webhook System: guild_id_str -> { role_id_str -> {role_id, name, avatar_url, system_prompt, guild_id} }
+        self.characters: Dict[str, Dict[str, Dict]] = {}
+
         # Lưu ý: Channel memory sẽ được quản lý hoàn toàn bởi event.py để tránh xung đột
 
     # === ĐÂY LÀ NƠI CẦN THÊM PHƯƠNG THỨC _reset_rpd_if_new_day ===
@@ -512,13 +515,73 @@ class BotConfig:
         return re.sub(r"\[avatar]", "", text, flags=re.IGNORECASE).strip()
 
     def build_intents(self) -> discord.Intents:
-        """Xây dựng intents cho bot"""
+        """Xây dựng intents cho bot — đủ cho Character Webhook System + AI chat"""
         intents = discord.Intents.default()
         intents.message_content = True
         intents.messages = True
         intents.guilds = True
-        intents.members = True  # Thêm để lấy thông tin member
+        intents.members = True  # Lấy thông tin member (cần cho role mention)
+        # Explicit theo spec: guilds, guild_messages, message_content, members
+        intents.guild_messages = True
+        try:
+            intents.dm_messages = True
+        except AttributeError:
+            pass
         return intents
+
+    # --- CHARACTER WEBHOOK SYSTEM HELPERS ---
+    def get_guild_characters(self, guild_id: int | str) -> Dict[str, Dict]:
+        """Lấy dict characters của 1 guild: {role_id_str: character_data}"""
+        gid = str(guild_id)
+        return self.characters.get(gid, {})
+
+    def get_character(self, guild_id: int | str, role_id: int | str) -> Optional[Dict]:
+        """Lấy 1 character theo guild + role_id"""
+        gid = str(guild_id)
+        rid = str(role_id)
+        return self.characters.get(gid, {}).get(rid)
+
+    def get_character_by_role(self, guild_id: int | str, role_id: int | str) -> Optional[Dict]:
+        """Alias cho get_character"""
+        return self.get_character(guild_id, role_id)
+
+    def add_character(self, guild_id: int | str, role_id: int | str, name: str, avatar_url: str, system_prompt: str):
+        """Thêm/cập nhật character"""
+        gid = str(guild_id)
+        rid = str(role_id)
+        if gid not in self.characters:
+            self.characters[gid] = {}
+        self.characters[gid][rid] = {
+            "role_id": int(rid),
+            "guild_id": int(gid),
+            "name": name,
+            "avatar_url": avatar_url,
+            "system_prompt": system_prompt,
+        }
+
+    def update_character(self, guild_id: int | str, role_id: int | str, name: Optional[str] = None, avatar_url: Optional[str] = None, system_prompt: Optional[str] = None) -> bool:
+        """Cập nhật character, trả về True nếu tồn tại"""
+        char = self.get_character(guild_id, role_id)
+        if not char:
+            return False
+        if name is not None:
+            char["name"] = name
+        if avatar_url is not None:
+            char["avatar_url"] = avatar_url
+        if system_prompt is not None:
+            char["system_prompt"] = system_prompt
+        return True
+
+    def delete_character(self, guild_id: int | str, role_id: int | str) -> Optional[Dict]:
+        """Xóa character, trả về data đã xóa hoặc None"""
+        gid = str(guild_id)
+        rid = str(role_id)
+        if gid in self.characters and rid in self.characters[gid]:
+            data = self.characters[gid].pop(rid)
+            if not self.characters[gid]:
+                del self.characters[gid]
+            return data
+        return None
 
 # ============================================
 # 5. MODEL WRAPPER (TƯƠNG THÍCH VỚI API MỚI)
@@ -787,6 +850,8 @@ def save_all_data():
         _atomic_write(f"{data_dir}/provider_settings.json", config.provider_settings)
         # Lưu custom roles
         _atomic_write(f"{data_dir}/custom_roles.json", config.custom_roles)
+        # Lưu characters (Character Webhook System)
+        _atomic_write(f"{data_dir}/characters.json", config.characters)
         # Lưu current_model_id
         _atomic_write(f"{data_dir}/model_config.json", {
             "current_model_id": config.current_model_id
@@ -830,6 +895,7 @@ def _backup_data(data_dir: str):
             "provider_settings.json",
             "custom_roles.json",
             "global_settings.json",
+            "characters.json",
         ]
         
         for filename in backup_files:
@@ -930,6 +996,19 @@ def load_all_data():
                 config.is_chat_enabled = g_data.get("is_chat_enabled", True)
                 print(f"✅ Loaded global_settings: is_chat_enabled={config.is_chat_enabled}")
 
+        # Load characters (Character Webhook System)
+        if os.path.exists(f"{data_dir}/characters.json"):
+            with open(f"{data_dir}/characters.json", "r", encoding="utf-8") as f:
+                raw = json.load(f)
+                # raw: {guild_id_str: {role_id_str: {...}}}
+                # Đảm bảo keys là str
+                config.characters = {str(k): {str(rk): rv for rk, rv in v.items()} for k, v in raw.items()} if isinstance(raw, dict) else {}
+                total = sum(len(v) for v in config.characters.values())
+                print(f"✅ Loaded characters: {total} characters in {len(config.characters)} guilds")
+        else:
+            # Migration: nếu trước đó dùng SQLite/empty, tạo file rỗng
+            config.characters = {}
+
         
         return True
     except Exception as e:
@@ -991,6 +1070,21 @@ def check_flash_rpd():
 def increment_flash_rpd():
     config.increment_flash_rpd()
 
+def get_guild_characters(guild_id):
+    return config.get_guild_characters(guild_id)
+
+def get_character(guild_id, role_id):
+    return config.get_character(guild_id, role_id)
+
+def add_character(guild_id, role_id, name, avatar_url, system_prompt):
+    return config.add_character(guild_id, role_id, name, avatar_url, system_prompt)
+
+def update_character(guild_id, role_id, name=None, avatar_url=None, system_prompt=None):
+    return config.update_character(guild_id, role_id, name, avatar_url, system_prompt)
+
+def delete_character(guild_id, role_id):
+    return config.delete_character(guild_id, role_id)
+
 # ============================================
 # 11. EXPOSE VARIABLES (COMPATIBILITY LAYER)
 # ============================================
@@ -1001,6 +1095,7 @@ MSG_COUNTERS = config.msg_counters
 USER_ROLES = config.user_roles
 GUILD_SETTINGS = config.guild_settings
 PROVIDER_SETTINGS = config.provider_settings
+CHARACTERS = config.characters
 
 current_model_id = config.current_model_id
 

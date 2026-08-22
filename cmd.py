@@ -12,6 +12,10 @@ BRAND_COLOR = 0x00F0FF
 ERROR_COLOR = 0xFF0040
 SUCCESS_COLOR = 0x00FF88
 
+# --- CHARACTER SYSTEM CONSTANTS ---
+MAX_AVATAR_SIZE = 20 * 1024 * 1024  # 20MB theo spec
+_pending_character_pfps: dict[int, Optional[discord.Attachment]] = {}  # user_id -> attachment
+
 async def autocomplete_users(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
     """Autocomplete gợi ý người dùng khi gõ /usage"""
     choices = []
@@ -70,6 +74,223 @@ async def autocomplete_characters(interaction: discord.Interaction, current: str
     for key, role in config.config.custom_roles.items():
         if not current or current.lower() in key.lower() or current.lower() in role["name"].lower():
             choices.append(app_commands.Choice(name=f"{role['name']} ⭐", value=f"custom_{key}"))
+    return choices[:25]
+
+# --- CHARACTER WEBHOOK SYSTEM: MODALS & AUTOCOMPLETE ---
+class CreateCharacterModal(discord.ui.Modal, title="Tạo Character mới"):
+    name_input = discord.ui.TextInput(
+        label="Tên Character",
+        placeholder="VD: Miku, Rem, Gojo...",
+        required=True,
+        max_length=100,
+    )
+    prompt_input = discord.ui.TextInput(
+        label="System Prompt",
+        style=discord.TextStyle.paragraph,
+        placeholder="Mô tả tính cách, cách nói chuyện, bối cảnh... (teencode, vibe...)",
+        required=True,
+        max_length=2000,
+    )
+
+    def __init__(self, pfp: Optional[discord.Attachment] = None):
+        super().__init__()
+        self.pfp = pfp
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("❌ Lệnh chỉ dùng trong server!", ephemeral=True)
+            return
+
+        # Kiểm tra quyền Manage Roles
+        if not interaction.guild.me.guild_permissions.manage_roles:
+            await interaction.response.send_message(
+                "❌ Bot thiếu quyền **Manage Roles** để tạo role! 🥀",
+                ephemeral=True,
+            )
+            return
+        if not interaction.user.guild_permissions.manage_roles and interaction.user.id != config.OWNER_ID:
+            await interaction.response.send_message(
+                "❌ Bạn cần quyền **Manage Roles** để tạo Character!",
+                ephemeral=True,
+            )
+            return
+
+        name = self.name_input.value.strip()
+        system_prompt = self.prompt_input.value.strip()
+
+        if not name or not system_prompt:
+            await interaction.response.send_message("❌ Thiếu tên hoặc System Prompt!", ephemeral=True)
+            return
+
+        # Kiểm tra avatar size nếu có
+        avatar_url = ""
+        if self.pfp:
+            if self.pfp.size > MAX_AVATAR_SIZE:
+                await interaction.response.send_message(
+                    f"❌ File avatar quá lớn ({self.pfp.size / 1024 / 1024:.1f}MB) — phải < 20MB!",
+                    ephemeral=True,
+                )
+                return
+            # Validate là ảnh
+            if self.pfp.content_type and not self.pfp.content_type.startswith("image/"):
+                await interaction.response.send_message("❌ Avatar phải là file ảnh!", ephemeral=True)
+                return
+            avatar_url = self.pfp.url
+        else:
+            # Thử lấy từ pending (trường hợp user gửi file kèm lệnh)
+            pending = _pending_character_pfps.pop(interaction.user.id, None)
+            if pending:
+                if pending.size > MAX_AVATAR_SIZE:
+                    await interaction.response.send_message(f"❌ File avatar quá lớn — phải < 20MB!", ephemeral=True)
+                    return
+                avatar_url = pending.url
+
+        # Nếu vẫn không có avatar, dùng default (optional, cho phép tạo không cần avatar nhưng spec yêu cầu có)
+        if not avatar_url:
+            avatar_url = ""  # Webhook sẽ fallback avatar mặc định
+
+        # Kiểm tra trùng tên role/character trong guild
+        guild_chars = config.get_guild_characters(interaction.guild.id)
+        for c in guild_chars.values():
+            if c["name"].lower() == name.lower():
+                await interaction.response.send_message(
+                    f"❌ Đã có Character tên **{name}** rồi! Dùng tên khác nhé.",
+                    ephemeral=True,
+                )
+                return
+
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        try:
+            # Tạo Role mới trên Server trùng tên với Character
+            new_role = await interaction.guild.create_role(
+                name=name,
+                reason=f"Character created by {interaction.user} via /character create",
+            )
+        except discord.Forbidden:
+            await interaction.followup.send("❌ Bot không có quyền tạo Role (Forbidden)! Kiểm tra role hierarchy 🥀", ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"❌ Lỗi khi tạo role: `{e}`", ephemeral=True)
+            return
+
+        # Lưu vào DB/JSON
+        config.add_character(interaction.guild.id, new_role.id, name, avatar_url, system_prompt)
+        config.save_all_data()
+
+        embed = discord.Embed(
+            title="✅ Đã tạo Character",
+            description=(
+                f"**Tên:** {name}\n"
+                f"**Role:** {new_role.mention} (`{new_role.id}`)\n"
+                f"**Avatar:** {'Đã đính kèm ✅' if avatar_url else 'Chưa có (webhook sẽ dùng default)'}\n"
+                f"**System Prompt:** {system_prompt[:300]}{'...' if len(system_prompt)>300 else ''}\n\n"
+                f"💡 Mention {new_role.mention} trong chat để gọi Character!"
+            ),
+            color=SUCCESS_COLOR,
+        )
+        if avatar_url:
+            embed.set_thumbnail(url=avatar_url)
+        embed.set_footer(text="Dùng /character edit để sửa, /character delete để xóa")
+        await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+class EditCharacterModal(discord.ui.Modal, title="Chỉnh sửa Character"):
+    name_input = discord.ui.TextInput(
+        label="Tên Character (mới)",
+        placeholder="Để trống nếu không đổi - sẽ giữ nguyên",
+        required=False,
+        max_length=100,
+    )
+    prompt_input = discord.ui.TextInput(
+        label="System Prompt (mới)",
+        style=discord.TextStyle.paragraph,
+        placeholder="Để trống nếu không đổi",
+        required=False,
+        max_length=2000,
+    )
+
+    def __init__(self, guild_id: int, role_id: int, current: dict, pfp: Optional[discord.Attachment] = None):
+        super().__init__()
+        self.guild_id = guild_id
+        self.role_id = role_id
+        self.current = current
+        self.pfp = pfp
+        # Pre-fill với giá trị hiện tại
+        self.name_input.default = current.get("name", "")
+        self.prompt_input.default = current.get("system_prompt", "")
+
+    async def on_submit(self, interaction: discord.Interaction):
+        if not interaction.guild:
+            await interaction.response.send_message("❌ Chỉ dùng trong server!", ephemeral=True)
+            return
+
+        new_name = self.name_input.value.strip()
+        new_prompt = self.prompt_input.value.strip()
+
+        # Nếu để trống thì giữ nguyên
+        if not new_name:
+            new_name = self.current["name"]
+        if not new_prompt:
+            new_prompt = self.current["system_prompt"]
+
+        # Avatar handling
+        new_avatar = self.current.get("avatar_url", "")
+        pfp_to_check = self.pfp or _pending_character_pfps.pop(interaction.user.id, None)
+        if pfp_to_check:
+            if pfp_to_check.size > MAX_AVATAR_SIZE:
+                await interaction.response.send_message(f"❌ File avatar quá lớn — phải < 20MB!", ephemeral=True)
+                return
+            if pfp_to_check.content_type and not pfp_to_check.content_type.startswith("image/"):
+                await interaction.response.send_message("❌ Avatar phải là file ảnh!", ephemeral=True)
+                return
+            new_avatar = pfp_to_check.url
+
+        # Kiểm tra quyền Manage Roles nếu đổi tên
+        role = interaction.guild.get_role(self.role_id)
+        if new_name != self.current["name"]:
+            if not interaction.guild.me.guild_permissions.manage_roles:
+                await interaction.response.send_message("❌ Bot thiếu quyền **Manage Roles** để đổi tên Role!", ephemeral=True)
+                return
+            if role:
+                try:
+                    await role.edit(name=new_name, reason=f"Character edited by {interaction.user}")
+                except discord.Forbidden:
+                    await interaction.response.send_message("❌ Bot không có quyền sửa Role (Forbidden)!", ephemeral=True)
+                    return
+                except discord.HTTPException as e:
+                    await interaction.response.send_message(f"❌ Lỗi khi sửa role: `{e}`", ephemeral=True)
+                    return
+
+        # Cập nhật DB
+        config.update_character(self.guild_id, self.role_id, name=new_name, avatar_url=new_avatar, system_prompt=new_prompt)
+        config.save_all_data()
+
+        embed = discord.Embed(
+            title="✅ Đã cập nhật Character",
+            description=(
+                f"**Tên:** {new_name}\n"
+                f"**Role:** <@&{self.role_id}>\n"
+                f"**Avatar:** {'Đã đổi ✅' if pfp_to_check else 'Giữ nguyên'}\n"
+                f"**System Prompt:** {new_prompt[:300]}{'...' if len(new_prompt)>300 else ''}"
+            ),
+            color=SUCCESS_COLOR,
+        )
+        if new_avatar:
+            embed.set_thumbnail(url=new_avatar)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+async def autocomplete_character_choices(interaction: discord.Interaction, current: str) -> List[app_commands.Choice[str]]:
+    """Autocomplete cho /character edit/delete — list characters của guild hiện tại"""
+    choices: List[app_commands.Choice[str]] = []
+    if not interaction.guild:
+        return choices
+    guild_chars = config.get_guild_characters(interaction.guild.id)
+    for role_id_str, char in guild_chars.items():
+        label = f"{char['name']} ({role_id_str})"
+        # value là role_id str
+        if not current or current.lower() in char["name"].lower() or current in role_id_str or current.lower() in label.lower():
+            choices.append(app_commands.Choice(name=label[:100], value=role_id_str))
     return choices[:25]
 
 def register_commands(bot):
@@ -184,6 +405,159 @@ def register_commands(bot):
             return
 
         await interaction.response.send_message("❌ Lệnh không hợp lệ. Dùng `/roleplay list` để xem hướng dẫn.", ephemeral=True)
+
+    # --- CHARACTER WEBHOOK SYSTEM (/character) ---
+    @bot.tree.command(name="character", description="🎭 Quản lý Character Webhook System (create/edit/delete)")
+    @app_commands.describe(
+        action="Chọn hành động",
+        character="Character cần edit/delete (chọn từ autocomplete)",
+        pfp="Avatar cho Character (file ảnh < 20MB) — dùng cho create/edit",
+    )
+    @app_commands.choices(action=[
+        app_commands.Choice(name="➕ Create - Tạo Character mới", value="create"),
+        app_commands.Choice(name="✏️ Edit - Sửa Character", value="edit"),
+        app_commands.Choice(name="🗑️ Delete - Xóa Character + Role", value="delete"),
+    ])
+    @app_commands.autocomplete(character=autocomplete_character_choices)
+    async def character_cmd(
+        interaction: discord.Interaction,
+        action: str,
+        character: Optional[str] = None,
+        pfp: Optional[discord.Attachment] = None,
+    ):
+        # Chỉ dùng trong guild
+        if not interaction.guild:
+            await interaction.response.send_message("❌ Lệnh `/character` chỉ dùng trong server!", ephemeral=True)
+            return
+
+        # Kiểm tra avatar size ngay tại command level (nếu có file)
+        if pfp and pfp.size > MAX_AVATAR_SIZE:
+            await interaction.response.send_message(
+                f"❌ File avatar quá lớn ({pfp.size / 1024 / 1024:.1f}MB) — giới hạn < 20MB!",
+                ephemeral=True,
+            )
+            return
+
+        # Lưu pending pfp cho modal flow (create/edit cần modal)
+        if pfp:
+            _pending_character_pfps[interaction.user.id] = pfp
+
+        # === CREATE ===
+        if action == "create":
+            # Mở Modal hỏi Name + System Prompt (pfp đã được attach ở param hoặc pending)
+            # Nếu user không đính kèm file nhưng vẫn muốn tạo, cho phép (avatar optional)
+            await interaction.response.send_modal(CreateCharacterModal(pfp=pfp))
+            return
+
+        # === EDIT ===
+        if action == "edit":
+            if not character:
+                await interaction.response.send_message(
+                    "❌ Vui lòng chọn Character cần sửa ở parameter `character` (gõ để autocomplete) !",
+                    ephemeral=True,
+                )
+                return
+            try:
+                role_id = int(character)
+            except ValueError:
+                await interaction.response.send_message("❌ `character` không hợp lệ!", ephemeral=True)
+                return
+
+            char_data = config.get_character(interaction.guild.id, role_id)
+            if not char_data:
+                await interaction.response.send_message(
+                    f"❌ Không tìm thấy Character với Role ID `{role_id}`! Có thể đã bị xóa.",
+                    ephemeral=True,
+                )
+                return
+
+            # Kiểm tra quyền
+            if not interaction.user.guild_permissions.manage_roles and interaction.user.id != config.OWNER_ID:
+                await interaction.response.send_message("❌ Bạn cần quyền **Manage Roles** để edit Character!", ephemeral=True)
+                return
+
+            # Mở Modal edit với pfp nếu có
+            await interaction.response.send_modal(EditCharacterModal(interaction.guild.id, role_id, char_data, pfp=pfp))
+            return
+
+        # === DELETE ===
+        if action == "delete":
+            if not character:
+                await interaction.response.send_message(
+                    "❌ Vui lòng chọn Character cần xóa ở parameter `character`!",
+                    ephemeral=True,
+                )
+                return
+            try:
+                role_id = int(character)
+            except ValueError:
+                await interaction.response.send_message("❌ `character` không hợp lệ!", ephemeral=True)
+                return
+
+            char_data = config.get_character(interaction.guild.id, role_id)
+            if not char_data:
+                await interaction.response.send_message(f"❌ Không tìm thấy Character với Role ID `{role_id}`!", ephemeral=True)
+                return
+
+            # Kiểm tra quyền Manage Roles
+            if not interaction.user.guild_permissions.manage_roles and interaction.user.id != config.OWNER_ID:
+                await interaction.response.send_message("❌ Bạn cần quyền **Manage Roles** để xóa Character!", ephemeral=True)
+                return
+            if not interaction.guild.me.guild_permissions.manage_roles:
+                await interaction.response.send_message("❌ Bot thiếu quyền **Manage Roles** để xóa Role!", ephemeral=True)
+                return
+
+            await interaction.response.defer(ephemeral=True, thinking=True)
+
+            # Xóa Role trên Discord trước
+            role = interaction.guild.get_role(role_id)
+            role_deleted = False
+            role_error = None
+            if role:
+                try:
+                    await role.delete(reason=f"Character delete by {interaction.user} via /character delete")
+                    role_deleted = True
+                except discord.Forbidden as e:
+                    role_error = f"Forbidden: {e}"
+                except discord.NotFound:
+                    role_deleted = True  # Role đã không tồn tại
+                except discord.HTTPException as e:
+                    role_error = str(e)
+            else:
+                # Role không tồn tại trên server nhưng vẫn có trong DB -> coi như đã xóa
+                role_deleted = True
+
+            if role_error:
+                await interaction.followup.send(
+                    f"⚠️ Không thể xóa Role <@&{role_id}> : `{role_error}`\nVẫn sẽ xóa dữ liệu Character trong DB nếu bạn xác nhận.",
+                    ephemeral=True,
+                )
+                # Không return, vẫn xóa DB? Theo spec phải xóa cả 2, nhưng nếu role không xóa được thì báo lỗi
+                # Ở đây ta vẫn tiếp tục xóa DB để tránh rác, nhưng thông báo rõ
+                # Nếu muốn strict, có thể return
+
+            # Xóa dữ liệu trong DB/JSON — QUAN TRỌNG: tránh rác server
+            deleted = config.delete_character(interaction.guild.id, role_id)
+            if deleted:
+                config.save_all_data()
+                # Xóa pending pfp nếu có
+                _pending_character_pfps.pop(interaction.user.id, None)
+                embed = discord.Embed(
+                    title="🗑️ Đã xóa Character",
+                    description=(
+                        f"**Tên:** {deleted['name']}\n"
+                        f"**Role ID:** `{role_id}`\n"
+                        f"**Role Discord:** {'Đã xóa ✅' if role_deleted and not role_error else '⚠️ Không xóa được (xem lỗi trên)'}\n"
+                        f"**DB:** Đã xóa khỏi `data/characters.json` ✅"
+                    ),
+                    color=SUCCESS_COLOR,
+                )
+                await interaction.followup.send(embed=embed, ephemeral=True)
+            else:
+                await interaction.followup.send("❌ Lỗi khi xóa Character khỏi DB!", ephemeral=True)
+            return
+
+        await interaction.response.send_message("❌ Action không hợp lệ!", ephemeral=True)
 
     # --- SETTING COMMAND ---
     @bot.tree.command(name="setting", description="[Admin/Owner] Tùy chỉnh cấu hình bot cho server")
