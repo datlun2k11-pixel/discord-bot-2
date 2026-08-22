@@ -122,32 +122,30 @@ class CreateCharacterModal(discord.ui.Modal, title="Tạo Character mới"):
             await interaction.response.send_message("❌ Thiếu tên hoặc System Prompt!", ephemeral=True)
             return
 
-        # Kiểm tra avatar size nếu có
+        # Kiểm tra avatar - ÉP BUỘC phải có (theo yêu cầu mới: phải upload pfp trước mới cho điền form)
         avatar_url = ""
-        if self.pfp:
-            if self.pfp.size > MAX_AVATAR_SIZE:
+        pfp_to_use = self.pfp or _pending_character_pfps.get(interaction.user.id)
+        if pfp_to_use:
+            if pfp_to_use.size > MAX_AVATAR_SIZE:
                 await interaction.response.send_message(
-                    f"❌ File avatar quá lớn ({self.pfp.size / 1024 / 1024:.1f}MB) — phải < 20MB!",
+                    f"❌ File avatar quá lớn ({pfp_to_use.size / 1024 / 1024:.1f}MB) — phải < 20MB!",
                     ephemeral=True,
                 )
                 return
-            # Validate là ảnh
-            if self.pfp.content_type and not self.pfp.content_type.startswith("image/"):
+            if pfp_to_use.content_type and not pfp_to_use.content_type.startswith("image/"):
                 await interaction.response.send_message("❌ Avatar phải là file ảnh!", ephemeral=True)
                 return
-            avatar_url = self.pfp.url
-        else:
-            # Thử lấy từ pending (trường hợp user gửi file kèm lệnh)
-            pending = _pending_character_pfps.pop(interaction.user.id, None)
-            if pending:
-                if pending.size > MAX_AVATAR_SIZE:
-                    await interaction.response.send_message(f"❌ File avatar quá lớn — phải < 20MB!", ephemeral=True)
-                    return
-                avatar_url = pending.url
-
-        # Nếu vẫn không có avatar, dùng default (optional, cho phép tạo không cần avatar nhưng spec yêu cầu có)
+            avatar_url = pfp_to_use.url
+            # Xóa pending sau khi dùng
+            _pending_character_pfps.pop(interaction.user.id, None)
+        # Nếu vẫn không có avatar → ÉP BUỘC báo lỗi (không cho tạo)
         if not avatar_url:
-            avatar_url = ""  # Webhook sẽ fallback avatar mặc định
+            await interaction.response.send_message(
+                "❌ **Thiếu avatar!** Bạn phải dùng `/character create pfp:<ảnh>` để đính kèm file trước khi tạo.\n"
+                "⚠️ File < 20MB và phải là ảnh.",
+                ephemeral=True,
+            )
+            return
 
         # Kiểm tra trùng tên role/character trong guild
         guild_chars = config.get_guild_characters(interaction.guild.id)
@@ -443,10 +441,21 @@ def register_commands(bot):
         if pfp:
             _pending_character_pfps[interaction.user.id] = pfp
 
-        # === CREATE ===
+        # === CREATE === Ép buộc phải upload pfp trước mới cho điền form
         if action == "create":
-            # Mở Modal hỏi Name + System Prompt (pfp đã được attach ở param hoặc pending)
-            # Nếu user không đính kèm file nhưng vẫn muốn tạo, cho phép (avatar optional)
+            if not pfp:
+                await interaction.response.send_message(
+                    "❌ **Bạn phải đính kèm file avatar (`pfp`) để tạo Character!**\n"
+                    "📌 Cách dùng: `/character create pfp:<chọn ảnh <20MB>` → sau đó điền Tên + System Prompt trong form.\n"
+                    "⚠️ File phải là ảnh (`png/jpg/webp/gif`) và dung lượng **< 20MB**.",
+                    ephemeral=True,
+                )
+                return
+            # Validate phải là ảnh (đã check size ở trên)
+            if pfp.content_type and not pfp.content_type.startswith("image/"):
+                await interaction.response.send_message("❌ `pfp` phải là file ảnh! (png/jpg/webp...)", ephemeral=True)
+                return
+            # Đã có pfp hợp lệ → cho phép điền form
             await interaction.response.send_modal(CreateCharacterModal(pfp=pfp))
             return
 

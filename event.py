@@ -268,6 +268,15 @@ async def _handle_character_mention(
     """
     guild = message.guild
     channel = message.channel
+    # === CHAT_ENABLED HARD BLOCK cho webhook (theo yêu cầu: /setting chat_enabled=false cấm cứng tất cả webhook) ===
+    if not config.config.is_chat_enabled:
+        print(f"🚫 [Character:{matched_char['name']}] Blocked do global chat_enabled=False")
+        return True  # chặn cứng, không reply gì cả (im lặng)
+    if guild:
+        gs = config.GUILD_SETTINGS.get(str(guild.id), {})
+        if gs.get("chat_enabled") is False:
+            print(f"🚫 [Character:{matched_char['name']}] Blocked do guild {guild.id} chat_enabled=False")
+            return True
     # Support TextChannel, VoiceChannel, Forum, Thread parent... bất kỳ channel nào có webhook
     # Nếu là Thread, lấy parent channel để tạo webhook (Discord thread không có webhook riêng)
     if isinstance(channel, discord.Thread) and channel.parent:
