@@ -161,9 +161,10 @@ class CreateCharacterModal(discord.ui.Modal, title="Tạo Character mới"):
 
         await interaction.response.defer(ephemeral=True, thinking=True)
         try:
-            # Tạo Role mới trên Server trùng tên với Character
+            # Tạo Role mới trên Server trùng tên với Character - mentionable để @tag được
             new_role = await interaction.guild.create_role(
                 name=name,
+                mentionable=True,
                 reason=f"Character created by {interaction.user} via /character create",
             )
         except discord.Forbidden:

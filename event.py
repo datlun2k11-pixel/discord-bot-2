@@ -221,31 +221,40 @@ def _strip_role_mentions(text: str) -> str:
         return ""
     return _ROLE_MENTION_RE.sub("", text).strip()
 
-async def _get_or_create_webhook(channel: discord.TextChannel, bot_user) -> Optional[discord.Webhook]:
-    """Tạo hoặc tái sử dụng Webhook trong channel hiện tại"""
-    # Kiểm tra quyền trước
-    if not channel.permissions_for(channel.guild.me).manage_webhooks:
+async def _get_or_create_webhook(channel, bot_user) -> Optional[discord.Webhook]:
+    """Tạo hoặc tái sử dụng Webhook trong channel hiện tại — hỗ trợ cả Thread (dùng parent)"""
+    # Nếu channel là Thread, webhook thực tế nằm ở parent channel
+    target_channel = channel.parent if isinstance(channel, discord.Thread) and channel.parent else channel
+    if not hasattr(target_channel, 'webhooks') or not hasattr(target_channel, 'create_webhook'):
+        print(f"⚠️ Channel {getattr(target_channel, 'name', target_channel.id)} không hỗ trợ webhook")
         return None
+    # Kiểm tra quyền trước (check trên target_channel)
     try:
-        webhooks = await channel.webhooks()
+        if not target_channel.permissions_for(target_channel.guild.me).manage_webhooks:
+            print(f"⚠️ Thiếu quyền Manage Webhooks tại #{getattr(target_channel, 'name', target_channel.id)}")
+            return None
+    except Exception:
+        pass
+    try:
+        webhooks = await target_channel.webhooks()
         # Tìm webhook do bot tạo ra hoặc tên GenA-Character
         for wh in webhooks:
             if wh.user and wh.user.id == bot_user.id:
                 return wh
             if wh.name == "GenA-Character":
                 return wh
-        # Không có -> tạo mới
-        wh = await channel.create_webhook(
+        # Không có -> tạo mới ở target_channel
+        wh = await target_channel.create_webhook(
             name="GenA-Character",
             reason="Character Webhook System - auto create",
         )
-        print(f"✅ Đã tạo webhook mới tại #{channel.name} ({channel.id})")
+        print(f"✅ Đã tạo webhook mới tại #{getattr(target_channel, 'name', target_channel.id)} ({target_channel.id})")
         return wh
     except discord.Forbidden:
-        print(f"⚠️ Thiếu quyền Manage Webhooks tại #{channel.name}")
+        print(f"⚠️ Thiếu quyền Manage Webhooks tại #{getattr(target_channel, 'name', target_channel.id)}")
         return None
     except discord.HTTPException as e:
-        print(f"⚠️ Lỗi tạo/fetch webhook tại #{channel.name}: {e}")
+        print(f"⚠️ Lỗi tạo/fetch webhook tại #{getattr(target_channel, 'name', target_channel.id)}: {e}")
         return None
 
 async def _handle_character_mention(
@@ -259,14 +268,17 @@ async def _handle_character_mention(
     """
     guild = message.guild
     channel = message.channel
-    if not guild or not isinstance(channel, discord.TextChannel):
-        # Chỉ support TextChannel (có webhook)
-        # Fallback: reply thường nếu không phải TextChannel
-        if isinstance(channel, discord.Thread):
-            # Thread không hỗ trợ webhook trực tiếp -> fallback reply thường
-            pass
-        else:
-            return False
+    # Support TextChannel, VoiceChannel, Forum, Thread parent... bất kỳ channel nào có webhook
+    # Nếu là Thread, lấy parent channel để tạo webhook (Discord thread không có webhook riêng)
+    if isinstance(channel, discord.Thread) and channel.parent:
+        # Với thread, webhook phải tạo ở parent và gửi vào thread via webhook.send(thread=channel)
+        # Để đơn giản, fallback về reply embed trong thread nếu không support
+        print(f"⚠️ Character mention trong Thread #{channel.name} -> sẽ fallback embed (thread chưa hỗ trợ webhook trực tiếp)")
+    if not guild or not hasattr(channel, 'webhooks'):
+        # Channel không hỗ trợ webhook -> fallback
+        print(f"⚠️ Channel {getattr(channel, 'name', channel.id)} không hỗ trợ webhook")
+        # vẫn để handler fallback ở dưới (webhook None -> embed)
+        pass
 
     # Kiểm tra RPD lock
     if config.is_rpd_locked():
@@ -465,26 +477,46 @@ async def _handle_character_mention(
                 # Chuẩn bị username/avatar — Discord giới hạn 80 ký tự / 1024
                 webhook_name = matched_char["name"][:80]
                 webhook_avatar = matched_char.get("avatar_url") or None
+                is_thread = isinstance(channel, discord.Thread)
                 # Validate avatar_url còn usable không (nếu rỗng thì không truyền)
                 try:
                     # Discord webhook sẽ fetch avatar_url, nếu lỗi sẽ fallback không avatar
-                    await webhook.send(
-                        content=response_text or "🥀",
-                        username=webhook_name,
-                        avatar_url=webhook_avatar,
-                        allowed_mentions=discord.AllowedMentions.none(),
-                        wait=True,
-                    )
+                    if is_thread:
+                        await webhook.send(
+                            content=response_text or "🥀",
+                            username=webhook_name,
+                            avatar_url=webhook_avatar,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                            wait=True,
+                            thread=channel,
+                        )
+                    else:
+                        await webhook.send(
+                            content=response_text or "🥀",
+                            username=webhook_name,
+                            avatar_url=webhook_avatar,
+                            allowed_mentions=discord.AllowedMentions.none(),
+                            wait=True,
+                        )
                 except discord.HTTPException as e:
                     print(f"⚠️ Webhook send lỗi (thử không avatar): {e}")
                     # Thử lại không có avatar
                     try:
-                        await webhook.send(
-                            content=response_text or "🥀",
-                            username=webhook_name,
-                            allowed_mentions=discord.AllowedMentions.none(),
-                            wait=True,
-                        )
+                        if is_thread:
+                            await webhook.send(
+                                content=response_text or "🥀",
+                                username=webhook_name,
+                                allowed_mentions=discord.AllowedMentions.none(),
+                                wait=True,
+                                thread=channel,
+                            )
+                        else:
+                            await webhook.send(
+                                content=response_text or "🥀",
+                                username=webhook_name,
+                                allowed_mentions=discord.AllowedMentions.none(),
+                                wait=True,
+                            )
                     except Exception as e2:
                         print(f"⚠️ Webhook fallback fail: {e2}")
                         await message.reply(response_text or "🥀", mention_author=False)
@@ -494,13 +526,23 @@ async def _handle_character_mention(
                     for url in gif_urls:
                         try:
                             # Gửi qua webhook để giữ vibe character?
-                            await webhook.send(
-                                content=url,
-                                username=webhook_name,
-                                avatar_url=webhook_avatar,
-                                allowed_mentions=discord.AllowedMentions.none(),
-                                wait=True,
-                            )
+                            if is_thread:
+                                await webhook.send(
+                                    content=url,
+                                    username=webhook_name,
+                                    avatar_url=webhook_avatar,
+                                    allowed_mentions=discord.AllowedMentions.none(),
+                                    wait=True,
+                                    thread=channel,
+                                )
+                            else:
+                                await webhook.send(
+                                    content=url,
+                                    username=webhook_name,
+                                    avatar_url=webhook_avatar,
+                                    allowed_mentions=discord.AllowedMentions.none(),
+                                    wait=True,
+                                )
                         except:
                             try:
                                 await channel.send(url)
@@ -620,20 +662,7 @@ def register_events(bot):
                 if _save_counter % 10 == 0:
                     save_memory()
             
-        # --- 2. KIỂM TRA CÓ CẦN REPLY KHÔNG ---
-        is_dm = message.guild is None
-        is_reply_to_bot = (
-            message.reference
-            and message.reference.resolved
-            and message.reference.resolved.author == bot.user
-        )
-        is_mentioned = bot.user in message.mentions
-        
-        # Nếu không tag, không reply, không DM -> không xử lý
-        if not is_dm and not is_mentioned and not is_reply_to_bot:
-            return
-            
-        # Check global chat_enabled (tắt toàn bộ server + DM)
+        # Check global chat_enabled (tắt toàn bộ server + DM) - áp dụng cho cả Character webhook
         if not config.config.is_chat_enabled:
             return
         # Check guild-specific chat_enabled (nếu server đã cài đặt)
@@ -643,18 +672,20 @@ def register_events(bot):
                 return
 
         # === 2a. CHARACTER WEBHOOK SYSTEM: phát hiện @Role Character ===
-        # Yêu cầu: khi user @Mention Role của Character -> trigger AI + webhook
-        if message.guild and message.role_mentions is not None:
+        # QUAN TRỌNG: phải check TRƯỚC khi check bot mention, vì @Role không cần tag bot
+        # Khi tag tên character (mention role), bot phải reply qua webhook ngay cả khi không tag bot
+        if message.guild:
             try:
                 guild_chars = config.get_guild_characters(message.guild.id)
                 matched_char = None
-                # Ưu tiên role_mentions (đã resolve)
-                for role in message.role_mentions:
-                    char = guild_chars.get(str(role.id))
-                    if char:
-                        matched_char = char
-                        break
-                # Fallback: parse thô từ content nếu role_mentions rỗng (thiếu intent/member cache)
+                # Ưu tiên role_mentions (đã resolve) nếu có
+                if message.role_mentions:
+                    for role in message.role_mentions:
+                        char = guild_chars.get(str(role.id))
+                        if char:
+                            matched_char = char
+                            break
+                # Fallback: parse thô từ content nếu role_mentions rỗng (thiếu intent/member cache hoặc role không mentionable cũ)
                 if not matched_char and message.content:
                     for m in _ROLE_MENTION_RE.finditer(message.content):
                         rid = m.group(1)
@@ -663,6 +694,17 @@ def register_events(bot):
                             matched_char = char
                             break
                 if matched_char:
+                    print(f"🎭 Phát hiện @Character: {matched_char['name']} ({matched_char['role_id']}) trong #{message.channel.name} bởi {message.author}")
+                    # Auto-fix: nếu role chưa mentionable thì bật lên để lần sau tag dễ hơn
+                    try:
+                        _r = message.guild.get_role(int(matched_char['role_id']))
+                        if _r and not _r.mentionable:
+                            # cần quyền Manage Roles
+                            if message.guild.me.guild_permissions.manage_roles:
+                                await _r.edit(mentionable=True, reason="Auto-fix Character role mentionable")
+                                print(f"🔧 Đã auto bật mentionable cho role {matched_char['name']}")
+                    except Exception as e:
+                        print(f"⚠️ Không thể auto-fix mentionable: {e}")
                     handled = await _handle_character_mention(bot, message, matched_char)
                     if handled:
                         return
@@ -670,6 +712,19 @@ def register_events(bot):
                 print(f"⚠️ Character mention handler lỗi: {e}")
                 import traceback
                 traceback.print_exc()
+
+        # --- 2b. KIỂM TRA CÓ CẦN REPLY BOT THƯỜNG KHÔNG ---
+        is_dm = message.guild is None
+        is_reply_to_bot = (
+            message.reference
+            and message.reference.resolved
+            and message.reference.resolved.author == bot.user
+        )
+        is_mentioned = bot.user in message.mentions
+        
+        # Nếu không tag bot, không reply bot, không DM và cũng không phải character mention (đã return ở trên) -> không xử lý
+        if not is_dm and not is_mentioned and not is_reply_to_bot:
+            return
 
         # === KIỂM TRA RPD LOCK ===
         if config.is_rpd_locked():
