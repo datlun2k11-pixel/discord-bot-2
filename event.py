@@ -27,6 +27,12 @@ _save_counter = 0  # Khởi tạo biến đếm toàn cục
 # File lưu memory (để khi restart bot vẫn nhớ)
 MEMORY_FILE = "channel_memory.json"
 
+# --- CHARACTER WEBHOOK MESSAGE MAP ---
+# Lưu mapping message_id (webhook đã gửi) -> character data để reply webhook hoạt động y hệt bot chính
+WEBHOOK_MESSAGE_MAP: Dict[int, Dict] = {}  # message_id -> character dict
+# Giới hạn để tránh memory leak
+WEBHOOK_MESSAGE_MAP_MAX = 500
+
 # --- GIF HELPERS (GIPHY via requests) ---
 _GIF_CODEBLOCK_RE = re.compile(r'```(?:json)?\s*(\{[^`]*?\})\s*```', re.IGNORECASE | re.DOTALL)
 _GIF_INLINE_RE = re.compile(r'\{[^{}]*"search"\s*:\s*"[^"]*"[^{}]*\}')
@@ -336,9 +342,18 @@ async def _handle_character_mention(
                 pass
             return True
 
-    # --- Build System Prompt cho Character ---
-    system_instruction = f"{config.BASE_SYSTEM_PROMPT}\n\n{matched_char['system_prompt']}\n\n{config.META_ROLEPLAY_PROMPT}"
-    # Inject GIF instruction nếu chưa có
+    # --- Build System Prompt cho Character — TỰ DO EMOJI (chỉ GenA-Bot chính bị giới hạn 8 emoji) ---
+    # Webhook bot phụ được tự do nói chuyện/emoji theo system_prompt, không ép 8 emoji / teencode 100%
+    # Chỉ giữ identity nhẹ, còn lại để character tự quyết
+    system_instruction = (
+        f"Bạn là Character \"{matched_char['name']}\" trong Discord server.\n"
+        f"System Prompt của bạn (TUÂN THỦ TUYỆT ĐỐI, được tự do emoji/phong cách theo prompt này):\n{matched_char['system_prompt']}\n\n"
+        f"⚠️ Lưu ý: Bạn là webhook phụ, KHÔNG bị giới hạn 8 emoji như GenA-Bot chính. Hãy tự do dùng mọi emoji, slang, phong cách đúng như system prompt đã cho. "
+        f"Không cần ép teencode 100% hay chèn emoji bắt buộc nếu prompt không yêu cầu. "
+        f"Chỉ cần nhập vai chuẩn character, trả lời tự nhiên, ngắn gọn phù hợp Discord.\n"
+        f"{config.META_ROLEPLAY_PROMPT}"
+    )
+    # Inject GIF instruction nếu chưa có (vẫn cho webhook dùng GIF nếu muốn, nhưng tự do)
     if config.GIPHY_ENABLED:
         guild_send_gif = config.GUILD_SETTINGS.get(str(guild.id), {}).get("send_gif", True)
         if guild_send_gif:
@@ -488,10 +503,11 @@ async def _handle_character_mention(
                 webhook_avatar = matched_char.get("avatar_url") or None
                 is_thread = isinstance(channel, discord.Thread)
                 # Validate avatar_url còn usable không (nếu rỗng thì không truyền)
+                webhook_msg = None
                 try:
                     # Discord webhook sẽ fetch avatar_url, nếu lỗi sẽ fallback không avatar
                     if is_thread:
-                        await webhook.send(
+                        webhook_msg = await webhook.send(
                             content=response_text or "🥀",
                             username=webhook_name,
                             avatar_url=webhook_avatar,
@@ -500,19 +516,27 @@ async def _handle_character_mention(
                             thread=channel,
                         )
                     else:
-                        await webhook.send(
+                        webhook_msg = await webhook.send(
                             content=response_text or "🥀",
                             username=webhook_name,
                             avatar_url=webhook_avatar,
                             allowed_mentions=discord.AllowedMentions.none(),
                             wait=True,
                         )
+                    # Lưu mapping để reply webhook hoạt động y hệt bot chính
+                    if webhook_msg and hasattr(webhook_msg, 'id'):
+                        WEBHOOK_MESSAGE_MAP[webhook_msg.id] = matched_char
+                        # Giới hạn tránh memory leak
+                        if len(WEBHOOK_MESSAGE_MAP) > WEBHOOK_MESSAGE_MAP_MAX:
+                            # Xóa bớt 100 cái cũ nhất
+                            for k in list(WEBHOOK_MESSAGE_MAP.keys())[:100]:
+                                del WEBHOOK_MESSAGE_MAP[k]
                 except discord.HTTPException as e:
                     print(f"⚠️ Webhook send lỗi (thử không avatar): {e}")
                     # Thử lại không có avatar
                     try:
                         if is_thread:
-                            await webhook.send(
+                            webhook_msg = await webhook.send(
                                 content=response_text or "🥀",
                                 username=webhook_name,
                                 allowed_mentions=discord.AllowedMentions.none(),
@@ -520,12 +544,17 @@ async def _handle_character_mention(
                                 thread=channel,
                             )
                         else:
-                            await webhook.send(
+                            webhook_msg = await webhook.send(
                                 content=response_text or "🥀",
                                 username=webhook_name,
                                 allowed_mentions=discord.AllowedMentions.none(),
                                 wait=True,
                             )
+                        if webhook_msg and hasattr(webhook_msg, 'id'):
+                            WEBHOOK_MESSAGE_MAP[webhook_msg.id] = matched_char
+                            if len(WEBHOOK_MESSAGE_MAP) > WEBHOOK_MESSAGE_MAP_MAX:
+                                for k in list(WEBHOOK_MESSAGE_MAP.keys())[:100]:
+                                    del WEBHOOK_MESSAGE_MAP[k]
                     except Exception as e2:
                         print(f"⚠️ Webhook fallback fail: {e2}")
                         await message.reply(response_text or "🥀", mention_author=False)
@@ -680,13 +709,54 @@ def register_events(bot):
             if guild_settings.get("chat_enabled") is False:
                 return
 
-        # === 2a. CHARACTER WEBHOOK SYSTEM: phát hiện @Role Character ===
+        # === 2a. CHARACTER WEBHOOK SYSTEM: phát hiện @Role Character & Reply to webhook ===
         # QUAN TRỌNG: phải check TRƯỚC khi check bot mention, vì @Role không cần tag bot
-        # Khi tag tên character (mention role), bot phải reply qua webhook ngay cả khi không tag bot
+        # Khi tag tên character (mention role) HOẶC reply webhook, bot phải reply qua webhook y hệt bot chính
         if message.guild:
             try:
                 guild_chars = config.get_guild_characters(message.guild.id)
                 matched_char = None
+
+                # 2a-1: Reply to webhook detection — y hệt bot chính (im ru trước đây do chỉ check bot.user)
+                if message.reference:
+                    resolved = message.reference.resolved
+                    # Nếu chưa cached, thử fetch (webhook message mới có thể chưa cached)
+                    if resolved is None and message.reference.message_id:
+                        try:
+                            resolved = await message.channel.fetch_message(message.reference.message_id)
+                        except Exception:
+                            resolved = None
+                    if resolved and isinstance(resolved, discord.Message):
+                        # Ưu tiên map (chính xác nhất)
+                        char_from_reply = WEBHOOK_MESSAGE_MAP.get(resolved.id)
+                        if char_from_reply:
+                            print(f"🎭 Reply to webhook {char_from_reply['name']} ({resolved.id}) trong #{message.channel.name} bởi {message.author}")
+                            handled = await _handle_character_mention(bot, message, char_from_reply)
+                            if handled:
+                                return
+                        # Fallback: nếu là webhook message (webhook_id != None) thì match theo tên author
+                        elif resolved.webhook_id is not None:
+                            webhook_name = getattr(resolved.author, 'display_name', None) or getattr(resolved.author, 'name', '') or ""
+                            webhook_name = webhook_name.strip()
+                            if webhook_name:
+                                for c in guild_chars.values():
+                                    if c['name'].lower() == webhook_name.lower():
+                                        print(f"🎭 Reply to webhook fallback name match: {c['name']} ({resolved.id})")
+                                        handled = await _handle_character_mention(bot, message, c)
+                                        if handled:
+                                            return
+                                        break
+                                # Nếu không match tên chính xác, thử match chứa
+                                if not matched_char:
+                                    for c in guild_chars.values():
+                                        if webhook_name.lower() in c['name'].lower() or c['name'].lower() in webhook_name.lower():
+                                            print(f"🎭 Reply to webhook fuzzy match: {c['name']}")
+                                            handled = await _handle_character_mention(bot, message, c)
+                                            if handled:
+                                                return
+                                            break
+
+                # 2a-2: @Role mention detection
                 # Ưu tiên role_mentions (đã resolve) nếu có
                 if message.role_mentions:
                     for role in message.role_mentions:
