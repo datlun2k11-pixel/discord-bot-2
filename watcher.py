@@ -7,8 +7,8 @@ from discord.ext import commands
 from google.genai import types
 import config
 
-# Model Gemma 3 12B trên Google AI Studio
-GEMMA_MODEL_ID = "gemma-3-12b-it"
+# Model Gemma 4 trên Google AI Studio (Gemma 3 đã khai tử 404)
+GEMMA_MODEL_ID = "gemma-4-31b-it"
 
 # Dict lưu trạng thái Watcher theo channel_id - mặc định tắt (False)
 watcher_status: dict[int, bool] = {}
@@ -57,7 +57,7 @@ def _extract_json(raw: str) -> dict | None:
 
 
 async def select_character_with_gemma3(text: str, guild_id: int) -> tuple[bool, dict | None]:
-    """Dùng Gemma 3 12B để quyết định có reply không và chọn character nào.
+    """Dùng Gemma 4 31B để quyết định có reply không và chọn character nào.
 
     Returns:
         (should_reply: bool, character: dict|None)
@@ -103,7 +103,7 @@ async def select_character_with_gemma3(text: str, guild_id: int) -> tuple[bool, 
 
         cfg = types.GenerateContentConfig(
             temperature=0.0,
-            max_output_tokens=120,
+            max_output_tokens=512,  # Gemma 4 có thinking (~300 tok) nên cần >=512 để ra JSON
         )
         response = await asyncio.wait_for(
             config._async_client.models.generate_content(
@@ -203,7 +203,7 @@ class Watcher(commands.Cog):
         self.bot = bot
 
     # ---- Slash Command /watcher ----
-    @app_commands.command(name="watcher", description="Bật/tắt Watcher Mode - Gemma 3 tự chọn character để rep (thú vị hơn)")
+    @app_commands.command(name="watcher", description="Bật/tắt Watcher Mode - Gemma 4 tự chọn character để rep (thú vị hơn)")
     async def watcher(self, interaction: discord.Interaction):
         if not interaction.guild:
             await interaction.response.send_message("❌ Lệnh chỉ dùng trong server!", ephemeral=True)
@@ -219,9 +219,9 @@ class Watcher(commands.Cog):
             guild_chars = config.get_guild_characters(interaction.guild.id)
             if guild_chars:
                 char_names = ", ".join([f"`{c['name']}`" for c in guild_chars.values()])
-                desc += f"\nBot sẽ dùng **Gemma 3 12B** để tự chọn character phù hợp khi không mention.\n**Characters:** {char_names}\n+ `DEFAULT` (GenA-Bot)"
+                desc += f"\nBot sẽ dùng **Gemma 4 31B** để tự chọn character phù hợp khi không mention.\n**Characters:** {char_names}\n+ `DEFAULT` (GenA-Bot)"
             else:
-                desc += "\nBot sẽ dùng **Gemma 3 12B** để nhận diện ý định chat khi không mention.\n(Chưa có character custom - sẽ rep bằng GenA-Bot)"
+                desc += "\nBot sẽ dùng **Gemma 4 31B** để nhận diện ý định chat khi không mention.\n(Chưa có character custom - sẽ rep bằng GenA-Bot)"
             desc += "\n*Gemma sẽ chọn character thú vị nhất dựa trên nội dung tin nhắn* ✨"
         else:
             desc += "\nBot chỉ trả lời khi được @mention trực tiếp."

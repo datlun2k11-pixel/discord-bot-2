@@ -17,3 +17,4 @@ data/rpd_lock.json
 data/global_settings.json
 channel_memory.json
 !data/characters.json
+test_watcher_gemma.py
