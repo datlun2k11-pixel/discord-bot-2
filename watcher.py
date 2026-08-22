@@ -274,13 +274,12 @@ class Watcher(commands.Cog):
         _mentions_bot = self.bot.user in message.mentions if self.bot.user else False
         print(f"🔍 [Watcher Debug] on_message guild={message.guild.id} channel={message.channel.id} watcher={_watcher_enabled} content={repr(message.content[:100])} mentions_bot={_mentions_bot}")
 
-        # Trường hợp 1: Bot được @mention trực tiếp -> reply ngay (ưu tiên cao nhất, kể cả khi watcher BẬT)
+        # FIX double-rep: Khi mention bot, để event.py (handler chính) rep 1 lần, watcher bỏ qua để tránh rep 2 lần
         if _mentions_bot:
-            should_reply = True
-            selected_character = None
-            print(f"🔍 [Watcher Debug] Mention bot trực tiếp -> rep DEFAULT")
-        # Trường hợp 2: Watcher BẬT ở channel này -> qua Gemma 4 selector
-        elif _watcher_enabled:
+            print(f"🔍 [Watcher Debug] Mention bot -> BỎ QUA watcher (nhường cho event.py rep 1 lần, tránh double)")
+            return
+        # Trường hợp duy nhất watcher xử lý: Watcher BẬT và KHÔNG mention -> qua Gemma 4 selector
+        if _watcher_enabled:
             content = message.content or ""
             if content.strip():
                 print(f"🔍 [Watcher Debug] Watcher BẬT -> gọi Gemma 4 selector...")
