@@ -105,20 +105,26 @@ async def select_character_with_gemma3(text: str, guild_id: int) -> tuple[bool, 
             temperature=0.0,
             max_output_tokens=512,  # Gemma 4 có thinking (~300 tok) nên cần >=512 để ra JSON
         )
+        import time
+        _t0 = time.time()
+        print(f"🔍 [Watcher Debug] Gọi Gemma 4 selector | guild={guild_id} | chars={len(guild_chars)} | text={repr(text[:80])}")
+        print(f"🔍 [Watcher Debug] Prompt preview: {selector_prompt[:300]}...")
         response = await asyncio.wait_for(
             config._async_client.models.generate_content(
                 model=GEMMA_MODEL_ID,
                 contents=[selector_prompt],
                 config=cfg,
             ),
-            timeout=8.0,
+            timeout=15.0,  # Gemma 4 full prompt ~11s nên 8s hay timeout với "bot ơi"
         )
+        _elapsed = time.time() - _t0
         raw = config.config.extract_response_text(response) if hasattr(config.config, "extract_response_text") else (getattr(response, "text", "") or "")
         if not raw:
             try:
                 raw = response.text or ""
             except Exception:
                 raw = ""
+        print(f"🔍 [Watcher Debug] Gemma raw ({_elapsed:.2f}s): {repr(raw[:400])}")
 
         obj = _extract_json(raw)
         if not obj:
@@ -161,10 +167,20 @@ async def select_character_with_gemma3(text: str, guild_id: int) -> tuple[bool, 
         return True, None
 
     except asyncio.TimeoutError:
-        print(f"⚠️ [Gemma3 Selector] timeout với text: {text[:50]}")
+        print(f"⚠️ [Gemma3 Selector] timeout 15s với text: {text[:80]} | chars={len(guild_chars)} -> fallback check keyword 'bot ơi'")
+        # Fallback: nếu timeout mà tin nhắn chứa từ khóa gọi bot thì vẫn rep DEFAULT để không im lặng
+        low = text.lower()
+        if any(k in low for k in ["bot ơi", "bot oi", "ê bot", "gena", "gema", "bot " ]):
+            print(f"🔁 [Watcher Fallback] timeout nhưng chứa keyword bot -> cho rep DEFAULT")
+            return True, None
         return False, None
     except Exception as e:
         print(f"⚠️ [Gemma3 Selector] lỗi: {e}")
+        import traceback; traceback.print_exc()
+        # Fallback tương tự nếu lỗi bất ngờ mà có keyword bot
+        low = text.lower() if text else ""
+        if any(k in low for k in ["bot ơi", "bot oi"]):
+            return True, None
         return False, None
 
 
@@ -253,20 +269,36 @@ class Watcher(commands.Cog):
         should_reply = False
         selected_character: dict | None = None
 
-        # Trường hợp 1: Bot được @mention trực tiếp -> reply ngay bằng GenA-Bot (không qua selector)
-        if self.bot.user and self.bot.user in message.mentions:
+        # Debug trạng thái watcher cho mỗi tin nhắn (để tui biết sao "bot ơi" không rep)
+        _watcher_enabled = watcher_status.get(message.channel.id, False)
+        _mentions_bot = self.bot.user in message.mentions if self.bot.user else False
+        print(f"🔍 [Watcher Debug] on_message guild={message.guild.id} channel={message.channel.id} watcher={_watcher_enabled} content={repr(message.content[:100])} mentions_bot={_mentions_bot}")
+
+        # Trường hợp 1: Bot được @mention trực tiếp -> reply ngay (ưu tiên cao nhất, kể cả khi watcher BẬT)
+        if _mentions_bot:
             should_reply = True
             selected_character = None
-        # Trường hợp 2: Watcher BẬT ở channel này -> qua Gemma 3 selector
-        elif watcher_status.get(message.channel.id, False):
+            print(f"🔍 [Watcher Debug] Mention bot trực tiếp -> rep DEFAULT")
+        # Trường hợp 2: Watcher BẬT ở channel này -> qua Gemma 4 selector
+        elif _watcher_enabled:
             content = message.content or ""
-            # Bỏ qua tin nhắn rỗng / chỉ có attachment không có text
             if content.strip():
+                print(f"🔍 [Watcher Debug] Watcher BẬT -> gọi Gemma 4 selector...")
                 should_reply, selected_character = await select_character_with_gemma3(content, message.guild.id)
                 if should_reply and selected_character:
                     print(f"👁️ [Watcher] Gemma chọn character: {selected_character['name']} ({selected_character['role_id']}) cho tin nhắn: {content[:80]}")
                 elif should_reply:
                     print(f"👁️ [Watcher] Gemma chọn DEFAULT (GenA-Bot) cho tin nhắn: {content[:80]}")
+                else:
+                    print(f"👁️ [Watcher] Gemma quyết định KHÔNG rep cho: {content[:80]}")
+                    print(f"🔍 [Watcher Debug] -> Không rep, kết thúc watcher branch")
+                    return
+            else:
+                print(f"🔍 [Watcher Debug] Bỏ qua do content rỗng/attachment -> không rep")
+                return
+        else:
+            print(f"🔍 [Watcher Debug] Watcher TẮT và không mention -> bỏ qua")
+            return
 
         if not should_reply:
             return
