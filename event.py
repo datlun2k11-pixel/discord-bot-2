@@ -392,18 +392,18 @@ def register_events(bot):
         ctx_key = config.get_context_key(message)
         state = config.get_context_state(ctx_key)
         
-        # System prompt
+        # System prompt — BASE luôn áp dụng dù có roleplay hay không
         if state["active"]:
-            system_instruction = f"{state['config']['prompt']}\n\n{config.META_ROLEPLAY_PROMPT}"
+            system_instruction = f"{config.BASE_SYSTEM_PROMPT}\n\n{state['config']['prompt']}\n\n{config.META_ROLEPLAY_PROMPT}"
         else:
-            system_instruction = config.DEFAULT_SYSTEM_PROMPT
-        # Inject GIF instruction nếu enabled toàn cục VÀ guild cho phép (mặc định true)
+            system_instruction = f"{config.BASE_SYSTEM_PROMPT}\n\n{config.DEFAULT_SYSTEM_PROMPT}"
+        # Inject GIF instruction fallback nếu BASE chưa có (tránh duplicate)
         _guild_send_gif_for_prompt = True
         if message.guild:
             _guild_send_gif_for_prompt = config.GUILD_SETTINGS.get(str(message.guild.id), {}).get("send_gif", True)
         if config.GIPHY_ENABLED and _guild_send_gif_for_prompt:
             gif_instr = _get_gif_instruction()
-            if gif_instr and "GIF" not in system_instruction:
+            if gif_instr and "GIF" not in system_instruction and "search" not in system_instruction:
                 system_instruction += "\n" + gif_instr
 
         # --- 5. XỬ LÝ ẢNH (AN TOÀN) ---
