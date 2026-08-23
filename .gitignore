@@ -18,3 +18,4 @@ data/global_settings.json
 channel_memory.json
 !data/characters.json
 test_watcher_gemma.py
+test_watcher_groq.py

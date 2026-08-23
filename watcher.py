@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 import discord
 from discord import app_commands
@@ -7,7 +8,12 @@ from discord.ext import commands
 from google.genai import types
 import config
 
-# Model Gemma 4 trên Google AI Studio (Gemma 3 đã khai tử 404) - 26B đỡ nghẽn hơn 31B
+# --- Groq watcher (ưu tiên) ---
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+GROQ_MODEL_ID = os.getenv("GROQ_WATCHER_MODEL", "openai/gpt-oss-120b")
+
+# Fallback Gemma 4 trên Google AI Studio (nếu không có GROQ_API_KEY)
 GEMMA_MODEL_ID = "gemma-4-26b-a4b-it"
 
 # Dict lưu trạng thái Watcher theo channel_id - mặc định tắt (False)
@@ -63,8 +69,67 @@ def _extract_json(raw: str) -> dict | None:
     return None
 
 
+def _build_selector_prompt(text: str, guild_chars: dict) -> str:
+    """Build prompt chung cho cả Groq và Gemma."""
+    if guild_chars:
+        char_lines = []
+        for role_id_str, c in guild_chars.items():
+            short_prompt = (c.get("system_prompt") or "")[:150].replace("\n", " ").strip()
+            if len(c.get("system_prompt", "")) > 150:
+                short_prompt += "..."
+            char_lines.append(f'- ID:{role_id_str} | Tên:"{c.get("name","")}" | Prompt:{short_prompt}')
+        character_list_str = "\n".join(char_lines)
+    else:
+        character_list_str = "(Hiện chưa có character custom nào - chỉ có DEFAULT)"
+    return (
+        "Bạn là hệ thống Character Selector cho Discord bot.\n"
+        "Nhiệm vụ: Phân tích tin nhắn Discord và quyết định:\n"
+        "1) User có đang muốn nói chuyện / gọi / hỏi bot hoặc 1 character không? (chat giữa user với nhau thì false)\n"
+        "2) Nếu có, chọn character phù hợp nhất để trả lời.\n\n"
+        f"Danh sách character trong server:\n{character_list_str}\n"
+        f'- DEFAULT: GenA-Bot (bot chính, vibe GenZ nhây, teencode)\n\n'
+        f'Tin nhắn cần phân tích: "{text.strip()[:500]}"\n\n'
+        "Quy tắc chọn:\n"
+        "- Nếu tin nhắn nhắc tên character cụ thể (VD: Miku, Rem...) -> chọn ID của character đó\n"
+        "- Nếu chung chung / không rõ / hỏi bot -> chọn \"DEFAULT\"\n"
+        "- Nếu là chat giữa user với nhau, không gọi bot -> should_reply=false\n"
+        "- Vibe/hài hước: nếu tin nhắn hợp vibe 1 character (vd tsundere, yandere...) có thể chọn character đó cho thú vị, nhưng ưu tiên nhắc tên trực tiếp\n\n"
+        "CHỈ trả về JSON duy nhất, không giải thích, không markdown, format chính xác:\n"
+        '{"should_reply": true/false, "character_id": "ROLE_ID hoặc DEFAULT hoặc null"}\n'
+        "Ví dụ: {\"should_reply\": true, \"character_id\": \"123456789\"} hoặc {\"should_reply\": false, \"character_id\": null} hoặc {\"should_reply\": true, \"character_id\": \"DEFAULT\"}"
+    )
+
+
+async def _call_groq_selector(prompt: str) -> str:
+    """Gọi Groq OpenAI-compatible API. Trả về raw text."""
+    import aiohttp
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY chưa set")
+    payload = {
+        "model": GROQ_MODEL_ID,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+        "max_tokens": 200,
+        "response_format": {"type": "json_object"},
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            f"{GROQ_BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"},
+            json=payload,
+        ) as resp:
+            data = await resp.json()
+            if resp.status != 200:
+                raise RuntimeError(f"Groq API {resp.status}: {data}")
+            choices = data.get("choices") or []
+            if not choices:
+                raise RuntimeError(f"Groq empty choices: {data}")
+            content = choices[0].get("message", {}).get("content") or ""
+            return content
+
+
 async def select_character_with_gemma3(text: str, guild_id: int) -> tuple[bool, dict | None]:
-    """Dùng Gemma 4 26B để quyết định có reply không và chọn character nào.
+    """Dùng Groq gpt-oss-120b (ưu tiên) fallback Gemma 4 26B để quyết định có reply không và chọn character nào.
 
     Returns:
         (should_reply: bool, character: dict|None)
@@ -75,63 +140,55 @@ async def select_character_with_gemma3(text: str, guild_id: int) -> tuple[bool, 
     if not text or not text.strip():
         return False, None
     try:
-        # Lấy danh sách character của guild
         guild_chars = config.get_guild_characters(guild_id) if guild_id else {}
-        # Build đoạn mô tả character cho prompt - giữ ngắn gọn để tiết kiệm token
-        if guild_chars:
-            char_lines = []
-            for role_id_str, c in guild_chars.items():
-                # Cắt prompt 150 ký tự để không quá dài
-                short_prompt = (c.get("system_prompt") or "")[:150].replace("\n", " ").strip()
-                if len(c.get("system_prompt", "")) > 150:
-                    short_prompt += "..."
-                char_lines.append(f'- ID:{role_id_str} | Tên:"{c.get("name","")}" | Prompt:{short_prompt}')
-            character_list_str = "\n".join(char_lines)
-        else:
-            character_list_str = "(Hiện chưa có character custom nào - chỉ có DEFAULT)"
+        selector_prompt = _build_selector_prompt(text, guild_chars)
 
-        selector_prompt = (
-            "Bạn là hệ thống Character Selector cho Discord bot.\n"
-            "Nhiệm vụ: Phân tích tin nhắn Discord và quyết định:\n"
-            "1) User có đang muốn nói chuyện / gọi / hỏi bot hoặc 1 character không? (chat giữa user với nhau thì false)\n"
-            "2) Nếu có, chọn character phù hợp nhất để trả lời.\n\n"
-            f"Danh sách character trong server:\n{character_list_str}\n"
-            f'- DEFAULT: GenA-Bot (bot chính, vibe GenZ nhây, teencode)\n\n'
-            f'Tin nhắn cần phân tích: "{text.strip()[:500]}"\n\n'
-            "Quy tắc chọn:\n"
-            "- Nếu tin nhắn nhắc tên character cụ thể (VD: Miku, Rem...) -> chọn ID của character đó\n"
-            "- Nếu chung chung / không rõ / hỏi bot -> chọn \"DEFAULT\"\n"
-            "- Nếu là chat giữa user với nhau, không gọi bot -> should_reply=false\n"
-            "- Vibe/hài hước: nếu tin nhắn hợp vibe 1 character (vd tsundere, yandere...) có thể chọn character đó cho thú vị, nhưng ưu tiên nhắc tên trực tiếp\n\n"
-            "CHỈ trả về JSON duy nhất, không giải thích, không markdown, format chính xác:\n"
-            '{"should_reply": true/false, "character_id": "ROLE_ID hoặc DEFAULT hoặc null"}\n'
-            "Ví dụ: {\"should_reply\": true, \"character_id\": \"123456789\"} hoặc {\"should_reply\": false, \"character_id\": null} hoặc {\"should_reply\": true, \"character_id\": \"DEFAULT\"}"
-        )
-
-        cfg = types.GenerateContentConfig(
-            temperature=0.0,
-            max_output_tokens=512,  # Gemma 4 có thinking (~300 tok) nên cần >=512 để ra JSON
-        )
+        raw = ""
+        _elapsed = 0
         import time
         _t0 = time.time()
-        print(f"🔍 [Watcher Debug] Gọi Gemma 4 selector | guild={guild_id} | chars={len(guild_chars)} | text={repr(text[:80])}")
-        print(f"🔍 [Watcher Debug] Prompt preview: {selector_prompt[:300]}...")
-        response = await asyncio.wait_for(
-            config._async_client.models.generate_content(
-                model=GEMMA_MODEL_ID,
-                contents=[selector_prompt],
-                config=cfg,
-            ),
-            timeout=15.0,  # Gemma 4 full prompt ~11s nên 8s hay timeout với "bot ơi"
-        )
-        _elapsed = time.time() - _t0
-        raw = config.config.extract_response_text(response) if hasattr(config.config, "extract_response_text") else (getattr(response, "text", "") or "")
-        if not raw:
+        # Ưu tiên Groq nếu có key
+        if GROQ_API_KEY:
             try:
-                raw = response.text or ""
-            except Exception:
-                raw = ""
-        print(f"🔍 [Watcher Debug] Gemma raw ({_elapsed:.2f}s): {repr(raw[:400])}")
+                print(f"🔍 [Watcher Debug] Gọi Groq {GROQ_MODEL_ID} selector | guild={guild_id} | chars={len(guild_chars)} | text={repr(text[:80])}")
+                raw = await asyncio.wait_for(_call_groq_selector(selector_prompt), timeout=8.0)
+                _elapsed = time.time() - _t0
+                print(f"🔍 [Watcher Debug] Groq raw ({_elapsed:.2f}s): {repr(raw[:400])}")
+            except Exception as e_groq:
+                print(f"⚠️ [Watcher] Groq lỗi, fallback Gemma: {e_groq}")
+                # Fallback Gemma
+                cfg = types.GenerateContentConfig(temperature=0.0, max_output_tokens=512)
+                _t0 = time.time()
+                print(f"🔍 [Watcher Debug] Fallback Gemma 4 selector | guild={guild_id}")
+                response = await asyncio.wait_for(
+                    config._async_client.models.generate_content(model=GEMMA_MODEL_ID, contents=[selector_prompt], config=cfg),
+                    timeout=15.0,
+                )
+                _elapsed = time.time() - _t0
+                raw = config.config.extract_response_text(response) if hasattr(config.config, "extract_response_text") else (getattr(response, "text", "") or "")
+                if not raw:
+                    try:
+                        raw = response.text or ""
+                    except Exception:
+                        raw = ""
+                print(f"🔍 [Watcher Debug] Gemma fallback raw ({_elapsed:.2f}s): {repr(raw[:400])}")
+        else:
+            # Không có Groq key -> dùng Gemma
+            cfg = types.GenerateContentConfig(temperature=0.0, max_output_tokens=512)
+            print(f"🔍 [Watcher Debug] Gọi Gemma 4 selector (không có GROQ_API_KEY) | guild={guild_id} | chars={len(guild_chars)} | text={repr(text[:80])}")
+            print(f"🔍 [Watcher Debug] Prompt preview: {selector_prompt[:300]}...")
+            response = await asyncio.wait_for(
+                config._async_client.models.generate_content(model=GEMMA_MODEL_ID, contents=[selector_prompt], config=cfg),
+                timeout=15.0,
+            )
+            _elapsed = time.time() - _t0
+            raw = config.config.extract_response_text(response) if hasattr(config.config, "extract_response_text") else (getattr(response, "text", "") or "")
+            if not raw:
+                try:
+                    raw = response.text or ""
+                except Exception:
+                    raw = ""
+            print(f"🔍 [Watcher Debug] Gemma raw ({_elapsed:.2f}s): {repr(raw[:400])}")
 
         obj = _extract_json(raw)
         if not obj:
@@ -226,7 +283,7 @@ class Watcher(commands.Cog):
         self.bot = bot
 
     # ---- Slash Command /watcher ----
-    @app_commands.command(name="watcher", description="Bật/tắt Watcher Mode - Gemma 4 26B tự chọn character để rep")
+    @app_commands.command(name="watcher", description="Bật/tắt Watcher Mode - Groq gpt-oss-120b tự chọn character")
     async def watcher(self, interaction: discord.Interaction):
         if not interaction.guild:
             await interaction.response.send_message("❌ Lệnh chỉ dùng trong server!", ephemeral=True)
@@ -242,9 +299,11 @@ class Watcher(commands.Cog):
             guild_chars = config.get_guild_characters(interaction.guild.id)
             if guild_chars:
                 char_names = ", ".join([f"`{c['name']}`" for c in guild_chars.values()])
-                desc += f"\nBot sẽ dùng **Gemma 4 26B** để tự chọn character phù hợp khi không mention.\n**Characters:** {char_names}\n+ `DEFAULT` (GenA-Bot)"
+                model_name = GROQ_MODEL_ID if GROQ_API_KEY else GEMMA_MODEL_ID
+                desc += f"\nBot sẽ dùng **{model_name}** để tự chọn character phù hợp khi không mention.\n**Characters:** {char_names}\n+ `DEFAULT` (GenA-Bot)"
             else:
-                desc += "\nBot sẽ dùng **Gemma 4 26B** để nhận diện ý định chat khi không mention.\n(Chưa có character custom - sẽ rep bằng GenA-Bot)"
+                model_name = GROQ_MODEL_ID if GROQ_API_KEY else GEMMA_MODEL_ID
+                desc += f"\nBot sẽ dùng **{model_name}** để nhận diện ý định chat khi không mention.\n(Chưa có character custom - sẽ rep bằng GenA-Bot)"
             desc += "\n*Gemma sẽ chọn character thú vị nhất dựa trên nội dung tin nhắn* ✨"
         else:
             desc += "\nBot chỉ trả lời khi được @mention trực tiếp."
